@@ -44,22 +44,51 @@ const start = async (stage) => {
 await start(0);
 await shot('dialogue');
 await skipTalk();
-await goto(41, 3);
-await shot('stage1');
+await goto(9, 4);
+await shot('stage-parking');
 
 await start(1);
 await skipTalk();
-await goto(26, 7);
-await shot('stage2');
-await goto(66, 3);
-await page.waitForTimeout(400);
-await skipTalk();
-await page.waitForTimeout(3500);
-await shot('boss');
+await page.waitForTimeout(3000);
+await goto(30, 3);
+await shot('stage-lcp7');
 
 await start(2);
 await skipTalk();
+await goto(13, 6);
+await shot('stage-ts');
+
+/** Starts the boss fight and lets it run into a given attack. @param {string} attack */
+const fight = async (attack) => {
+  await goto(86, 3);
+  await skipTalk();
+  await page.waitForFunction(
+    (a) =>
+      /** @type {any} */ (globalThis).__nao.sim.things.some(
+        (/** @type {any} */ t) => t.kind === 'boss' && t.state === a,
+      ),
+    attack,
+    { timeout: 60000 },
+  );
+  await page.evaluate(() => {
+    const h = /** @type {any} */ (globalThis).__nao.sim.hero;
+    Object.assign(h, { invuln: 99, hearts: 9 });
+  });
+  await page.waitForTimeout(700);
+};
+await fight('rackDrop');
+await shot('boss-julien');
+
+await start(3);
+await skipTalk();
+await goto(46, 4);
+await shot('stage-copil');
+
+await start(4);
+await skipTalk();
 await goto(41, 6);
-await shot('stage3');
+await shot('stage-rooftop');
+await fight('fan');
+await shot('boss-rodolphe');
 
 await browser.close();
