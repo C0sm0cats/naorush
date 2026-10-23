@@ -212,6 +212,8 @@ function updateContinue() {
   $('dailyBtn').textContent =
     `Défi du jour : ${LEVELS[d.stage].name} · ${CAST[d.hero].name} · ${d.twist.label}`;
   $('bonusBtn').hidden = !trophies.data.got.nao;
+  const got = trophies.list().filter((t) => t.got).length;
+  $('trophiesBtn').textContent = `Trophées ${got}/${trophies.list().length}`;
   const n = saved();
   $('continue').hidden = n === 0;
   $('continue').textContent = `Continuer · étape ${n + 1} : ${LEVELS[n].name}`;
