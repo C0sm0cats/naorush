@@ -19,6 +19,18 @@ describe.each(LEVELS)('$name', (level) => {
     expect(sim.won).toBe(true);
   });
 
+  it.runIf(Boolean(level.boss)).each(HEROES)(
+    '%s can win the boss fight without taking a hit',
+    (hero) => {
+      // Every attack is telegraphed and dodgeable: the solver proves it.
+      const sim = createSim(level, hero);
+      const x = (level.boss?.arena[0] ?? 0) - 3;
+      Object.assign(sim.hero, { x, y: 3 });
+      sim.checkpoint = { x, y: 3 };
+      expect(solve(sim, { maxNodes: 300000 }).won).toBe(true);
+    },
+  );
+
   it('has no two-tile walls (too high to jump, too low to hang from)', () => {
     const sim = createSim(level, 'kevin');
     /** @param {number} c @param {number} r */
