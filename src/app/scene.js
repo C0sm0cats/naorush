@@ -593,6 +593,11 @@ export class LevelView {
               this.glow(th.x + (th.dir ?? 1) * 0.35, th.y + 1.02, -0.1, 0.09, [1, 0.25, 0.2]),
             );
           break;
+        case 'beamer':
+          at(P.monitor, th.x, th.y, -0.3, scaling(1.3, 1.3, 1.3));
+          if (th.state === 'flicker' && Math.floor(t * 16) % 2 === 0)
+            items.push(this.glow(th.x, th.y + 0.45, 0, 0.16, [1.4, 1.4, 1.8]));
+          break;
         case 'paper':
           at(P.paper, th.x, th.y, 0, rotationZ(Math.sin(th.t * 20) * 0.25));
           break;

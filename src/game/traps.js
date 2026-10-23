@@ -11,7 +11,7 @@ import { DT, GRAVITY, HERO, TILE, emit, hurt, make, solid } from './world.js';
 const LOOSE_DELAY = 0.45;
 
 /** Periodic traps: cycle length in seconds, offset by position so neighbours differ. */
-export const PERIOD = { drawer: 2.8, sprinkler: 3.2, printer: 2.6 };
+export const PERIOD = { drawer: 2.8, sprinkler: 3.2, printer: 2.6, beamer: 3.4 };
 
 /** Phase of a periodic trap in seconds. @param {Sim} s @param {Thing} t @param {number} period */
 export const phaseOf = (s, t, period) => (s.time + (t.phase ?? 0)) % period;
@@ -185,5 +185,23 @@ export function stepPaper(s, t) {
   } else if (overlaps(s, t.x - 0.2, t.y - 0.08, t.x + 0.2, t.y + 0.08)) {
     t.alive = false;
     hurt(s, s.hero, 'paper');
+  }
+}
+
+/**
+ * Meeting-room projector: the screen flickers, then a KPI slide sails out in an arc.
+ * @param {Sim} s @param {Thing} t
+ */
+export function stepBeamer(s, t) {
+  const k = phaseOf(s, t, PERIOD.beamer);
+  const prev = t.state;
+  t.state = k < 2.6 ? 'idle' : 'flicker';
+  if (t.state !== prev && t.state === 'flicker') emit(s, 'telegraph', t.x, t.y + 1.2);
+  if (prev === 'flicker' && t.state === 'idle') {
+    const dir = t.dir ?? -1;
+    s.things.push(
+      make('kpi', t.x + dir * 0.6, t.y + 1.1, { vx: dir * 5.5, vy: 6.5, state: 'fly' }),
+    );
+    emit(s, 'bossThrow', t.x, t.y + 1.1);
   }
 }

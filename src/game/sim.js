@@ -11,6 +11,7 @@ import {
 } from './enemies.js';
 import {
   PERIOD,
+  stepBeamer,
   stepBottle,
   stepChair,
   stepDrawer,
@@ -99,6 +100,8 @@ export function createSim(def, heroId) {
       else if (c === 'S') start = { x: col + 0.2, y };
       else if (c === '*') thing('secret', col + 0.5, y);
       else if (c === 'k') thing('switch', col + 0.5, y);
+      else if (c === 'J')
+        thing('beamer', col + 0.5, y, { dir: -1, phase: (col * 0.41) % PERIOD.beamer });
       else if (c === '$') thing('ticket', col + 0.5, y + 0.5);
       else if (c === 'C') thing('checkpoint', col + 0.5, y);
       else if (c === 'p') thing('reader', col + 0.5, y);
@@ -601,6 +604,9 @@ function stepThings(s) {
         break;
       case 'printer':
         stepPrinter(s, t);
+        break;
+      case 'beamer':
+        stepBeamer(s, t);
         break;
       case 'paper':
         stepPaper(s, t);

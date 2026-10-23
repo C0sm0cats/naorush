@@ -495,7 +495,15 @@ let wonTimer = 0;
 let idleTime = 0;
 let gameOverTimer = 0;
 /** Events from traps that run on their own, wherever the hero is. */
-const AMBIENT = new Set(['telegraph', 'drawerOut', 'sprayOn', 'paperShot', 'poof', 'invite']);
+const AMBIENT = new Set([
+  'telegraph',
+  'drawerOut',
+  'sprayOn',
+  'paperShot',
+  'poof',
+  'invite',
+  'bossThrow',
+]);
 /** Events that reuse another event's sound. @type {Record<string, string>} */
 const SFX_ALIAS = { throw: 'fire', archive: 'crack', switch: 'door' };
 /** Freeze time per event, in seconds. @type {Record<string, number>} */
