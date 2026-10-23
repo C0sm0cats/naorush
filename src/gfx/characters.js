@@ -1,7 +1,7 @@
 import { MeshBuilder } from './geometry.js';
 import { chain, rotationX, rotationY, rotationZ, scaling, translation } from './mat4.js';
 import { Mesh } from './renderer.js';
-import { MAT } from './voxels.js';
+import { MAT, rgb } from './voxels.js';
 
 /**
  * Smooth "designer toy" characters built from rounded primitives, split into
@@ -61,6 +61,290 @@ const part = (gl, draw) => {
   return { mesh: new Mesh(gl, b.build()) };
 };
 
+// ---------------------------------------------------------------------------
+// Sculpting helpers: parametric surfaces with numerical normals, lofts along y,
+// tubes along curves and shells over the skull.
+
+const TAU = Math.PI * 2;
+/** @param {number} a @param {number} b @param {number} t */
+const lerp = (a, b, t) => a + (b - a) * t;
+/** @param {number} e0 @param {number} e1 @param {number} x */
+const smooth = (e0, e1, x) => {
+  const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
+  return t * t * (3 - 2 * t);
+};
+/** @param {number} x @param {number} e */
+const spow = (x, e) => Math.sign(x) * Math.abs(x) ** e;
+/** @param {number[]} a @param {number[]} b */
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+/** @param {number[]} a @param {number[]} b */
+const cross = (a, b) => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+];
+/** @param {number[]} a */
+const unit = (a) => {
+  const l = Math.hypot(a[0], a[1], a[2]) || 1;
+  return [a[0] / l, a[1] / l, a[2] / l];
+};
+/** @param {string} hex */
+const luma = (hex) => {
+  const n = parseInt(hex.slice(1), 16);
+  return (0.3 * (n >> 16) + 0.59 * ((n >> 8) & 255) + 0.11 * (n & 255)) / 255;
+};
+
+/**
+ * Parametric surface; normals come from finite differences and face away from `inside`.
+ * @param {MeshBuilder} b @param {number} nu @param {number} nv
+ * @param {(u: number, v: number) => number[]} f
+ * @param {(u: number, v: number) => number[]} inside
+ * @param {string} color @param {number} [mat]
+ */
+function surf(b, nu, nv, f, inside, color, mat = MAT.MATTE) {
+  const e = 1e-3;
+  b.grid(
+    nu,
+    nv,
+    (u, v) => {
+      const uu = Math.min(1 - e, Math.max(e, u));
+      const vv = Math.min(1 - e, Math.max(e, v));
+      const du = sub(f(uu + e, vv), f(uu - e, vv));
+      const dv = sub(f(uu, vv + e), f(uu, vv - e));
+      let n = unit(cross(du, dv));
+      const o = sub(f(uu, vv), inside(uu, vv));
+      if (n[0] * o[0] + n[1] * o[1] + n[2] * o[2] < 0) n = [-n[0], -n[1], -n[2]];
+      return { p: f(u, v), n };
+    },
+    rgb(color),
+    mat,
+  );
+}
+
+/**
+ * Rotates a vector by Euler angles (x, then y, then z).
+ * @param {number[]} p @param {number[]} r
+ */
+function rot(p, r) {
+  let [x, y, z] = p;
+  if (r[0])
+    [y, z] = [y * Math.cos(r[0]) - z * Math.sin(r[0]), y * Math.sin(r[0]) + z * Math.cos(r[0])];
+  if (r[1])
+    [x, z] = [x * Math.cos(r[1]) + z * Math.sin(r[1]), -x * Math.sin(r[1]) + z * Math.cos(r[1])];
+  if (r[2])
+    [x, y] = [x * Math.cos(r[2]) - y * Math.sin(r[2]), x * Math.sin(r[2]) + y * Math.cos(r[2])];
+  return [x, y, z];
+}
+
+/**
+ * Ellipsoid (or a patch of one) with optional rotation; longitude 0 faces +z.
+ * @param {MeshBuilder} b @param {number[]} c @param {number[]} r @param {string} color
+ * @param {{seg?: number, lon?: number[], lat?: number[], rot?: number[], mat?: number}} [o]
+ */
+function ell(b, c, r, color, o = {}) {
+  const seg = o.seg ?? 8;
+  const [l0, l1] = o.lon ?? [-Math.PI, Math.PI];
+  const [a0, a1] = o.lat ?? [-Math.PI / 2, Math.PI / 2];
+  const R = o.rot ?? [0, 0, 0];
+  surf(
+    b,
+    Math.max(3, Math.round((seg * 2 * (l1 - l0)) / TAU)),
+    Math.max(2, Math.round((seg * (a1 - a0)) / Math.PI)),
+    (u, v) => {
+      const lon = lerp(l0, l1, u),
+        lat = lerp(a0, a1, v);
+      const d = rot(
+        [
+          Math.cos(lat) * Math.sin(lon) * r[0],
+          Math.sin(lat) * r[1],
+          Math.cos(lat) * Math.cos(lon) * r[2],
+        ],
+        R,
+      );
+      return [c[0] + d[0], c[1] + d[1], c[2] + d[2]];
+    },
+    () => c,
+    color,
+    o.mat,
+  );
+}
+
+/**
+ * Catmull-Rom spline through rows of numbers; t runs over [0, rows - 1].
+ * @param {number[][]} keys
+ * @returns {(t: number) => number[]}
+ */
+function spline(keys) {
+  const n = keys.length;
+  return (t) => {
+    const i = Math.min(n - 2, Math.max(0, Math.floor(t)));
+    const f = t - i;
+    const p0 = keys[Math.max(0, i - 1)],
+      p1 = keys[i],
+      p2 = keys[i + 1],
+      p3 = keys[Math.min(n - 1, i + 2)];
+    return p1.map((b, k) => {
+      const a = p0[k],
+        c = p2[k],
+        d = p3[k];
+      return (
+        0.5 *
+        (2 * b +
+          (-a + c) * f +
+          (2 * a - 5 * b + 4 * c - d) * f * f +
+          (-a + 3 * b - 3 * c + d) * f ** 3)
+      );
+    });
+  };
+}
+
+/**
+ * A loft profile: rows [y, rx, rz, cz?, squareness?, cx?] from bottom to top.
+ * @typedef {{row: (t: number) => number[], n: number, tAt: (y: number) => number}} Profile
+ * @param {number[][]} keys
+ * @returns {Profile}
+ */
+function profile(keys) {
+  const row = spline(keys.map((k) => [k[0], k[1], k[2], k[3] ?? 0, k[4] ?? 2, k[5] ?? 0]));
+  const n = keys.length - 1;
+  /** @param {number} y */
+  const tAt = (y) => {
+    let lo = 0,
+      hi = n;
+    for (let i = 0; i < 30; i++) {
+      const m = (lo + hi) / 2;
+      if (row(m)[0] < y) lo = m;
+      else hi = m;
+    }
+    return (lo + hi) / 2;
+  };
+  return { row, n, tAt };
+}
+
+/**
+ * Point on a loft ring at angle `a` (0 = front, +π/2 = +x), pushed out by `dr`.
+ * @param {number[]} r @param {number} a @param {number} [dr]
+ */
+const ringPoint = (r, a, dr = 0) => [
+  r[5] + (r[1] + dr) * spow(Math.sin(a), 2 / r[4]),
+  r[0],
+  r[3] + (r[2] + dr) * spow(Math.cos(a), 2 / r[4]),
+];
+
+/**
+ * Lofted surface along y through superellipse rings.
+ * @param {MeshBuilder} b @param {Profile} P @param {string} color
+ * @param {{seg?: number, steps?: number, t0?: number, t1?: number, dr?: number, mat?: number,
+ *   arc?: (r: number[]) => number[]}} [o]
+ */
+function loft(b, P, color, o = {}) {
+  const t0 = o.t0 ?? 0,
+    t1 = o.t1 ?? P.n;
+  const dr = o.dr ?? 0;
+  surf(
+    b,
+    o.seg ?? 20,
+    Math.max(1, Math.ceil((t1 - t0) * (o.steps ?? 3))),
+    (u, v) => {
+      const r = P.row(lerp(t0, t1, v));
+      const [a0, a1] = o.arc ? o.arc(r) : [0, TAU];
+      return ringPoint(r, lerp(a0, a1, u), dr);
+    },
+    (_u, v) => {
+      const r = P.row(lerp(t0, t1, v));
+      return [r[5], r[0], r[3]];
+    },
+    color,
+    o.mat,
+  );
+}
+
+/**
+ * Tube swept along a curve with an elliptical section [r1 along N, r2 along B].
+ * @param {MeshBuilder} b @param {(t: number) => number[]} path
+ * @param {(t: number) => number[]} rad @param {string} color
+ * @param {{nu?: number, nv?: number, ref?: (t: number) => number[], mat?: number}} [o]
+ */
+function tube(b, path, rad, color, o = {}) {
+  const ref = o.ref ?? (() => [0, 0, 1]);
+  surf(
+    b,
+    o.nu ?? 8,
+    o.nv ?? 8,
+    (u, v) => {
+      const c = path(v);
+      const T = unit(sub(path(Math.min(1, v + 1e-3)), path(Math.max(0, v - 1e-3))));
+      const N = unit(cross(T, ref(v)));
+      const B = cross(N, T);
+      const [r1, r2] = rad(v);
+      const ca = Math.cos(u * TAU) * r1,
+        sa = Math.sin(u * TAU) * r2;
+      return [
+        c[0] + N[0] * ca + B[0] * sa,
+        c[1] + N[1] * ca + B[1] * sa,
+        c[2] + N[2] * ca + B[2] * sa,
+      ];
+    },
+    (_u, v) => path(v),
+    color,
+    o.mat,
+  );
+}
+
+// Head: an ellipsoid centred above the neck joint.
+const HEAD_C = [0, 0.25, 0];
+const HEAD_R = [0.205, 0.215, 0.19];
+/** Head surface depth at (x, y), plus `d`. @param {number} x @param {number} y @param {number} [d] */
+const faceZ = (x, y, d = 0) =>
+  HEAD_R[2] *
+    Math.sqrt(Math.max(0, 1 - (x / HEAD_R[0]) ** 2 - ((y - HEAD_C[1]) / HEAD_R[1]) ** 2)) +
+  d;
+/** @param {number} x @param {number} y @param {number} z */
+const dir = (x, y, z) => unit([x, y, z]);
+/** Soft bump around direction `c`. @param {number[]} d @param {number[]} c @param {number} amp @param {number} w */
+const bump = (d, c, amp, w) => amp * Math.exp(-(1 - (d[0] * c[0] + d[1] * c[1] + d[2] * c[2])) / w);
+
+/**
+ * Shell hugging the skull: longitude range, latitude bounds per longitude and a
+ * radial push (fraction of the head radius) shape hair and beards.
+ * @param {MeshBuilder} b @param {string} color
+ * @param {{nu: number, nv: number, lon?: number[], lat: (lon: number) => number[],
+ *   push: (d: number[], u: number, v: number) => number, mat?: number}} o
+ */
+function shell(b, color, o) {
+  const [l0, l1] = o.lon ?? [-Math.PI, Math.PI];
+  surf(
+    b,
+    o.nu,
+    o.nv,
+    (u, v) => {
+      const lon = lerp(l0, l1, u);
+      const [lo, hi] = o.lat(lon);
+      const lat = lerp(lo, hi, v);
+      const d = [Math.cos(lat) * Math.sin(lon), Math.sin(lat), Math.cos(lat) * Math.cos(lon)];
+      const k = 1 + o.push(d, u, v);
+      return [0, 1, 2].map((i) => HEAD_C[i] + d[i] * HEAD_R[i] * k);
+    },
+    () => HEAD_C,
+    color,
+    o.mat,
+  );
+}
+
+/**
+ * Hairline latitude around the head: high over the forehead, `side` above or over
+ * the ears, `back` at the nape; the face window spans longitudes w0..w1.
+ * @param {number} front @param {number} side @param {number} back @param {number} w0 @param {number} w1
+ */
+const hairline = (front, side, back, w0, w1) => /** @param {number} lon */ (lon) => {
+  const c = Math.cos(lon);
+  const lo =
+    c >= 0
+      ? lerp(side, front, smooth(Math.cos(w1), Math.cos(w0), c))
+      : lerp(side, back, smooth(0, 0.8, -c));
+  return [lo, Math.PI / 2];
+};
+
 /**
  * @param {WebGL2RenderingContext} gl
  * @param {Look} look
@@ -70,169 +354,526 @@ export function buildCharacter(gl, look) {
   const female = Boolean(look.lips);
   const dark = '#1d1a24';
   const gloss = MAT.GLOSSY;
+  const hair = look.hair;
+  const style = look.hairStyle;
 
   // Head: origin at the neck joint.
   const head = part(gl, (b) => {
-    b.ellipsoid([0, 0.25, 0], [0.205, 0.215, 0.19], look.skin, { seg: 24 });
-    b.ellipsoid([-0.2, 0.24, -0.01], [0.035, 0.05, 0.03], look.skin);
-    b.ellipsoid([0.2, 0.24, -0.01], [0.035, 0.05, 0.03], look.skin);
+    b.ellipsoid(HEAD_C, HEAD_R, look.skin, { seg: 22 });
     for (const s of [-1, 1]) {
+      // Ears with a shaded hollow.
+      ell(b, [s * 0.198, 0.245, -0.01], [0.035, 0.052, 0.03], look.skin, { seg: 7 });
+      ell(b, [s * 0.215, 0.245, 0.0], [0.014, 0.03, 0.016], shade(look.skin, -0.12), {
+        seg: 5,
+        lon: [s > 0 ? 0 : -Math.PI, s > 0 ? Math.PI : 0],
+      });
       // Eyes: dark ovals with a catch-light.
-      b.ellipsoid(
+      const front = /** @type {number[]} */ ([-1.7, 1.7]);
+      ell(
+        b,
         [s * 0.072, 0.27, 0.172],
         [0.028, female ? 0.038 : 0.034, 0.02],
         look.eyes ?? '#2a2236',
-        { seg: 14 },
+        {
+          seg: 9,
+          lon: front,
+        },
       );
-      b.ellipsoid([s * 0.064 + 0.006, 0.284, 0.188], [0.009, 0.009, 0.006], '#ffffff', {
-        seg: 10,
+      ell(b, [s * 0.064 + 0.006, 0.284, 0.188], [0.009, 0.009, 0.006], '#ffffff', {
+        seg: 5,
+        lon: front,
         mat: MAT.EMISSIVE,
       });
-      // Brows, lashes for female characters.
-      b.roundedBox(
-        [s * 0.075, 0.335, 0.166],
-        [0.038, female ? 0.007 : 0.011, 0.012],
-        0.007,
-        female ? dark : look.hair,
+      // Arched brows (hair-coloured, finer for female characters) and lashes.
+      const bw = female ? 0.0065 : 0.011;
+      const browColor = female ? dark : style === 'bald' ? shade(look.skin, -0.45) : hair;
+      tube(
+        b,
+        (t) => {
+          const x = s * lerp(0.04, 0.112, t);
+          const y = 0.33 + Math.sin(t * Math.PI) * 0.012 - t * 0.006;
+          return [x, y, faceZ(x, y, 0.004)];
+        },
+        (t) => [bw * (0.75 + 0.35 * Math.sin(t * Math.PI * 0.9 + 0.2)), 0.007],
+        browColor,
+        { nu: 6, nv: 7 },
       );
-      if (female) b.roundedBox([s * 0.105, 0.302, 0.162], [0.014, 0.006, 0.01], 0.005, dark);
-      b.ellipsoid([s * 0.12, 0.2, 0.15], [0.035, 0.022, 0.02], '#f19a92', { seg: 10 });
+      if (female)
+        tube(
+          b,
+          (t) => {
+            const x = s * lerp(0.088, 0.112, t);
+            const y = 0.296 + t * 0.012;
+            return [x, y, faceZ(x, y, 0.002)];
+          },
+          (t) => [0.005 * (1 - t * 0.6), 0.004],
+          dark,
+          { nu: 5, nv: 3 },
+        );
+      ell(b, [s * 0.12, 0.2, 0.148], [0.035, 0.022, 0.02], '#f19a92', { seg: 6, lon: front });
     }
-    b.ellipsoid([0, 0.225, 0.19], [0.022, 0.028, 0.02], shade(look.skin, -0.08), { seg: 10 });
+    ell(b, [0, 0.225, 0.188], [0.022, 0.028, 0.02], shade(look.skin, -0.08), { seg: 7 });
     if (female)
-      b.ellipsoid([0, 0.155, 0.168], [0.05, 0.016, 0.02], /** @type {string} */ (look.lips), {
-        seg: 14,
+      ell(b, [0, 0.155, 0.166], [0.048, 0.016, 0.02], /** @type {string} */ (look.lips), {
+        seg: 8,
+        lon: [-1.8, 1.8],
         mat: gloss,
       });
-    else b.roundedBox([0, 0.158, 0.172], [0.04, 0.008, 0.01], 0.006, '#8c4a3c');
-    if (look.beard)
-      b.ellipsoid([0, 0.13, 0.08], [0.17, 0.11, 0.12], look.hair, { from: 0, to: 0.62 });
-    if (look.glasses) {
+    else
+      tube(
+        b,
+        (t) => {
+          const x = lerp(-0.036, 0.036, t);
+          const y = 0.152 + 0.012 * (2 * t - 1) ** 2;
+          return [x, y, faceZ(x, y, 0.002)];
+        },
+        (t) => [0.0065 * (0.45 + 0.55 * Math.sin(t * Math.PI)), 0.004],
+        '#8c4a3c',
+        { nu: 5, nv: 8 },
+      );
+
+    if (look.beard) {
+      // Trimmed full beard: from the sideburns along the jaw to a rounded chin,
+      // leaving the mouth clear, with a moustache above it.
+      const lonMax = 1.75;
+      shell(b, hair, {
+        nu: 28,
+        nv: 12,
+        lon: [-lonMax, lonMax],
+        lat: (lon) => {
+          const a = Math.abs(lon);
+          const top = lerp(-0.62, 0.15, smooth(0.25, 1.45, a));
+          return [-Math.PI / 2 + 0.05, top];
+        },
+        push: (d, u, v) =>
+          (0.035 + bump(d, dir(0, -0.75, 0.66), 0.13, 0.12)) *
+          smooth(1, 0.7, v) *
+          smooth(0, 0.12, u) *
+          smooth(1, 0.88, u),
+        mat: gloss,
+      });
       for (const s of [-1, 1])
-        b.lathe(
-          [s * 0.075, 0.268, 0.178],
-          [
-            [0.045, -0.006],
-            [0.045, 0.006],
-          ],
-          dark,
-          { seg: 24 },
+        tube(
+          b,
+          (t) => {
+            const x = s * lerp(0.004, 0.07, t);
+            const y = 0.183 - t * t * 0.03;
+            return [x, y, faceZ(x, y, 0.006)];
+          },
+          (t) => [0.017 * (1 - 0.55 * t), 0.012 * (1 - 0.4 * t)],
+          hair,
+          { nu: 7, nv: 6, mat: gloss },
         );
-      b.roundedBox([0, 0.275, 0.182], [0.03, 0.005, 0.005], 0.004, dark);
+    }
+
+    if (look.glasses) {
+      // Rounded-rectangle rims following the face, a bridge and temples to the ears.
+      for (const s of [-1, 1]) {
+        const cx = s * 0.075,
+          cy = 0.27;
+        tube(
+          b,
+          (t) => {
+            const a = t * TAU;
+            const x = cx + spow(Math.cos(a), 0.7) * 0.047;
+            const y = cy + spow(Math.sin(a), 0.7) * 0.036;
+            return [x, y, faceZ(cx, cy, 0.02) - (x - cx) * s * 0.3];
+          },
+          () => [0.0065, 0.0065],
+          dark,
+          { nu: 6, nv: 28, mat: gloss },
+        );
+        tube(
+          b,
+          (t) => {
+            const z = lerp(faceZ(0.075, 0.27, 0.006), -0.02, t);
+            return [s * lerp(0.122, 0.2, Math.sqrt(t)), 0.275, z];
+          },
+          () => [0.005, 0.005],
+          dark,
+          { nu: 5, nv: 5, ref: () => [0, 1, 0], mat: gloss },
+        );
+      }
+      tube(
+        b,
+        (t) => {
+          const x = lerp(-0.03, 0.03, t);
+          return [x, 0.276 + Math.sin(t * Math.PI) * 0.008, faceZ(0, 0.27, 0.017)];
+        },
+        () => [0.0055, 0.0055],
+        dark,
+        { nu: 5, nv: 5, mat: gloss },
+      );
     }
     if (look.earrings)
       for (const s of [-1, 1])
-        b.ellipsoid([s * 0.2, 0.17, 0], [0.018, 0.018, 0.018], '#ffd166', { mat: gloss });
-    const s = look.hairStyle;
-    if (s !== 'bald') {
-      // Hair cap: slightly larger shells over the top and back of the skull.
-      b.ellipsoid([0, 0.29, -0.025], [0.222, 0.2, 0.2], look.hair, {
-        from: 0.42,
-        to: 1,
+        ell(b, [s * 0.205, 0.175, 0.005], [0.017, 0.017, 0.017], '#ffd166', { seg: 6, mat: gloss });
+
+    // Hair: one smooth shell melting into the skull, shaped per style.
+    /** @param {number} v */
+    const melt = (v) => 0.25 + 0.75 * smooth(0, 0.3, v);
+    if (style === 'short')
+      shell(b, hair, {
+        nu: 36,
+        nv: 14,
+        lat: hairline(0.8, 0.28, -0.62, 0.5, 1.25),
+        push: (d, _u, v) =>
+          melt(v) *
+          (0.08 + bump(d, dir(0.2, 0.66, 0.72), 0.08, 0.06) + bump(d, dir(0, 1, 0), 0.05, 0.2)),
         mat: gloss,
       });
-      b.ellipsoid([0, 0.25, -0.05], [0.215, 0.2, 0.17], look.hair, {
-        from: 0.15,
-        to: 0.6,
+    else if (style === 'quiff')
+      shell(b, hair, {
+        nu: 40,
+        nv: 16,
+        lat: hairline(0.76, 0.28, -0.62, 0.5, 1.25),
+        push: (d, _u, v) =>
+          0.07 * melt(v) +
+          smooth(0, 0.12, v) *
+            (bump(d, dir(0.12, 0.82, 0.56), 0.36, 0.05) +
+              bump(d, dir(-0.18, 0.74, 0.64), 0.14, 0.04) +
+              bump(d, dir(0, 1, -0.3), 0.05, 0.2)),
         mat: gloss,
       });
-    }
-    if (s === 'quiff') {
-      b.ellipsoid([0.03, 0.47, 0.08], [0.15, 0.07, 0.11], look.hair, { mat: gloss });
-      b.ellipsoid([-0.06, 0.44, 0.13], [0.1, 0.05, 0.07], look.hair, { mat: gloss });
-    }
-    if (s === 'short') b.ellipsoid([0, 0.44, 0.06], [0.17, 0.05, 0.13], look.hair, { mat: gloss });
-    if (s === 'curly')
-      for (let i = 0; i < 9; i++) {
-        const a = (i / 9) * Math.PI * 2;
-        b.ellipsoid(
-          [Math.sin(a) * 0.15, 0.42 + Math.cos(a * 2) * 0.02, Math.cos(a) * 0.13 - 0.02],
-          [0.08, 0.07, 0.08],
-          look.hair,
+    else if (style === 'curly') {
+      const line = hairline(0.72, 0.22, -0.55, 0.5, 1.25);
+      shell(b, hair, {
+        nu: 40,
+        nv: 14,
+        lat: line,
+        push: (d, _u, v) => melt(v) * (0.09 + bump(d, dir(0, 0.8, 0.6), 0.05, 0.1)),
+        mat: gloss,
+      });
+      // Springy curls scattered over the cap (golden-angle spiral).
+      for (let i = 0; i < 64; i++) {
+        const y = 1 - (i + 0.5) / 64;
+        const lon = i * 2.39996;
+        const lat = Math.asin(y);
+        if (lat < line(lon)[0] + 0.1) continue;
+        const d = [Math.cos(lat) * Math.sin(lon), y, Math.cos(lat) * Math.cos(lon)];
+        const k = 1.02 + 0.02 * (i % 3);
+        ell(
+          b,
+          [0, 1, 2].map((j) => HEAD_C[j] + d[j] * HEAD_R[j] * k),
+          [0.046, 0.043, 0.046],
+          shade(hair, (i % 3) * 0.05 - 0.04),
+          { seg: 6, mat: gloss },
         );
       }
-    if (s === 'long' || s === 'bob') {
-      // Side-swept fringe and locks framing the face.
-      b.ellipsoid([-0.06, 0.42, 0.13], [0.17, 0.07, 0.08], look.hair, { mat: gloss });
-      for (const side of [-1, 1]) {
-        b.roundedBox(
-          [side * 0.2, 0.22, 0.02],
-          [0.05, s === 'long' ? 0.17 : 0.12, 0.12],
-          0.05,
-          look.hair,
-          { mat: gloss },
-        );
-        if (s === 'long')
-          b.ellipsoid([side * 0.19, 0.06, -0.02], [0.07, 0.09, 0.1], look.hair, { mat: gloss });
-      }
+    } else if (style === 'long' || style === 'bob') {
+      const bob = style === 'bob';
+      shell(b, hair, {
+        nu: 44,
+        nv: 18,
+        lat: hairline(0.82, bob ? -0.62 : -0.5, -0.82, 0.58, 1.08),
+        push: (d, _u, v) => {
+          const lat = Math.asin(d[1]);
+          const side = Math.abs(d[0]) + Math.max(0, -d[2]);
+          return (
+            melt(v) *
+            (0.07 +
+              bump(d, bob ? dir(0, 0.6, 0.8) : dir(-0.35, 0.62, 0.7), bob ? 0.06 : 0.1, 0.05) +
+              (bob ? 0.14 : 0.07) * smooth(0.3, -0.45, lat) * Math.min(1, side))
+          );
+        },
+        mat: gloss,
+      });
+      if (!bob)
+        // Locks framing the face down to the shoulders.
+        for (const s of [-1, 1])
+          loft(
+            b,
+            profile([
+              [-0.07, 0.0, 0.0, -0.01, 2, s * 0.17],
+              [-0.05, 0.04, 0.06, -0.01, 2, s * 0.175],
+              [0.06, 0.05, 0.085, -0.02, 2, s * 0.19],
+              [0.18, 0.045, 0.1, -0.02, 2, s * 0.2],
+              [0.26, 0.03, 0.08, -0.03, 2, s * 0.19],
+            ]),
+            hair,
+            { seg: 12, steps: 3, mat: gloss },
+          );
+    } else if (style === 'bun' || style === 'ponytail') {
+      shell(b, hair, {
+        nu: 36,
+        nv: 14,
+        lat: hairline(0.8, 0.25, -0.62, 0.5, 1.25),
+        push: (d, _u, v) =>
+          melt(v) *
+          (0.07 + bump(d, dir(0.3, 0.6, 0.74), 0.05, 0.05) + bump(d, dir(0, 1, 0), 0.03, 0.2)),
+        mat: gloss,
+      });
+      if (style === 'bun') {
+        ell(b, [0, 0.47, -0.12], [0.085, 0.08, 0.085], hair, { seg: 10, mat: gloss });
+        ell(b, [0, 0.43, -0.1], [0.06, 0.03, 0.06], shade(hair, 0.25), { seg: 6 });
+      } else ell(b, [0, 0.33, -0.205], [0.04, 0.035, 0.03], '#ff6b8b', { seg: 7, mat: gloss });
     }
-    if (s === 'bun') b.ellipsoid([0, 0.5, -0.08], [0.09, 0.08, 0.09], look.hair, { mat: gloss });
   });
 
   // Long hair down the back, as its own part so it sways with the body.
   const longHair =
-    look.hairStyle === 'long'
-      ? part(gl, (b) => {
-          b.roundedBox([0, -0.12, 0], [0.2, 0.2, 0.07], 0.07, look.hair, { mat: gloss });
-          b.roundedBox([0, -0.31, 0.01], [0.16, 0.06, 0.05], 0.05, look.hair, { mat: gloss });
-        })
-      : look.hairStyle === 'ponytail'
-        ? part(gl, (b) => b.roundedBox([0, -0.12, 0], [0.05, 0.16, 0.05], 0.05, look.hair))
+    style === 'long'
+      ? part(gl, (b) =>
+          loft(
+            b,
+            profile([
+              [-0.37, 0.0, 0.0, -0.04],
+              [-0.355, 0.12, 0.05, -0.04],
+              [-0.3, 0.17, 0.07, -0.035],
+              [-0.12, 0.19, 0.08, -0.03],
+              [0.0, 0.2, 0.085, -0.02],
+              [0.06, 0.18, 0.08, -0.02],
+            ]),
+            hair,
+            { seg: 22, steps: 3, mat: gloss },
+          ),
+        )
+      : style === 'ponytail'
+        ? part(gl, (b) =>
+            tube(
+              b,
+              (t) => [0, 0.04 - t * 0.3, -0.11 - Math.sin(t * 2.4) * 0.07],
+              (t) => {
+                const r =
+                  0.05 * Math.sin(Math.min(1, t * 3 + 0.25) * Math.PI * 0.5) * (1 - 0.75 * t);
+                return [r, r * 0.85];
+              },
+              hair,
+              { nu: 12, nv: 12, ref: () => [1, 0, 0], mat: gloss },
+            ),
+          )
         : null;
 
-  // Torso: origin at the hip; jacket open over the shirt.
+  // Torso: origin at the hip; tailored jacket open in a V over the shirt.
+  const yb = female ? 0.27 : 0.255; // Button point, where the V closes.
+  const jacketKeys = female
+    ? [
+        [0.03, 0.16, 0.1],
+        [0.05, 0.226, 0.154, 0, 2.2],
+        [0.12, 0.208, 0.142, 0, 2.2],
+        [0.2, 0.166, 0.114, 0, 2.3],
+        [0.3, 0.195, 0.128, 0.008, 2.4],
+        [0.4, 0.205, 0.122, 0, 2.6],
+        [0.47, 0.215, 0.112, 0, 2.6],
+        [0.505, 0.18, 0.094],
+        [0.535, 0.085, 0.07],
+        [0.548, 0.062, 0.058],
+      ]
+    : [
+        [-0.03, 0.13, 0.09],
+        [0.0, 0.188, 0.125, 0, 2.2],
+        [0.07, 0.182, 0.12, 0, 2.3],
+        [0.16, 0.18, 0.12, 0, 2.4],
+        [0.28, 0.205, 0.132, 0.006, 2.5],
+        [0.38, 0.222, 0.13, 0, 2.7],
+        [0.46, 0.238, 0.12, 0, 2.8],
+        [0.505, 0.2, 0.1],
+        [0.535, 0.088, 0.072],
+        [0.548, 0.062, 0.058],
+      ];
+  const J = profile(jacketKeys);
+  /** V half-angle at height y. @param {number} y */
+  const vee = (y) => 0.5 * smooth(yb, 0.5, y) ** 0.8;
+  const lapelColor = shade(look.jacket, luma(look.jacket) < 0.25 ? 0.14 : -0.14);
   const torso = part(gl, (b) => {
-    // Chest wider than the waist, generously rounded.
-    b.roundedBox([0, 0.34, 0], [0.215, 0.17, 0.13], 0.128, look.jacket);
-    b.roundedBox([0, 0.16, 0], [0.18, 0.15, 0.115], 0.113, look.jacket);
-    b.roundedBox([0, 0.37, 0.12], [0.07, 0.14, 0.04], 0.035, look.shirt);
+    loft(b, J, look.jacket, {
+      seg: 36,
+      steps: 3,
+      arc: (r) => {
+        const a = vee(r[0]);
+        return [a, TAU - a];
+      },
+    });
+    // Shirt filling the V, set back inside the jacket.
+    const ts = J.tAt(yb - 0.03);
+    loft(b, J, look.shirt, { seg: 12, steps: 3, t0: ts, dr: -0.01, arc: () => [-0.75, 0.75] });
+    // Lapels rolling along both edges of the V, widest at the chest.
     for (const s of [-1, 1])
-      b.roundedBox([s * 0.08, 0.38, 0.14], [0.025, 0.11, 0.02], 0.018, shade(look.jacket, -0.18));
+      tube(
+        b,
+        (t) => {
+          const y = lerp(yb, 0.535, t);
+          const r = J.row(J.tAt(y));
+          const w = 0.008 + 0.024 * Math.sin(Math.min(1, t * 1.25) * Math.PI * 0.75);
+          return ringPoint(r, s * (vee(y) + (w * 0.9) / r[1]), 0.002);
+        },
+        (t) => [0.008 + 0.024 * Math.sin(Math.min(1, t * 1.25) * Math.PI * 0.75), 0.0055],
+        lapelColor,
+        {
+          nu: 8,
+          nv: 12,
+          ref: (t) => {
+            const a = s * vee(lerp(yb, 0.535, t));
+            return [Math.sin(a), 0, Math.cos(a)];
+          },
+        },
+      );
+    // Shirt collar points either side of the throat.
+    for (const s of [-1, 1])
+      tube(
+        b,
+        (t) => {
+          const y = lerp(0.545, 0.49, t);
+          const r = J.row(J.tAt(y));
+          return ringPoint(r, s * lerp(0.15, 0.4, t), -0.004);
+        },
+        (t) => [0.016 * (1 - 0.7 * t), 0.004],
+        shade(look.shirt, -0.04),
+        { nu: 6, nv: 5, ref: () => [0, 0, 1] },
+      );
     if (look.tie) {
-      b.roundedBox([0, 0.33, 0.16], [0.03, 0.12, 0.012], 0.012, look.tie, { mat: gloss });
-      b.roundedBox([0, 0.47, 0.158], [0.034, 0.025, 0.014], 0.012, look.tie);
+      const tieZ = /** @param {number} y */ (y) => J.row(J.tAt(y))[2] + J.row(J.tAt(y))[3] - 0.004;
+      ell(b, [0, 0.49, tieZ(0.49) + 0.008], [0.022, 0.02, 0.014], look.tie, { seg: 6, mat: gloss });
+      tube(
+        b,
+        (t) => {
+          const y = lerp(0.475, yb - 0.02, t);
+          return [0, y, tieZ(y)];
+        },
+        (t) => [0.012 + 0.016 * t - 0.02 * smooth(0.82, 1, t), 0.004],
+        look.tie,
+        { nu: 6, nv: 8, mat: gloss },
+      );
     }
-    if (!look.skirt) b.roundedBox([0, 0.035, 0], [0.19, 0.035, 0.11], 0.03, look.legs);
-    b.roundedBox([0, 0.52, 0], [0.055, 0.05, 0.05], 0.045, look.skin);
-    for (const y of [0.18, 0.1])
-      b.ellipsoid([0.06, y, 0.125], [0.014, 0.014, 0.008], shade(look.jacket, -0.35));
+    // Closed front below the V: a seam and two buttons.
+    tube(
+      b,
+      (t) => {
+        const y = lerp(yb, jacketKeys[1][0] + 0.005, t);
+        return ringPoint(J.row(J.tAt(y)), 0, 0.001);
+      },
+      () => [0.0035, 0.002],
+      shade(look.jacket, -0.3),
+      { nu: 4, nv: 4, ref: () => [1, 0, 0] },
+    );
+    for (const y of female ? [yb - 0.035] : [yb - 0.035, yb - 0.11]) {
+      const p = ringPoint(J.row(J.tAt(y)), 0, 0.004);
+      ell(b, p, [0.012, 0.012, 0.006], shade(look.jacket, -0.35), { seg: 5, lon: [-1.6, 1.6] });
+    }
+    // Hips in trousers (hidden under a skirt), and the neck.
+    if (!look.skirt) ell(b, [0, 0.03, 0], [0.17, 0.08, 0.108], look.legs, { seg: 8 });
+    loft(
+      b,
+      profile([
+        [0.44, 0.05, 0.05],
+        [0.6, 0.052, 0.05],
+      ]),
+      look.skin,
+      { seg: 12, steps: 1 },
+    );
   });
 
   const skirt = look.skirt
     ? part(gl, (b) =>
-        b.lathe(
-          [0, 0, 0],
-          [
-            [0.2, 0.05],
-            [0.2, 0],
-            [0.24, -0.2],
-            [0.25, -0.24],
-          ],
+        loft(
+          b,
+          profile([
+            [-0.25, 0.2, 0.13],
+            [-0.24, 0.255, 0.17],
+            [-0.15, 0.24, 0.16],
+            [-0.04, 0.215, 0.145],
+            [0.05, 0.2, 0.136],
+          ]),
           /** @type {string} */ (look.skirt),
-          {
-            seg: 28,
-            scaleZ: 0.68,
-          },
+          { seg: 32, steps: 3 },
         ),
       )
     : null;
 
-  // Arm: origin at the shoulder, hanging down.
+  // Arm: origin at the shoulder, hanging down; tapered sleeve, cuff, mitten hand.
   const arm = part(gl, (b) => {
-    b.roundedBox([0, -0.17, 0], [0.058, 0.2, 0.06], 0.056, look.jacket);
-    b.roundedBox([0, -0.37, 0], [0.05, 0.025, 0.052], 0.024, look.shirt);
-    b.ellipsoid([0, -0.42, 0.005], [0.048, 0.055, 0.05], look.skin);
+    ell(b, [0, -0.035, 0], [0.066, 0.056, 0.068], look.jacket, { seg: 9 });
+    loft(
+      b,
+      profile([
+        [-0.358, 0.044, 0.046],
+        [-0.352, 0.055, 0.057],
+        [-0.3, 0.052, 0.054],
+        [-0.18, 0.056, 0.058],
+        [-0.06, 0.062, 0.064],
+        [-0.02, 0.062, 0.064],
+      ]),
+      look.jacket,
+      { seg: 16, steps: 2 },
+    );
+    loft(
+      b,
+      profile([
+        [-0.382, 0.036, 0.038],
+        [-0.375, 0.046, 0.048],
+        [-0.345, 0.046, 0.048],
+      ]),
+      look.shirt,
+      { seg: 14, steps: 2 },
+    );
+    // Mitten: palm and fingers in one rounded mass, thumb forward (shared by both arms).
+    const hand = look.skin;
+    ell(b, [0, -0.425, 0.0], [0.036, 0.056, 0.046], hand, { seg: 9 });
+    ell(b, [0, -0.4, 0.04], [0.018, 0.032, 0.018], hand, { seg: 6, rot: [-0.5, 0, 0] });
   });
 
-  // Leg: origin at the hip joint; court shoes with a heel under a skirt.
+  // Leg: origin at the hip joint; tapered trousers with a hem, shoes with toe cap and sole.
+  const lightShoes = luma(look.shoes) > 0.6;
+  const sole = lightShoes ? '#c9ccd4' : shade(look.shoes, -0.55);
   const leg = part(gl, (b) => {
     if (look.skirt) {
-      b.roundedBox([0, -0.3, 0], [0.05, 0.28, 0.05], 0.05, look.legs);
-      b.roundedBox([0, -0.585, 0.035], [0.05, 0.03, 0.09], 0.03, look.shoes, { mat: gloss });
-      b.roundedBox([0, -0.6, -0.04], [0.02, 0.025, 0.02], 0.015, look.shoes);
+      loft(
+        b,
+        profile([
+          [-0.57, 0.03, 0.033],
+          [-0.5, 0.034, 0.037],
+          [-0.36, 0.044, 0.048],
+          [-0.22, 0.05, 0.054],
+          [0.0, 0.056, 0.058],
+          [0.04, 0.03, 0.03],
+          [0.05, 0.0, 0.0],
+        ]),
+        look.legs,
+        { seg: 14, steps: 2 },
+      );
+      ell(b, [0, -0.587, 0.035], [0.046, 0.036, 0.09], look.shoes, {
+        seg: 9,
+        lat: [-0.1, Math.PI / 2],
+        mat: gloss,
+      });
+      b.roundedBox([0, -0.613, 0.04], [0.045, 0.008, 0.085], 0.007, sole, { seg: 3 });
+      b.roundedBox([0, -0.6, -0.04], [0.018, 0.022, 0.018], 0.012, look.shoes, {
+        seg: 3,
+        mat: gloss,
+      });
     } else {
-      b.roundedBox([0, -0.28, 0], [0.075, 0.29, 0.08], 0.07, look.legs);
-      b.roundedBox([0, -0.585, 0.04], [0.075, 0.04, 0.115], 0.04, look.shoes, { mat: gloss });
+      loft(
+        b,
+        profile([
+          [-0.545, 0.054, 0.058],
+          [-0.53, 0.07, 0.074],
+          [-0.42, 0.066, 0.07],
+          [-0.24, 0.072, 0.077],
+          [-0.05, 0.08, 0.084],
+          [0.025, 0.07, 0.074],
+          [0.055, 0.0, 0.0],
+        ]),
+        look.legs,
+        { seg: 16, steps: 3 },
+      );
+      ell(b, [0, -0.588, 0.03], [0.072, 0.058, 0.112], look.shoes, {
+        seg: 10,
+        lat: [-0.2, Math.PI / 2],
+        mat: gloss,
+      });
+      ell(
+        b,
+        [0, -0.592, 0.085],
+        [0.068, 0.046, 0.062],
+        shade(look.shoes, lightShoes ? -0.06 : 0.1),
+        {
+          seg: 8,
+          lon: [-1.9, 1.9],
+          lat: [-0.2, Math.PI / 2],
+          mat: gloss,
+        },
+      );
+      b.roundedBox([0, -0.608, 0.032], [0.074, 0.013, 0.118], 0.011, sole, { seg: 3 });
     }
   });
 

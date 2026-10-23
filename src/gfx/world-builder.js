@@ -72,11 +72,11 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
   const roof = theme === 'rooftop';
   const dc = theme === 'datacenter';
   const park = theme === 'parking';
-  const concrete = vary(rgb('#7b818c'), 0.08, 2);
+  const concrete = vary(rgb('#7b818c'), 0.08, 4);
   /** Floor finish: carpet in offices, raised-floor tiles in the server hall. */
   const floorTop = park
     ? /** @param {number} x @param {number} y @param {number} z */ (x, y, z) =>
-        x % (3 * V) < 1 && z > zv(-1.8) ? rgb('#e9e6dc') : vary(rgb('#3b3f47'), 0.18, 1)(x, y, z)
+        x % (3 * V) < 1 && z > zv(-1.8) ? rgb('#e9e6dc') : vary(rgb('#3b3f47'), 0.16, 2)(x, y, z)
     : dc
       ? /** @param {number} x @param {number} _y @param {number} z */ (x, _y, z) =>
           ((x >> 2) + (z >> 2)) % 2 ? rgb('#a3acb7') : rgb('#8d96a2')
@@ -129,7 +129,7 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
               ? rgb('#2f6fd6')
               : panel && inWindowBand
                 ? rgb('#8e949e')
-                : vary(rgb('#6b717c'), 0.07, 3)(x, y, 0);
+                : vary(rgb('#6b717c'), 0.07, 8)(x, y, 0);
           vol.box(x, y, 0, x + 1, y + 1, 3, c);
           continue;
         }

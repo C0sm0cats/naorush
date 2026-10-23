@@ -55,6 +55,14 @@ export function boardUrl(id) {
 /** @type {Record<string, string>} */
 const BOARD_URLS = {};
 
+/** The city skyline depends only on the level width: built once per width. */
+const SKYLINES = new Map();
+/** @param {WebGL2RenderingContext} gl @param {number} width @returns {Mesh} */
+function skylineMesh(gl, width) {
+  if (!SKYLINES.has(width)) SKYLINES.set(width, new Mesh(gl, buildSkyline(width)));
+  return SKYLINES.get(width);
+}
+
 /** Meshes shared by every level, built once per GL context. */
 const SHARED = new WeakMap();
 /** @param {WebGL2RenderingContext} gl */
@@ -116,9 +124,7 @@ export class LevelView {
     this.lights = office.lights;
     this.office = new Mesh(gl, office.mesh);
     this.skyline =
-      level.theme === 'datacenter' || level.theme === 'parking'
-        ? null
-        : new Mesh(gl, buildSkyline(sim.w));
+      level.theme === 'datacenter' || level.theme === 'parking' ? null : skylineMesh(gl, sim.w);
     const shared = sharedMeshes(gl);
     this.things = shared.things;
     this.props = shared.props;
@@ -209,7 +215,6 @@ export class LevelView {
   /** Frees the level's own GPU resources (shared meshes stay). */
   dispose() {
     this.office.dispose(this.gl);
-    this.skyline?.dispose(this.gl);
     for (const s of this.sprites) s.dispose(this.gl);
     this.sprites = [];
   }
