@@ -98,6 +98,7 @@ export function createSim(def, heroId) {
         });
       else if (c === 'S') start = { x: col + 0.2, y };
       else if (c === '*') thing('secret', col + 0.5, y);
+      else if (c === 'k') thing('switch', col + 0.5, y);
       else if (c === '$') thing('ticket', col + 0.5, y + 0.5);
       else if (c === 'C') thing('checkpoint', col + 0.5, y);
       else if (c === 'p') thing('reader', col + 0.5, y);
@@ -554,6 +555,14 @@ function stepThings(s) {
           }
         }
         break;
+      case 'switch':
+        // The water shut-off valve: every sprinkler in the stage stops.
+        if (t.state === 'idle' && alive && touches(hero, t, 0.5, 1)) {
+          t.state = 'on';
+          for (const k of s.things) if (k.kind === 'sprinkler') k.state = 'dry';
+          emit(s, 'switch', t.x, t.y + 1);
+        }
+        break;
       case 'secret':
         if (t.state === 'idle' && alive && touches(hero, t, 0.6, 1)) {
           t.state = 'found';
@@ -586,7 +595,7 @@ function stepThings(s) {
         stepDrawer(s, t);
         break;
       case 'sprinkler':
-        stepSprinkler(s, t);
+        if (t.state !== 'dry') stepSprinkler(s, t);
         break;
       case 'printer':
         stepPrinter(s, t);

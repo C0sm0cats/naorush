@@ -24,6 +24,7 @@ Une étape est un fichier de `src/data/levels/`, enregistré dans `LEVELS` de `s
 | `n` `i` `v` `z` | Collègue en call, stagiaire, robot aspirateur, chef de projet en visio |
 | `X` | Boss (avec `boss` dans la définition) |
 | `*` | Secret (invisible, un léger scintillement le trahit) |
+| `k` | Coupure d’eau : arrête tous les sprinklers de l’étape |
 
 ### Règles de level design
 

@@ -79,7 +79,16 @@ export const MOVES = [
   { name: 'pause', frames: repeat(8, {}) },
 ];
 
-const FLAGGED = new Set(['colleague', 'loose', 'bottle', 'intern', 'visio', 'crate', 'panel']);
+const FLAGGED = new Set([
+  'colleague',
+  'loose',
+  'bottle',
+  'intern',
+  'visio',
+  'crate',
+  'panel',
+  'switch',
+]);
 const PERIODIC = /** @type {Record<string, number>} */ (PERIOD);
 
 /** @param {import('./sim.js').Sim} s */

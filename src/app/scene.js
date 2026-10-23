@@ -625,6 +625,13 @@ export class LevelView {
           at(P.laptopStand, th.x + dir * 0.35, th.y, -0.3);
           break;
         }
+        case 'switch':
+          items.push({
+            mesh: th.state === 'on' ? things.readerOn : things.reader,
+            model: translation(th.x, th.y + 0.9, -0.8),
+            tint: [0.6, 0.85, 1.6],
+          });
+          break;
         case 'secret':
           // A faint glint gives the hiding place away to curious eyes.
           if (th.state === 'idle' && Math.sin(t * 2.3 + th.x) > 0.6)

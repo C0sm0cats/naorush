@@ -49,6 +49,7 @@ const EFFECTS = {
   smash: { n: 20, colors: [[0.95, 0.94, 0.9]], speed: 4, up: 2, life: 0.8, size: 0.12 },
   splash: { n: 40, colors: [BLUE, [0.8, 0.95, 1]], speed: 5, up: 3, life: 0.9, size: 0.08 },
   key: { n: 24, colors: [GOLD, WHITE], speed: 4, up: 3, life: 0.9 },
+  switch: { n: 18, colors: [BLUE, WHITE], speed: 3, up: 2, life: 0.7 },
   door: { n: 16, colors: [LIME], speed: 3, up: 2, life: 0.7 },
   meeting: { n: 18, colors: [WHITE, BLUE], speed: 3, up: 2, life: 0.7 },
   // Ambience, one kind per stage theme.

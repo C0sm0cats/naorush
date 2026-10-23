@@ -451,7 +451,7 @@ let gameOverTimer = 0;
 /** Events from traps that run on their own, wherever the hero is. */
 const AMBIENT = new Set(['telegraph', 'drawerOut', 'sprayOn', 'paperShot', 'poof', 'invite']);
 /** Events that reuse another event's sound. @type {Record<string, string>} */
-const SFX_ALIAS = { throw: 'fire', archive: 'crack' };
+const SFX_ALIAS = { throw: 'fire', archive: 'crack', switch: 'door' };
 /** Freeze time per event, in seconds. @type {Record<string, number>} */
 const HITSTOP = {
   hurt: 0.12,

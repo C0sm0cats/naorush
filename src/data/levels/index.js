@@ -17,7 +17,7 @@ import { TS } from './ts.js';
  *   'n' colleague in a call              'a' ream of paper (+3 CR)   'h' coffee (+1 heart)
  *   'i' intern (hurts; a CR stuns)       'v' robot vacuum (jump on it)   'z' video call (invites)
  *   'c' rolling chair   'd' drawer (wall)   'w' sprinkler (ceiling)   'P' printer (paper)
- *   'L' hidden trapdoor 'O' falling binders
+ *   'L' hidden trapdoor 'O' falling binders   'k' water shut-off (stops the sprinklers)   '*' secret
  *   'X' level boss     'E' exit (needs the purchase order)
  *
  * @typedef {Object} Decor

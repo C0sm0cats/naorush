@@ -37,6 +37,7 @@ const FIRST_TIME = {
   cableWarn: 'Les câbles qui s’allument vont passer sous tension : reste sur les zones éteintes.',
   zoneWarn: 'Les projecteurs vont frapper : file dans la zone restée sombre.',
   dash: 'La tournée régionale ! Monte sur une plateforme pour la laisser passer.',
+  switch: 'Coupure d’eau : tous les sprinklers de l’étape sont arrêtés.',
   secret: 'Secret trouvé ! Il y en a un pour chaque héros dans chaque étape.',
 };
 const TIPS_KEY = 'naorush.tips';
