@@ -23,12 +23,13 @@ Une étape est un fichier de `src/data/levels/`, enregistré dans `LEVELS` de `s
 | `c` `d` `w` `P` | Fauteuil roulant, tiroir (posé contre un mur), sprinkler (sous le plafond), imprimante |
 | `n` `i` `v` `z` | Collègue en call, stagiaire, robot aspirateur, chef de projet en visio |
 | `X` | Boss (avec `boss` dans la définition) |
+| `*` | Secret (invisible, un léger scintillement le trahit) |
 
 ### Règles de level design
 
 - Un mur fait **1 case** (on saute) ou **au moins 3 cases** (on s’accroche) : 2 cases sont infranchissables pour Kévin, et un test le vérifie.
 - Le saut simple monte d’environ 1,7 case et porte à environ 3,5 cases. Kévin attrape un rebord jusqu’à environ 4,5 cases au-dessus de ses pieds, Charline encore plus haut grâce au double saut.
-- Un secret pour Charline : un rebord à 5 cases au-dessus du sol. Un secret pour Kévin : une niche fermée par des cartons `A`.
+- Deux secrets `*` par étape : un pour Charline (un rebord à 5 cases au-dessus du sol), un pour Kévin (une niche fermée par des cartons `A`, toute la pile tombe d’un seul CR). Un test vérifie que chaque héros en atteint au moins un.
 - Chaque piège doit se voir venir. Les pièges périodiques (tiroir, sprinkler, imprimante) se décalent selon leur colonne.
 
 ## 2. La définition
@@ -44,7 +45,8 @@ export const MON_ETAPE = {
   keyLabel: 'Badge', // nom de l’objet clé dans le HUD
   rooms: ['Salle 1', 'Salle 2'], // une par tranche de 20 cases
   map: [/* 12 lignes */],
-  lifts: [{ x: 23, y: 3, top: 6, w: 2, period: 4 }], // optionnel
+  lifts: [{ x: 23, y: 3, top: 6, w: 2, period: 4 }], // optionnel : nacelles verticales
+  tips: [{ x0: 5, x1: 8, keys: 'Espace pour sauter', touch: 'SAUT pour sauter' }], // optionnel
   boss: { id: 'techServicesDirector', hp: 4, arena: [82, 98] }, // optionnel
   decor: [
     { type: 'poster', id: 'spark', x: 10, y: 4 },
@@ -53,6 +55,8 @@ export const MON_ETAPE = {
   lighting: {/* soleil, ciel, brouillard, fond : copier une étape existante */},
   intro: [{ who: 'partner', text: '…' }],
   outro: [{ who: 'hero', text: '…' }],
+  bossIntro: [{ who: 'boss', text: '…' }], // avec un boss
+  phaseLine: '…', // réplique du boss au passage en deuxième phase
 };
 ```
 
@@ -66,4 +70,4 @@ export const MON_ETAPE = {
 npm run check
 ```
 
-Si le solveur échoue, il indique où il est resté bloqué (`closest` dans `src/game/solver.js`). C’est presque toujours un saut trop long ou un mur de 2 cases.
+Les tests vérifient aussi les secrets et, pour une étape à boss, qu’il est possible de le convaincre sans prendre un seul coup. Si le solveur échoue, il indique où il est resté bloqué (`closest` dans `src/game/solver.js`). C’est presque toujours un saut trop long ou un mur de 2 cases.
