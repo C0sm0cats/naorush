@@ -326,7 +326,11 @@ document.addEventListener('visibilitychange', () => {
 for (const type of ['pointerdown', 'keydown'])
   addEventListener(type, () => audio.unlock(), { once: true, capture: true });
 
+/** Whiteboards stay on the wall while a boss fight is on. */
+const fighting = () => sim.bossActive && !sim.bossDone;
+
 function openBoard() {
+  if (fighting()) return false;
   const board = view.boardAt(sim);
   if (!board?.id) return false;
   /** @type {HTMLImageElement} */ ($('readerImg')).src = boardUrl(board.id);
@@ -736,7 +740,7 @@ function frame(now) {
       // Standing still for a while earns a quip.
       const h = sim.hero;
       idleTime = h.state === 'ground' && Math.abs(h.vx) < 0.1 ? idleTime + dt : 0;
-      if (idleTime > 7) {
+      if (idleTime > 7 && !fighting()) {
         idleTime = -6;
         say(heroId, 'idle');
       }
@@ -804,7 +808,7 @@ function frame(now) {
       { rooms: level.rooms, roomW: ROOM_W, keyLabel: level.keyLabel, timer: Boolean(challenge) },
       {
         poster: screen === 'play' ? poster?.id : undefined,
-        board: Boolean(view.boardAt(sim)),
+        board: !fighting() && Boolean(view.boardAt(sim)),
         tip: screen === 'play' ? tipAt() : undefined,
       },
     );
