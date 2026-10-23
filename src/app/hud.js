@@ -1,4 +1,5 @@
 import { CAST } from '../data/cast.js';
+import { load, store } from './storage.js';
 import { POSTER_HINTS, posterTitle } from '../data/inetum.js';
 import { HERO } from '../game/sim.js';
 
@@ -56,7 +57,7 @@ export class Hud {
     this.lastHearts = -1;
     this.lastPoster = '';
     /** Mechanics already explained. @type {Set<string>} */
-    this.seen = new Set(JSON.parse(localStorage.getItem(TIPS_KEY) ?? '[]'));
+    this.seen = new Set(/** @type {string[]} */ (load(TIPS_KEY, [])));
     this.bossbar = $('bossbar');
     this.bossName = $('bossName');
     this.bossHp = $('bossHp');
@@ -79,7 +80,7 @@ export class Hud {
     const tip = FIRST_TIME[/** @type {keyof typeof FIRST_TIME} */ (e.type)];
     if (tip && !this.seen.has(e.type)) {
       this.seen.add(e.type);
-      localStorage.setItem(TIPS_KEY, JSON.stringify([...this.seen]));
+      store(TIPS_KEY, [...this.seen]);
       this.toast(tip);
       return;
     }

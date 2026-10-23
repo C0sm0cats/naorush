@@ -1,3 +1,5 @@
+import { load, store } from './storage.js';
+
 /**
  * Trophies: small goals for replaying the stages, saved in the browser.
  *
@@ -29,17 +31,13 @@ export class Trophies {
     this.onUnlock = onUnlock;
     /** @type {{got: Record<string, boolean>, counts: Record<string, number>, secrets: string[]}} */
     this.data = { got: {}, counts: {}, secrets: [] };
-    try {
-      Object.assign(this.data, JSON.parse(localStorage.getItem(KEY) ?? '{}'));
-    } catch {
-      /* A corrupted save just starts over. */
-    }
+    Object.assign(this.data, load(KEY, {}));
     /** Hits taken during the current boss fight. */
     this.bossHits = 0;
   }
 
   save() {
-    localStorage.setItem(KEY, JSON.stringify(this.data));
+    store(KEY, this.data);
   }
 
   /** @param {string} id */

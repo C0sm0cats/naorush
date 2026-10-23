@@ -3,6 +3,8 @@
  * `pressed()` reports one-shot actions (pause, read, confirm) for the menus.
  * Players can add their own key for each action; it is saved locally.
  */
+import { load, store } from './storage.js';
+
 const KEYMAP = /** @type {Record<string, string>} */ ({
   ArrowLeft: 'left',
   KeyA: 'left',
@@ -56,11 +58,7 @@ export class Input {
     this.taps = new Set();
     /** Custom bindings: action → key code. @type {Record<string, string>} */
     this.custom = {};
-    try {
-      this.custom = JSON.parse(localStorage.getItem(BIND_KEY) ?? '{}');
-    } catch {
-      this.custom = {};
-    }
+    this.custom = load(BIND_KEY, {});
     /** Waiting for a key to bind. @type {((code: string) => void) | null} */
     this.capture = null;
     /** Gamepad buttons held last frame. @type {Set<string>} */
@@ -103,12 +101,12 @@ export class Input {
   bind(action, code) {
     for (const [a, c] of Object.entries(this.custom)) if (c === code) delete this.custom[a];
     this.custom[action] = code;
-    localStorage.setItem(BIND_KEY, JSON.stringify(this.custom));
+    store(BIND_KEY, this.custom);
   }
 
   resetBindings() {
     this.custom = {};
-    localStorage.removeItem(BIND_KEY);
+    store(BIND_KEY, {});
   }
 
   /**

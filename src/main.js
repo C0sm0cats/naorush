@@ -6,6 +6,7 @@ import { Particles } from './app/fx.js';
 import { Hud } from './app/hud.js';
 import { Input } from './app/input.js';
 import { applyPrefs, prefs, setupOptions } from './app/options.js';
+import { load, store } from './app/storage.js';
 import { Trophies } from './app/trophies.js';
 import { LevelView, boardUrl } from './app/scene.js';
 import { PROLOGUE } from './data/barks.js';
@@ -184,7 +185,7 @@ for (const card of document.querySelectorAll('.hero-card')) {
   });
 }
 
-const saved = () => Math.min(CAMPAIGN - 1, Number(localStorage.getItem(SAVE_KEY)) || 0);
+const saved = () => Math.min(CAMPAIGN - 1, Number(load(SAVE_KEY, 0)) || 0);
 function updateContinue() {
   const d = today();
   $('dailyBtn').textContent =
@@ -337,7 +338,7 @@ function stageWon() {
   run.secrets += sim.secrets;
   const last = stage === CAMPAIGN - 1 && !challenge;
   const bonus = stage >= CAMPAIGN || Boolean(challenge);
-  if (!bonus) localStorage.setItem(SAVE_KEY, String(last ? 0 : stage + 1));
+  if (!bonus) store(SAVE_KEY, last ? 0 : stage + 1);
   trophies.stageWon(sim, level.id, last);
   if (last) return credits();
   $('next').hidden = bonus;
@@ -349,12 +350,12 @@ function stageWon() {
   $('wonTitle').textContent = STAGE_END[stage].title;
   $('wonText').textContent = STAGE_END[stage].text;
   // Best time per stage and hero.
-  const bests = JSON.parse(localStorage.getItem(BEST_KEY) ?? '{}');
+  const bests = /** @type {Record<string, number>} */ (load(BEST_KEY, {}));
   const key = challenge ? `daily:${challenge.key}` : `${level.id}:${heroId}`;
   const record = !(bests[key] <= sim.time);
   if (record) {
     bests[key] = sim.time;
-    localStorage.setItem(BEST_KEY, JSON.stringify(bests));
+    store(BEST_KEY, bests);
   }
   const rows = [
     ['Tickets Swile', sim.tickets],

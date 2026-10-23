@@ -1,4 +1,5 @@
 import { ACTIONS, keyName } from './input.js';
+import { load, store } from './storage.js';
 
 /**
  * Player preferences and the options screen: volumes, accessibility switches,
@@ -19,7 +20,7 @@ export const prefs = {
   vibrate: true,
   assist: false,
   pad: 'm',
-  ...JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}'),
+  ...load(PREFS_KEY, {}),
 };
 
 /** Applies the preferences that live in the page (contrast, pad size). */
@@ -28,7 +29,7 @@ export function applyPrefs() {
   document.body.dataset.pad = prefs.pad;
 }
 
-const save = () => localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+const save = () => store(PREFS_KEY, prefs);
 
 const ACTION_LABELS = {
   left: 'Gauche',
