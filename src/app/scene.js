@@ -568,6 +568,13 @@ export class LevelView {
           at(P.laptopStand, th.x + dir * 0.35, th.y, -0.3);
           break;
         }
+        case 'secret':
+          // A faint glint gives the hiding place away to curious eyes.
+          if (th.state === 'idle' && Math.sin(t * 2.3 + th.x) > 0.6)
+            items.push(
+              this.glow(th.x, th.y + 0.6 + Math.sin(t * 3) * 0.1, 0.3, 0.07, [1.4, 1.2, 0.5]),
+            );
+          break;
         case 'invite':
           at(P.invite, th.x, th.y, 0, rotationZ(Math.sin(th.t * 12) * 0.2));
           break;

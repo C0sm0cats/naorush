@@ -173,9 +173,14 @@ export function stepCr(s, t) {
     t.alive = false;
     // Kévin's heavy CRs knock archive boxes over.
     if (tileAt(s, c, r) === TILE.CRATE && s.stats.heavy) {
-      s.tiles[c + r * s.w] = TILE.EMPTY;
-      const box = s.things.find((b) => b.kind === 'crate' && b.alive && b.x === c && b.y === r);
-      if (box) box.alive = false;
+      // The whole stack of archive boxes in that column comes down.
+      let bottom = r;
+      while (tileAt(s, c, bottom - 1) === TILE.CRATE) bottom--;
+      for (let y = bottom; tileAt(s, c, y) === TILE.CRATE; y++) {
+        s.tiles[c + y * s.w] = TILE.EMPTY;
+        const box = s.things.find((b) => b.kind === 'crate' && b.alive && b.x === c && b.y === y);
+        if (box) box.alive = false;
+      }
       emit(s, 'crack', c + 0.5, r + 0.5);
     } else emit(s, tileAt(s, c, r) === TILE.CRATE ? 'block' : 'poof', t.x, t.y);
     return;

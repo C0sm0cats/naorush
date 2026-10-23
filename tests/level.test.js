@@ -40,6 +40,24 @@ describe.each(LEVELS)('$name', (level) => {
     expect(walls).toEqual([]);
   });
 
+  it('hides a secret for each hero', () => {
+    const sim = createSim(level, 'kevin');
+    const spots = sim.things.filter((t) => t.kind === 'secret');
+    expect(spots.length).toBe(2);
+    // Each hero can reach at least one of them.
+    for (const hero of HEROES) {
+      const found = spots.some((spot) => {
+        const s = createSim(level, hero);
+        return solve(s, {
+          maxNodes: 40000,
+          allowDamage: true,
+          goal: { x: spot.x, y: spot.y, done: (x) => x.secrets > 0 },
+        }).won;
+      });
+      expect(found, hero).toBe(true);
+    }
+  });
+
   it('keeps every row the same width', () => {
     expect(level.map.length).toBe(12);
     expect(new Set(level.map.map((r) => r.length)).size).toBe(1);

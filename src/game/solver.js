@@ -131,7 +131,8 @@ function remaining(s) {
 /**
  * Best-first search guided by {@link remaining}; ties go to shorter paths.
  * @param {import('./sim.js').Sim} start
- * @param {{maxNodes?: number, allowDamage?: boolean}} [o]
+ * @param {{maxNodes?: number, allowDamage?: boolean, goal?: {x: number, y: number, done: (s: import('./sim.js').Sim) => boolean}}} [o]
+ *   `goal` replaces the exit as the target (used to prove secrets are reachable).
  * @returns {{won: boolean, inputs: Input[], explored: number, closest?: import('./sim.js').Sim}}
  */
 export function solve(start, o = {}) {
@@ -156,7 +157,7 @@ export function solve(start, o = {}) {
       let bad = false;
       for (const input of move.frames) {
         step(s, input);
-        if (s.won) break;
+        if (s.won || o.goal?.done(s)) break;
         if (s.hero.state === 'dead' || (!o.allowDamage && s.hero.hearts < hearts)) {
           bad = true;
           break;
@@ -165,11 +166,14 @@ export function solve(start, o = {}) {
       explored++;
       if (bad) continue;
       const path = [...node.path, move];
-      if (s.won) return { won: true, inputs: path.flatMap((m) => m.frames), explored };
+      if (o.goal ? o.goal.done(s) : s.won)
+        return { won: true, inputs: path.flatMap((m) => m.frames), explored };
       const k = key(s);
       if (seen.has(k)) continue;
       seen.add(k);
-      const left = remaining(s);
+      const left = o.goal
+        ? Math.abs(o.goal.x - s.hero.x) + Math.abs(o.goal.y - s.hero.y) * 1.5
+        : remaining(s);
       if (left < best.left) best = { left, sim: s };
       open.push({ sim: s, path, score: left + path.length * 0.35 });
     }

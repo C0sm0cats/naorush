@@ -97,6 +97,7 @@ export function createSim(def, heroId) {
           step: -1,
         });
       else if (c === 'S') start = { x: col + 0.2, y };
+      else if (c === '*') thing('secret', col + 0.5, y);
       else if (c === '$') thing('ticket', col + 0.5, y + 0.5);
       else if (c === 'C') thing('checkpoint', col + 0.5, y);
       else if (c === 'p') thing('reader', col + 0.5, y);
@@ -177,6 +178,9 @@ export function createSim(def, heroId) {
     stats,
     checkpoint: { ...start },
     tickets: 0,
+    secrets: 0,
+    /** Hidden spots: one for each hero's strength. */
+    secretTotal: things.filter((t) => t.kind === 'secret').length,
     ammo: stats.ammo,
     fireHeld: false,
     hasKey: false,
@@ -546,6 +550,13 @@ function stepThings(s) {
             hero.hearts++;
             emit(s, 'heart', t.x, t.y);
           }
+        }
+        break;
+      case 'secret':
+        if (t.state === 'idle' && alive && touches(hero, t, 0.6, 1)) {
+          t.state = 'found';
+          s.secrets++;
+          emit(s, 'secret', t.x, t.y + 1);
         }
         break;
       case 'lift': {

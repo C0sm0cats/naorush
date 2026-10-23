@@ -61,7 +61,7 @@ const lightingFor = (l) => {
 };
 let lighting = lightingFor(level);
 /** Totals over the whole run, for the credits. */
-const run = { tickets: 0, time: 0, deaths: 0 };
+const run = { tickets: 0, time: 0, deaths: 0, secrets: 0 };
 
 /** @type {Screen} */
 let screen = 'loading';
@@ -255,7 +255,7 @@ function updateContinue() {
 /** @param {number} i */
 const startFrom = (i) => {
   audio.sfx('confirm');
-  if (i === 0) Object.assign(run, { tickets: 0, time: 0, deaths: 0 });
+  if (i === 0) Object.assign(run, { tickets: 0, time: 0, deaths: 0, secrets: 0 });
   beginStage(i, i === 0 && screen === 'title' ? PROLOGUE : []);
 };
 const toMenu = () => {
@@ -408,6 +408,7 @@ function stageWon() {
   run.tickets += sim.tickets;
   run.time += sim.time;
   run.deaths += sim.deaths;
+  run.secrets += sim.secrets;
   const last = stage === LEVELS.length - 1;
   localStorage.setItem(SAVE_KEY, String(last ? 0 : stage + 1));
   if (last) return credits();
@@ -416,6 +417,7 @@ function stageWon() {
   $('wonText').textContent = STAGE_END[stage].text;
   const rows = [
     ['Tickets Swile', sim.tickets],
+    ['Secrets', `${sim.secrets} / ${sim.secretTotal}`],
     ['Temps', clock(sim.time)],
     ['Retours au badge', sim.deaths],
   ];
@@ -440,7 +442,9 @@ function credits() {
     ['NAO Rush', 't'],
     ['Les NAO sont sauvées !', 'h'],
     [`${hero.name}, ${hero.title}, a fait signer l’enveloppe.`],
-    [`${run.tickets} tickets Swile · ${clock(run.time)} · ${run.deaths} retours au badge`],
+    [
+      `${run.tickets} tickets Swile · ${run.secrets} secrets · ${clock(run.time)} · ${run.deaths} retours au badge`,
+    ],
     ['Avec', 'h'],
     ['Kévin · Directeur de Projets'],
     ['Charline · Business Manager'],
@@ -498,6 +502,7 @@ const QUIPS = new Set([
   'crack',
   'vacuumBounce',
   'heart',
+  'secret',
 ]);
 
 /** @param {number} amount */
