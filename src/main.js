@@ -95,6 +95,9 @@ function show(next) {
 /** Rebuilds the scene when the stage changes; restarts the simulation either way. @param {number} i */
 async function loadStage(i) {
   if (i !== stage || view.levelId !== LEVELS[i].id) {
+    // Building a stage takes a moment: show the loading screen first.
+    show('loading');
+    await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
     stage = i;
     level = LEVELS[i];
     sim = createSim(level, heroId);
