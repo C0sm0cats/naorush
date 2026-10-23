@@ -190,6 +190,8 @@ export function createSim(def, heroId) {
     time: 0,
     deaths: 0,
     gameOver: false,
+    /** Relaxed mode: obstacles knock you back but cost no heart. */
+    assist: false,
     jumpHeld: false,
     /** @type {SimEvent[]} */
     events: [],

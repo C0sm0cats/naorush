@@ -43,6 +43,7 @@ const prefs = {
   flash: true,
   contrast: false,
   vibrate: true,
+  assist: false,
   pad: 'm',
   ...JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}'),
 };
@@ -107,6 +108,7 @@ async function loadStage(i) {
     await view.ready;
   }
   sim = createSim(level, heroId);
+  sim.assist = prefs.assist;
   particles.clear();
   view.doorT = 0;
   camera.snap(sim.hero.x, sim.hero.y + 3);
@@ -323,6 +325,7 @@ function openOptions() {
   field('optFlash').checked = prefs.flash;
   field('optContrast').checked = prefs.contrast;
   field('optVibrate').checked = prefs.vibrate;
+  field('optAssist').checked = prefs.assist;
   padSelect.value = prefs.pad;
   renderKeys();
   show('options');
@@ -357,9 +360,11 @@ for (const [id, k] of /** @type {const} */ ([
   ['optFlash', 'flash'],
   ['optContrast', 'contrast'],
   ['optVibrate', 'vibrate'],
+  ['optAssist', 'assist'],
 ]))
   field(id).onchange = () => {
     prefs[k] = field(id).checked;
+    sim.assist = prefs.assist;
     savePrefs();
     applyPrefs();
   };

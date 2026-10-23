@@ -187,14 +187,15 @@ export const make = (kind, x, y, extra = {}) => ({
 export const LETHAL = new Set(['cables', 'void']);
 
 /**
- * @param {World & {deaths: number, gameOver: boolean}} s
+ * @param {World & {deaths: number, gameOver: boolean, assist?: boolean}} s
  * @param {Hero} hero
  * @param {string} cause
  */
 export function hurt(s, hero, cause) {
   if (hero.state === 'dead') return;
   if (hero.invuln > 0 && !LETHAL.has(cause)) return;
-  hero.hearts--;
+  // Relaxed mode: knocks still happen, hearts are never lost.
+  if (!s.assist || LETHAL.has(cause)) hero.hearts--;
   emit(
     s,
     cause === 'fall' ? 'hardland' : LETHAL.has(cause) ? 'zap' : 'hurt',
