@@ -57,6 +57,11 @@ export const ROOFTOP = {
     { type: 'speaker', x: 85.8, y: 3 },
     { type: 'speaker', x: 96.4, y: 3 },
     { type: 'confetti', x: 98.2, y: 3 },
+    { type: 'truss', x: 85, y: 10.6, z: -0.8 },
+    { type: 'truss', x: 89, y: 10.6, z: -0.8 },
+    { type: 'truss', x: 93, y: 10.6, z: -0.8 },
+    { type: 'spotlight', x: 83.4, y: 3, z: -0.2 },
+    { type: 'spotlight', x: 97.4, y: 3, z: -0.2 },
   ],
   lighting: {
     sunDir: [0.55, -0.35, 0.75],

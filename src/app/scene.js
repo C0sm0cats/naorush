@@ -789,6 +789,23 @@ export class LevelView {
       default:
         break;
     }
+    // Entrances: Julien's racks light up one by one, Rodolphe's curtain opens.
+    if (b.state === 'intro' || b.state === 'phase') {
+      const k = Math.min(1, b.t / 1.6);
+      if (id === 'techServicesDirector')
+        for (let i = 0; i < 8; i++) {
+          if (i / 8 > k) break;
+          const side = i % 2 ? 1 : -1;
+          const dx = side * (1.2 + Math.floor(i / 2) * 0.9);
+          items.push(this.glow(b.x + dx, b.y + 0.4 + (i % 3) * 0.7, -1.4, 0.12, [0.3, 1.6, 1.2]));
+        }
+      else if (b.state === 'intro')
+        for (const side of [-1, 1])
+          items.push({
+            mesh: this.props.curtain,
+            model: translation(b.x + side * (0.7 + k * 3.2), b.y, 0.5),
+          });
+    }
     items.push(
       ...poseCharacter(this.cast[id], b.x, y, -0.1, facing, pose, {
         scale: CAST[id].scale,

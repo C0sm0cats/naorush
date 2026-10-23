@@ -284,6 +284,9 @@ $('pauseBtn').onclick = () => screen === 'play' && pause();
 $('readerClose').onclick = () => show('play');
 $('talk').onclick = () => advanceTalk();
 function pause() {
+  $('pauseInfo').textContent =
+    `${level.name} · ${sim.tickets} tickets · secrets ${sim.secrets}/${sim.secretTotal} · ` +
+    `${clock(sim.time)}`;
   audio.sfx('pause');
   show('pause');
 }
@@ -479,6 +482,8 @@ let flash = 0;
 let wonTimer = 0;
 let idleTime = 0;
 let gameOverTimer = 0;
+/** Events that reuse another event's sound. @type {Record<string, string>} */
+const SFX_ALIAS = { throw: 'fire', archive: 'crack' };
 /** Freeze time per event, in seconds. @type {Record<string, number>} */
 const HITSTOP = {
   hurt: 0.12,
@@ -502,7 +507,7 @@ const QUIPS = new Set([
   'meeting',
   'internStun',
   'visioMute',
-  'crack',
+  'archive',
   'vacuumBounce',
   'heart',
   'secret',
@@ -522,7 +527,7 @@ function onEvent(e) {
   hud.event(e);
   view.event(e, sim.time);
   particles.emit(e.type, e.x, e.y);
-  audio.sfx(e.type === 'throw' ? 'fire' : e.type);
+  audio.sfx(SFX_ALIAS[e.type] ?? e.type);
   // A few frames of freeze sell the impact.
   hitstop = Math.max(hitstop, HITSTOP[e.type] ?? 0);
   const boss = level.boss?.id ?? '';

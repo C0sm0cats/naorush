@@ -101,6 +101,14 @@ const EFFECTS = {
   invite: { n: 6, colors: [[0.7, 0.5, 1], WHITE], speed: 1.5, up: 1.5, life: 0.4, gravity: 0 },
   visioMute: { n: 14, colors: [[0.7, 0.5, 1], WHITE], speed: 2.5, up: 2, life: 0.6 },
   heart: { n: 18, colors: [[1, 0.35, 0.45], WHITE], speed: 2.5, up: 3, life: 0.8 },
+  archive: {
+    n: 22,
+    colors: [[0.75, 0.6, 0.4], [0.9, 0.8, 0.6], WHITE],
+    speed: 3.5,
+    up: 2.5,
+    life: 0.8,
+    size: 0.12,
+  },
   crack: {
     n: 14,
     colors: [

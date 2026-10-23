@@ -181,7 +181,7 @@ export function stepCr(s, t) {
         const box = s.things.find((b) => b.kind === 'crate' && b.alive && b.x === c && b.y === y);
         if (box) box.alive = false;
       }
-      emit(s, 'crack', c + 0.5, r + 0.5);
+      emit(s, 'archive', c + 0.5, r + 0.5);
     } else emit(s, tileAt(s, c, r) === TILE.CRATE ? 'block' : 'poof', t.x, t.y);
     return;
   }

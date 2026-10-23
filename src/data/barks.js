@@ -13,7 +13,7 @@ export const BARKS = {
     meeting: ['Je t’envoie l’invitation.', 'On en parle en réunion ?'],
     internStun: ['Pause café méritée.', 'Pose les dossiers, on reprend après.'],
     visioMute: ['Micro coupé, on avance.', 'On se rappelle ?'],
-    crack: ['Archivage express.', 'Ces cartons n’étaient pas dans le planning.'],
+    archive: ['Archivage express.', 'Ces cartons n’étaient pas dans le planning.'],
     secret: ['Personne n’avait vu ça dans le planning !', 'Un raccourci hors planning !'],
     vacuumBounce: ['Ce robot a de l’avenir.'],
     heart: ['Un café, et ça repart.'],

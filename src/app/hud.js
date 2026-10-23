@@ -22,6 +22,25 @@ const EVENT_TEXT = {
   zap: 'Court-circuit ! Retour au dernier badge Chronotime.',
 };
 
+/** One-time tips the first time a mechanic shows up (remembered across sessions). */
+const FIRST_TIME = {
+  chairRoll: 'Les fauteuils foncent sur toi : saute par-dessus !',
+  drawerOut: 'Le tiroir claque en rythme : passe juste après.',
+  sprayOn: 'Le sprinkler goutte avant d’arroser : attends la pause.',
+  paperShot: 'L’imprimante clignote puis tire : saute la feuille, ou renvoie un CR.',
+  trapdoor: 'Une trappe cachée ! Au prochain passage, tu sauras où elle est.',
+  invite: 'Une invitation en visio fonce sur toi : saute-la, ou réponds par un CR.',
+  vacuumBounce: 'Le robot aspirateur fait un excellent tremplin.',
+  internStun: 'Le stagiaire prend une pause café : passe vite !',
+  archive: 'Les CR de Kévin font tomber les cartons d’archives.',
+  rackDrop: 'Une ombre au sol : une baie serveur arrive, écarte-toi !',
+  cableWarn: 'Les câbles qui s’allument vont passer sous tension : reste sur les zones éteintes.',
+  zoneWarn: 'Les projecteurs vont frapper : file dans la zone restée sombre.',
+  dash: 'La tournée régionale ! Monte sur une plateforme pour la laisser passer.',
+  secret: 'Secret trouvé ! Il y en a un pour chaque héros dans chaque étape.',
+};
+const TIPS_KEY = 'naorush.tips';
+
 /** DOM heads-up display: hearts, Swile tickets, CR stock, purchase order, room name, hints. */
 export class Hud {
   constructor() {
@@ -35,6 +54,8 @@ export class Hud {
     this.toastTime = 0;
     this.lastHearts = -1;
     this.lastPoster = '';
+    /** Mechanics already explained. @type {Set<string>} */
+    this.seen = new Set(JSON.parse(localStorage.getItem(TIPS_KEY) ?? '[]'));
     this.bossbar = $('bossbar');
     this.bossName = $('bossName');
     this.bossHp = $('bossHp');
@@ -49,6 +70,13 @@ export class Hud {
 
   /** @param {import('../game/sim.js').SimEvent} e */
   event(e) {
+    const tip = FIRST_TIME[/** @type {keyof typeof FIRST_TIME} */ (e.type)];
+    if (tip && !this.seen.has(e.type)) {
+      this.seen.add(e.type);
+      localStorage.setItem(TIPS_KEY, JSON.stringify([...this.seen]));
+      this.toast(tip);
+      return;
+    }
     const text = EVENT_TEXT[/** @type {keyof typeof EVENT_TEXT} */ (e.type)];
     if (text) this.toast(text);
   }
