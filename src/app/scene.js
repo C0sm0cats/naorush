@@ -63,6 +63,37 @@ function skylineMesh(gl, width) {
   return SKYLINES.get(width);
 }
 
+/** The "SORTIE" sign: white running figure and arrow on emergency green. */
+function exitSign() {
+  const c = document.createElement('canvas');
+  c.width = 384;
+  c.height = 144;
+  const g = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
+  g.fillStyle = '#0f9d58';
+  g.beginPath();
+  g.roundRect(0, 0, 384, 144, 18);
+  g.fill();
+  g.strokeStyle = '#e8fff1';
+  g.lineWidth = 8;
+  g.strokeRect(10, 10, 364, 124);
+  g.fillStyle = '#ffffff';
+  g.font = '900 64px system-ui, sans-serif';
+  g.textBaseline = 'middle';
+  g.fillText('SORTIE', 34, 76);
+  // Arrow.
+  g.beginPath();
+  g.moveTo(282, 60);
+  g.lineTo(322, 60);
+  g.lineTo(322, 42);
+  g.lineTo(356, 72);
+  g.lineTo(322, 102);
+  g.lineTo(322, 84);
+  g.lineTo(282, 84);
+  g.closePath();
+  g.fill();
+  return c;
+}
+
 /** Meshes shared by every level, built once per GL context. */
 const SHARED = new WeakMap();
 /** @param {WebGL2RenderingContext} gl */
@@ -165,6 +196,9 @@ export class LevelView {
     }
     /** @type {Sprite[]} */
     this.sprites = [];
+    const exit = sim.things.find((t) => t.kind === 'exit');
+    /** Where the stage ends, for the exit sign. */
+    this.exitAt = exit ? { x: exit.x, y: exit.y } : null;
     this.ready = this.loadArtwork();
     this.doorT = 0;
     this.gallery = false;
@@ -221,6 +255,12 @@ export class LevelView {
 
   async loadArtwork() {
     const gl = this.gl;
+    // A green emergency-exit sign above the way out.
+    const exit = this.exitAt;
+    if (exit)
+      this.sprites.push(
+        new Sprite(gl, exitSign(), [exit.x - 0.75, exit.y + 2.55, -0.85, 1.5, 0.56]),
+      );
     const jobs = this.decor.map(async (d) => {
       if (d.type === 'poster' && d.id) {
         const art = /** @type {HTMLCanvasElement} */ (renderPoster(d.id));
