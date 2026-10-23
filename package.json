@@ -2,7 +2,7 @@
   "name": "naorush",
   "version": "1.0.0",
   "private": true,
-  "description": "NAO Rush — un platformer 2D pour retrouver l'enveloppe des NAO.",
+  "description": "NAO Rush — un jeu de plateforme dans les bureaux d’Inetum : fais signer l’enveloppe des NAO.",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -31,5 +31,10 @@
   },
   "engines": {
     "node": ">=22.12"
+  },
+  "homepage": "https://c0sm0cats.github.io/naorush/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/C0sm0cats/naorush.git"
   }
 }
