@@ -3,6 +3,7 @@ import { Camera } from './app/camera.js';
 import { Particles } from './app/fx.js';
 import { Hud } from './app/hud.js';
 import { ACTIONS, Input, keyName } from './app/input.js';
+import { Trophies } from './app/trophies.js';
 import { LevelView, boardUrl } from './app/scene.js';
 import { BARKS, PROLOGUE } from './data/barks.js';
 import { CAST } from './data/cast.js';
@@ -15,7 +16,7 @@ import { DT, HERO, createSim, step } from './game/sim.js';
  * play ⇄ pause / options / reading / dialogue / game over → stage won → … → credits.
  * The level keeps rendering behind every screen.
  *
- * @typedef {'loading'|'title'|'play'|'pause'|'options'|'reading'|'talk'|'won'|'gameover'|'credits'} Screen
+ * @typedef {'loading'|'title'|'play'|'pause'|'options'|'reading'|'talk'|'won'|'gameover'|'credits'|'trophies'} Screen
  * @typedef {import('./data/levels/index.js').Line} Line
  */
 
@@ -28,6 +29,10 @@ const hud = new Hud();
 const camera = new Camera();
 const particles = new Particles();
 const audio = new Audio();
+const trophies = new Trophies((t) => {
+  hud.toast(`Trophée débloqué : ${t.name}`);
+  audio.sfx('secret');
+});
 const SAVE_KEY = 'naorush.stage';
 const PREFS_KEY = 'naorush.prefs';
 
@@ -75,6 +80,7 @@ const OVERLAYS = /** @type {const} */ ([
   'talk',
   'gameover',
   'credits',
+  'trophies',
 ]);
 /** @param {Screen} next */
 function show(next) {
@@ -318,6 +324,23 @@ function openOptions() {
   show('options');
 }
 $('optionsBtn').onclick = $('pauseOptions').onclick = openOptions;
+$('trophiesBtn').onclick = () => {
+  $('trophyList').replaceChildren(
+    ...trophies.list().map((t) => {
+      const li = document.createElement('li');
+      li.className = t.got ? 'got' : '';
+      const name = document.createElement('b');
+      name.textContent = t.name;
+      const text = document.createElement('span');
+      text.textContent = t.text;
+      li.append(name, text);
+      return li;
+    }),
+  );
+  audio.sfx('select');
+  show('trophies');
+};
+$('trophiesClose').onclick = () => show('title');
 $('optionsClose').onclick = () => show(optionsFrom === 'pause' ? 'pause' : 'title');
 field('volMusic').oninput = () => audio.setVolume('music', Number(field('volMusic').value));
 field('volSfx').oninput = () => {
@@ -417,6 +440,7 @@ function stageWon() {
   run.secrets += sim.secrets;
   const last = stage === LEVELS.length - 1;
   localStorage.setItem(SAVE_KEY, String(last ? 0 : stage + 1));
+  trophies.stageWon(sim, level.id, last);
   if (last) return credits();
   $('wonKicker').textContent = `Étape ${stage + 1} sur ${LEVELS.length} terminée`;
   $('wonTitle').textContent = STAGE_END[stage].title;
@@ -525,6 +549,7 @@ const vibrate = (pattern) => {
 /** @param {import('./game/sim.js').SimEvent} e */
 function onEvent(e) {
   hud.event(e);
+  trophies.event(e, sim, level.id);
   view.event(e, sim.time);
   particles.emit(e.type, e.x, e.y);
   audio.sfx(SFX_ALIAS[e.type] ?? e.type);

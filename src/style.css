@@ -884,3 +884,47 @@ body[data-pad='l'] .touch .big {
 .touch .pad {
   touch-action: none;
 }
+
+/* Trophies */
+.trophy-list {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+  max-height: 60vh;
+  overflow: auto;
+}
+.trophy-list li {
+  display: grid;
+  gap: 2px;
+  padding: 10px 14px 10px 44px;
+  border-radius: 12px;
+  background: #141a2c0d;
+  color: #7a8aa6;
+  position: relative;
+}
+.trophy-list li::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin-top: -9px;
+  border-radius: 50%;
+  background: #141a2c26;
+}
+.trophy-list li.got {
+  color: #141a2c;
+  background: #c6f43233;
+}
+.trophy-list li.got::before {
+  background: radial-gradient(circle at 35% 35%, #fff6c9, #ffc93a 60%, #d99a00);
+}
+.trophy-list b {
+  font-size: 15px;
+}
+.trophy-list span {
+  font-size: 13px;
+}
