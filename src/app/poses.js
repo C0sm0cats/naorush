@@ -140,7 +140,13 @@ export function bossPose(b, hx, t) {
     default:
       break;
   }
-  return { pose, y, turn, tint, facing };
+  return {
+    pose: { ...pose, mood: BOSS_MOOD[b.state], blink: blinkAt(t + 1.3) },
+    y,
+    turn,
+    tint,
+    facing,
+  };
 }
 
 /**
@@ -233,9 +239,31 @@ export function heroPose(sim, t, still) {
   return idlePose(t);
 }
 
+/** Eyelids: a quick blink every few seconds. @param {number} t */
+export function blinkAt(t) {
+  const k = t % 3.7;
+  return k < 0.14 ? Math.sin((Math.PI * k) / 0.14) : 0;
+}
+
+/** Facial expression of a boss for each phase of the duel. @type {Record<string, Pose['mood']>} */
+const BOSS_MOOD = {
+  intro: 'happy',
+  consult: 'focus',
+  hit: 'ouch',
+  phase: 'focus',
+  convinced: 'happy',
+  sign: 'happy',
+  rackDrop: 'focus',
+  cables: 'focus',
+  dash: 'focus',
+  zones: 'happy',
+  fan: 'happy',
+};
+
 /** @param {number} t @returns {Pose} */
 export function idlePose(t) {
   return {
+    blink: blinkAt(t),
     legL: 0,
     legR: 0,
     armL: Math.sin(t * 1.3) * 0.08,

@@ -18,7 +18,7 @@ import { MAT, Volume, meshVolume } from '../gfx/voxels.js';
 import { buildOffice, buildSkyline } from '../gfx/world-builder.js';
 import { HERO, TILE } from '../game/sim.js';
 import { assetUrl, crop, loadImage } from './assets.js';
-import { bossPose, heroPose, idlePose } from './poses.js';
+import { blinkAt, bossPose, heroPose, idlePose } from './poses.js';
 
 const IDENTITY = translation(0, 0, 0);
 const GALLERY = [
@@ -322,6 +322,8 @@ export class LevelView {
               armSpread: 0.5,
               bob: Math.abs(Math.sin(ph)) * 2,
               head: Math.sin(ph * 0.5) * 0.2,
+              mood: 'happy',
+              blink: blinkAt(t + i),
             },
             { scale: CAST[id].scale, turn: 0.3, rim: 0.4 },
           ),
@@ -743,6 +745,25 @@ export class LevelView {
   }
 
   /**
+   * The hero's face: winces when hurt, beams on success, concentrates on a ledge.
+   * @param {Pose} pose @param {Sim} sim @param {number} t
+   * @returns {Pose}
+   */
+  face(pose, sim, t) {
+    const h = sim.hero;
+    /** @type {Pose['mood']} */
+    const mood =
+      h.state === 'dead' || h.invuln > 1.1
+        ? 'ouch'
+        : sim.won
+          ? 'happy'
+          : h.state === 'hang' || h.state === 'climb'
+            ? 'focus'
+            : pose.mood;
+    return { ...pose, mood, blink: mood === 'ouch' ? 0 : (pose.blink ?? blinkAt(t)) };
+  }
+
+  /**
    * Throwing arm on top of whatever the body is doing.
    * @param {Pose} pose @param {Sim} sim
    * @returns {Pose}
@@ -790,6 +811,7 @@ export class LevelView {
         armR: 2.6 + Math.sin(t * 7) * 0.3,
         armSpread: 0.7,
         head: -0.1,
+        mood: /** @type {const} */ ('happy'),
       };
       items.push(
         ...poseCharacter(this.cast[sim.heroId], hx, hy, 0.3, 1, wave, {
@@ -807,7 +829,7 @@ export class LevelView {
         hy,
         0,
         h.facing,
-        this.squashed(this.overlay(heroPose(sim, t, this.still), sim), sim.time),
+        this.face(this.squashed(this.overlay(heroPose(sim, t, this.still), sim), sim.time), sim, t),
         {
           scale: CAST[sim.heroId].scale,
           turn: h.state === 'hang' || h.state === 'climb' ? 1.45 : 1.0,

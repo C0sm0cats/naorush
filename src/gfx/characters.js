@@ -34,6 +34,7 @@ const HIP_X = 0.1;
 const SHOULDER_Y = 0.48; // above the hip
 const SHOULDER_X = 0.235;
 const NECK_Y = 0.52;
+const EYE_Y = 0.27; // Eye centre, in head space.
 
 /**
  * @param {string} hex
@@ -332,6 +333,30 @@ function shell(b, color, o) {
 }
 
 /**
+ * Flat shape lying on the face, slightly domed: `edge(a)` gives the outline offset
+ * at angle a (0..2π) around (cx, cy); `d` lifts it off the skin, `h` domes the middle.
+ * @param {MeshBuilder} b @param {number} cx @param {number} cy
+ * @param {(a: number) => number[]} edge @param {number} d @param {number} h
+ * @param {string} color @param {{nu?: number, nv?: number, mat?: number}} [o]
+ */
+function decal(b, cx, cy, edge, d, h, color, o = {}) {
+  surf(
+    b,
+    o.nu ?? 20,
+    o.nv ?? 3,
+    (u, v) => {
+      const [ex, ey] = edge(u * TAU);
+      const x = cx + ex * v,
+        y = cy + ey * v;
+      return [x, y, faceZ(x, y, d + h * (1 - v * v))];
+    },
+    () => HEAD_C,
+    color,
+    o.mat,
+  );
+}
+
+/**
  * Hairline latitude around the head: high over the forehead, `side` above or over
  * the ears, `back` at the nape; the face window spans longitudes w0..w1.
  * @param {number} front @param {number} side @param {number} back @param {number} w0 @param {number} w1
@@ -367,70 +392,8 @@ export function buildCharacter(gl, look) {
         seg: 5,
         lon: [s > 0 ? 0 : -Math.PI, s > 0 ? Math.PI : 0],
       });
-      // Eyes: dark ovals with a catch-light.
-      const front = /** @type {number[]} */ ([-1.7, 1.7]);
-      ell(
-        b,
-        [s * 0.072, 0.27, 0.172],
-        [0.028, female ? 0.038 : 0.034, 0.02],
-        look.eyes ?? '#2a2236',
-        {
-          seg: 9,
-          lon: front,
-        },
-      );
-      ell(b, [s * 0.064 + 0.006, 0.284, 0.188], [0.009, 0.009, 0.006], '#ffffff', {
-        seg: 5,
-        lon: front,
-        mat: MAT.EMISSIVE,
-      });
-      // Arched brows (hair-coloured, finer for female characters) and lashes.
-      const bw = female ? 0.0065 : 0.011;
-      const browColor = female ? dark : style === 'bald' ? shade(look.skin, -0.45) : hair;
-      tube(
-        b,
-        (t) => {
-          const x = s * lerp(0.04, 0.112, t);
-          const y = 0.33 + Math.sin(t * Math.PI) * 0.012 - t * 0.006;
-          return [x, y, faceZ(x, y, 0.004)];
-        },
-        (t) => [bw * (0.75 + 0.35 * Math.sin(t * Math.PI * 0.9 + 0.2)), 0.007],
-        browColor,
-        { nu: 6, nv: 7 },
-      );
-      if (female)
-        tube(
-          b,
-          (t) => {
-            const x = s * lerp(0.088, 0.112, t);
-            const y = 0.296 + t * 0.012;
-            return [x, y, faceZ(x, y, 0.002)];
-          },
-          (t) => [0.005 * (1 - t * 0.6), 0.004],
-          dark,
-          { nu: 5, nv: 3 },
-        );
-      ell(b, [s * 0.12, 0.2, 0.148], [0.035, 0.022, 0.02], '#f19a92', { seg: 6, lon: front });
     }
     ell(b, [0, 0.225, 0.188], [0.022, 0.028, 0.02], shade(look.skin, -0.08), { seg: 7 });
-    if (female)
-      ell(b, [0, 0.155, 0.166], [0.048, 0.016, 0.02], /** @type {string} */ (look.lips), {
-        seg: 8,
-        lon: [-1.8, 1.8],
-        mat: gloss,
-      });
-    else
-      tube(
-        b,
-        (t) => {
-          const x = lerp(-0.036, 0.036, t);
-          const y = 0.152 + 0.012 * (2 * t - 1) ** 2;
-          return [x, y, faceZ(x, y, 0.002)];
-        },
-        (t) => [0.0065 * (0.45 + 0.55 * Math.sin(t * Math.PI)), 0.004],
-        '#8c4a3c',
-        { nu: 5, nv: 8 },
-      );
 
     if (look.beard) {
       // Trimmed full beard: from the sideburns along the jaw to a rounded chin,
@@ -608,6 +571,170 @@ export function buildCharacter(gl, look) {
         ell(b, [0, 0.43, -0.1], [0.06, 0.03, 0.06], shade(hair, 0.25), { seg: 6 });
       } else ell(b, [0, 0.33, -0.205], [0.04, 0.035, 0.03], '#ff6b8b', { seg: 7, mat: gloss });
     }
+  });
+
+  // Face features are separate small parts riding on the head transform, so they
+  // can blink and change with the mood. Eyes: dark ovals with a catch-light.
+  const front = /** @type {number[]} */ ([-1.7, 1.7]);
+  const eyeColor = look.eyes ?? '#2a2236';
+  const eyes = part(gl, (b) => {
+    for (const s of [-1, 1]) {
+      ell(b, [s * 0.072, EYE_Y, 0.172], [0.028, female ? 0.038 : 0.034, 0.02], eyeColor, {
+        seg: 9,
+        lon: front,
+      });
+      ell(b, [s * 0.064 + 0.006, EYE_Y + 0.014, 0.188], [0.009, 0.009, 0.006], '#ffffff', {
+        seg: 5,
+        lon: front,
+        mat: MAT.EMISSIVE,
+      });
+      if (female)
+        // Lashes flicking out of the outer corner.
+        tube(
+          b,
+          (t) => {
+            const x = s * lerp(0.088, 0.112, t);
+            const y = EYE_Y + 0.026 + t * 0.012;
+            return [x, y, faceZ(x, y, 0.002)];
+          },
+          (t) => [0.005 * (1 - t * 0.6), 0.004],
+          dark,
+          { nu: 5, nv: 3 },
+        );
+    }
+  });
+  // Squeezed "> <" eyes for the ouch face.
+  const squint = part(gl, (b) => {
+    for (const s of [-1, 1])
+      tube(
+        b,
+        (t) => {
+          const k = 1 - Math.abs(2 * t - 1);
+          const x = s * lerp(0.098, 0.052, k ** 0.9);
+          const y = EYE_Y + 0.002 + (1 - 2 * t) * 0.02 * (1 - 0.15 * k);
+          return [x, y, faceZ(x, y, 0.004)];
+        },
+        (t) => [0.0085 * (0.75 + 0.25 * Math.sin(t * Math.PI)), 0.005],
+        eyeColor,
+        { nu: 6, nv: 12 },
+      );
+  });
+  const cheeks = part(gl, (b) => {
+    for (const s of [-1, 1])
+      ell(b, [s * 0.12, 0.2, 0.148], [0.035, 0.022, 0.02], '#f19a92', { seg: 6, lon: front });
+  });
+
+  // Arched brows (hair-coloured, finer for female characters): `lift` raises them,
+  // `tilt` raises the inner end (negative frowns), `arch` bends them.
+  const bw = female ? 0.0065 : 0.011;
+  const browColor = female ? dark : style === 'bald' ? shade(look.skin, -0.45) : hair;
+  /** @param {number} lift @param {number} tilt @param {number} arch */
+  const brows = (lift, tilt, arch) =>
+    part(gl, (b) => {
+      for (const s of [-1, 1])
+        tube(
+          b,
+          (t) => {
+            const x = s * lerp(0.04, 0.112, t);
+            const y = 0.33 + lift + tilt * (1 - t) + Math.sin(t * Math.PI) * arch - t * 0.006;
+            return [x, y, faceZ(x, y, 0.004)];
+          },
+          (t) => [bw * (0.75 + 0.35 * Math.sin(t * Math.PI * 0.9 + 0.2)), 0.007],
+          browColor,
+          { nu: 6, nv: 7 },
+        );
+    });
+
+  // Mouths, one per mood. Lipstick looks keep their colour; bearded ones sit a little
+  // lower so they peek out under the moustache.
+  const lips = look.lips;
+  const my = look.beard ? 0.146 : 0.153;
+  const mouthDark = '#5c2333';
+  const lineColor = '#8c4a3c';
+  const mouthNeutral = part(gl, (b) => {
+    if (lips)
+      ell(b, [0, 0.155, 0.166], [0.048, 0.016, 0.02], lips, {
+        seg: 8,
+        lon: [-1.8, 1.8],
+        mat: gloss,
+      });
+    else
+      tube(
+        b,
+        (t) => {
+          const x = lerp(-0.036, 0.036, t);
+          const y = 0.152 + 0.012 * (2 * t - 1) ** 2;
+          return [x, y, faceZ(x, y, 0.002)];
+        },
+        (t) => [0.0065 * (0.45 + 0.55 * Math.sin(t * Math.PI)), 0.004],
+        lineColor,
+        { nu: 5, nv: 8 },
+      );
+  });
+  /** Open grin outline: flat-ish top, round bottom, corners curling up. @param {number} w @param {number} h */
+  const grin = (w, h) => /** @param {number} a */ (a) => {
+    const c = Math.cos(a),
+      sn = Math.sin(a);
+    return [w * c, (sn > 0 ? 0.18 * h * sn : h * sn) + 0.45 * h * c * c];
+  };
+  const mouthHappy = part(gl, (b) => {
+    const w = look.beard ? 0.04 : 0.046,
+      h = look.beard ? 0.03 : 0.04;
+    const cy = my + 0.004;
+    if (lips) decal(b, 0, cy, grin(w + 0.008, h + 0.009), 0.002, 0.002, lips, { mat: gloss });
+    decal(b, 0, cy, grin(w, h), 0.004, 0.001, mouthDark, { nu: 22 });
+    // Tongue at the bottom, a strip of teeth along the top.
+    decal(
+      b,
+      0,
+      cy - h * 0.62,
+      (a) => [w * 0.5 * Math.cos(a), h * 0.3 * Math.sin(a)],
+      0.005,
+      0.001,
+      '#e86f7e',
+    );
+    decal(
+      b,
+      0,
+      cy + h * 0.02,
+      (a) => {
+        const c = Math.cos(a),
+          sn = Math.sin(a);
+        return [w * 0.78 * c, (sn > 0 ? 0.16 * h * sn : 0.2 * h * sn) + 0.3 * h * c * c];
+      },
+      0.0055,
+      0.001,
+      '#ffffff',
+    );
+  });
+  const mouthOuch = part(gl, (b) => {
+    const cy = my - 0.004;
+    /** @param {number} w @param {number} h */
+    const oval = (w, h) => /** @param {number} a */ (a) => [w * Math.cos(a), h * Math.sin(a)];
+    decal(b, 0, cy, oval(0.023, 0.025), 0.002, 0.002, lips ?? shade(look.skin, -0.22), {
+      mat: lips ? gloss : MAT.MATTE,
+    });
+    decal(b, 0, cy, oval(0.015, 0.017), 0.004, 0.001, mouthDark);
+  });
+  const mouthFocus = part(gl, (b) => {
+    if (lips)
+      ell(b, [0, 0.153, 0.166], [0.04, 0.0105, 0.02], lips, {
+        seg: 8,
+        lon: [-1.8, 1.8],
+        mat: gloss,
+      });
+    else
+      tube(
+        b,
+        (t) => {
+          const x = lerp(-0.032, 0.032, t);
+          const y = 0.15 - 0.004 * (2 * t - 1) ** 2;
+          return [x, y, faceZ(x, y, 0.002)];
+        },
+        (t) => [0.006 * (0.5 + 0.5 * Math.sin(t * Math.PI)), 0.004],
+        lineColor,
+        { nu: 5, nv: 8 },
+      );
   });
 
   // Long hair down the back, as its own part so it sways with the body.
@@ -904,7 +1031,25 @@ export function buildCharacter(gl, look) {
     );
 
   /** @type {Record<string, Part>} */
-  const parts = { head, torso, armL: arm, armR: arm, legL: leg, legR: leg };
+  const parts = {
+    head,
+    torso,
+    armL: arm,
+    armR: arm,
+    legL: leg,
+    legR: leg,
+    eyes,
+    squint,
+    cheeks,
+    browNeutral: brows(0, 0, 0.012),
+    browHappy: brows(0.012, -0.002, 0.018),
+    browOuch: brows(0.004, 0.014, 0.006),
+    browFocus: brows(-0.008, -0.014, 0.008),
+    mouthNeutral,
+    mouthHappy,
+    mouthOuch,
+    mouthFocus,
+  };
   if (longHair) parts.hair = longHair;
   if (skirt) parts.skirt = skirt;
   if (prop) parts.prop = prop;
@@ -922,7 +1067,11 @@ export function buildCharacter(gl, look) {
  * @property {number} [bob] Vertical body offset (1/16 tile).
  * @property {number} [head] Head nod.
  * @property {number} [squash] Vertical squash (−0.2..0.2).
+ * @property {number} [blink] Eyelids, 0 = open, 1 = closed.
+ * @property {'neutral'|'happy'|'ouch'|'focus'} [mood] Facial expression.
  */
+
+const MOOD_NAMES = { neutral: 'Neutral', happy: 'Happy', ouch: 'Ouch', focus: 'Focus' };
 
 /**
  * Turns a posed character into draw items.
@@ -951,12 +1100,13 @@ export function poseCharacter(parts, x, y, z, facing, pose, o = {}) {
   const at = (name, ...ms) => ({ mesh: parts[name].mesh, model: chain(root, ...ms), ...base });
   const torso = [translation(0, HIP_Y, 0), rotationX(pose.lean ?? 0)];
   const spread = pose.armSpread ?? 0;
+  const headM = [...torso, translation(0, NECK_Y, 0), rotationX(pose.head ?? 0)];
   /** @type {import('./renderer.js').DrawItem[]} */
   const items = [
     at('legL', translation(-HIP_X, HIP_Y, 0), rotationX(-pose.legL)),
     at('legR', translation(HIP_X, HIP_Y, 0), rotationX(-pose.legR)),
     at('torso', ...torso),
-    at('head', ...torso, translation(0, NECK_Y, 0), rotationX(pose.head ?? 0)),
+    at('head', ...headM),
     at(
       'armL',
       ...torso,
@@ -972,6 +1122,30 @@ export function poseCharacter(parts, x, y, z, facing, pose, o = {}) {
       rotationX(-pose.armR),
     ),
   ];
+  if (parts.eyes) {
+    const mood = pose.mood ?? 'neutral';
+    const name = MOOD_NAMES[mood] ?? 'Neutral';
+    const face = { noShadow: true };
+    if (mood === 'ouch') items.push({ ...at('squint', ...headM), ...face });
+    else {
+      // Lids close towards a line a little below the eye centre; happy cheeks push the
+      // eyes up into smiling crescents, focus lowers the upper lid.
+      const open =
+        Math.max(0.08, 1 - Math.min(1, Math.max(0, pose.blink ?? 0))) *
+        (mood === 'happy' ? 0.78 : mood === 'focus' ? 0.8 : 1);
+      const py = EYE_Y - (mood === 'focus' ? 0.03 : 0.006);
+      items.push({
+        ...at('eyes', ...headM, translation(0, py, 0), scaling(1, open, 1), translation(0, -py, 0)),
+        ...face,
+      });
+    }
+    const cheekUp = mood === 'happy' ? 0.008 : 0;
+    items.push(
+      { ...at('cheeks', ...headM, translation(0, cheekUp, 0)), ...face },
+      { ...at('brow' + name, ...headM), ...face },
+      { ...at('mouth' + name, ...headM), ...face },
+    );
+  }
   if (parts.hair)
     items.push(
       at(
