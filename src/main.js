@@ -241,7 +241,7 @@ for (const card of document.querySelectorAll('.hero-card')) {
     for (const c of document.querySelectorAll('.hero-card'))
       c.setAttribute('aria-checked', String(c === card));
     audio.sfx('select');
-    loadStage(stage);
+    loadStage(stage).then(showcase);
   });
 }
 
@@ -262,7 +262,10 @@ const toMenu = () => {
   updateContinue();
   audio.music('title');
   audio.intensity(0);
-  loadStage(stage).then(() => show('title'));
+  loadStage(stage).then(() => {
+    showcase();
+    show('title');
+  });
 };
 $('play').onclick = () => startFrom(0);
 $('continue').onclick = () => startFrom(saved());
@@ -580,6 +583,16 @@ function onEvent(e) {
   }
 }
 
+/** Where the hero poses behind the title card. */
+const SHOWCASE = { x: 6.6, y: 3 };
+const SHOWCASE_LIGHT = {
+  pos: [SHOWCASE.x + 0.8, SHOWCASE.y + 2.2, 2],
+  radius: 5,
+  color: [0.9, 0.85, 0.8],
+};
+/** Puts the hero in the title-screen spot (the run restarts from S anyway). */
+const showcase = () => Object.assign(sim.hero, { x: SHOWCASE.x, y: SHOWCASE.y, facing: -1, vx: 0 });
+
 /** On touch screens the pads cover the bottom: frame the hero a little higher. */
 const touchLift = matchMedia('(pointer: coarse)').matches ? 1.1 : 0;
 
@@ -656,15 +669,22 @@ function frame(now) {
       if (th.kind === 'cr' && th.alive) particles.emit('trail', th.x, th.y);
   }
   particles.update(dt);
-  // Behind the title screen the camera drifts slowly along the stage.
-  const drift = screen === 'title' || screen === 'loading' || screen === 'credits';
+  // The title shows the chosen hero up close; the credits drift along the stage.
+  const drift = screen === 'loading' || screen === 'credits';
   const focus = gallery
     ? { x: 3.5, y: 1.6, facing: 0 }
-    : drift
-      ? { x: 10 + Math.sin(t * 0.07) * 8, y: 3, facing: 1 }
-      : (fightFocus() ?? { x: h.x + HERO.w / 2, y: h.y - touchLift, facing: h.facing });
+    : screen === 'title'
+      ? { x: SHOWCASE.x - 0.8 + Math.sin(t * 0.25) * 0.15, y: SHOWCASE.y - 1.4, facing: 0 }
+      : drift
+        ? { x: 10 + Math.sin(t * 0.07) * 8, y: 3, facing: 1 }
+        : (fightFocus() ?? { x: h.x + HERO.w / 2, y: h.y - touchLift, facing: h.facing });
   const cam = camera.update(dt, renderer.width / renderer.height, focus, { w: sim.w, h: sim.h });
-  renderer.render(cam, lighting, view.items(sim, t, particles.list), view.sprites, { flash });
+  view.showcase = screen === 'title';
+  // A soft key light on the hero posing behind the title card.
+  const lit = view.showcase
+    ? { ...lighting, lights: [SHOWCASE_LIGHT, ...lighting.lights] }
+    : lighting;
+  renderer.render(cam, lit, view.items(sim, t, particles.list), view.sprites, { flash });
   if (screen === 'play' || screen === 'talk') {
     const poster = view.posterAt(sim);
     hud.update(
@@ -687,7 +707,8 @@ view.gallery = gallery;
 if (params.has('sounds')) import('./app/soundtest.js').then((m) => m.mountSoundTest(audio));
 
 view.ready.then(() => {
-  camera.snap(10, 6);
+  showcase();
+  camera.snap(SHOWCASE.x, SHOWCASE.y + 1);
   updateContinue();
   audio.music('title');
   show('title');

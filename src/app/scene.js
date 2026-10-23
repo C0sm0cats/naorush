@@ -153,6 +153,8 @@ export class LevelView {
     this.ready = this.loadArtwork();
     this.doorT = 0;
     this.gallery = false;
+    /** Title screen: the hero poses for the camera. */
+    this.showcase = false;
     this.landAt = -1;
     this.jumpAt = -1;
     this.throwAt = -1;
@@ -838,6 +840,23 @@ export class LevelView {
       hx += h.facing * 0.55 * Math.max(0, e - 0.5) * 2;
     }
     if (h.invuln > 0 && h.state !== 'dead' && Math.floor(t * 14) % 2 === 0) return;
+    if (this.showcase) {
+      // Title screen: facing us, with a friendly wave.
+      const wave = {
+        ...idlePose(t),
+        armR: 2.6 + Math.sin(t * 7) * 0.3,
+        armSpread: 0.7,
+        head: -0.1,
+      };
+      items.push(
+        ...poseCharacter(this.cast[sim.heroId], hx, hy, 0.3, 1, wave, {
+          scale: CAST[sim.heroId].scale,
+          turn: 0.3,
+          rim: 0.35,
+        }),
+      );
+      return;
+    }
     items.push(
       ...poseCharacter(
         this.cast[sim.heroId],
