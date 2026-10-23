@@ -274,6 +274,13 @@ $('trophiesBtn').onclick = () => {
 $('trophiesClose').onclick = () => show('title');
 $('bonusBtn').onclick = () => startFrom(CAMPAIGN);
 $('optionsClose').onclick = () => show(optionsFrom === 'pause' ? 'pause' : 'title');
+// Switching tabs or apps pauses the game and the sound.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (screen === 'play') pause();
+    audio.ctx?.suspend();
+  } else audio.ctx?.resume();
+});
 // Browsers only allow sound after a user gesture.
 for (const type of ['pointerdown', 'keydown'])
   addEventListener(type, () => audio.unlock(), { once: true, capture: true });
