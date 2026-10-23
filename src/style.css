@@ -1003,3 +1003,36 @@ body[data-pad='l'] .touch .big {
   color: #a3124f;
   font-size: 14px;
 }
+
+.btn-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.title .card > button + button,
+.title .card > button + .btn-row,
+.title .card > .btn-row + button {
+  margin-top: 8px;
+}
+/* Landscape phones: a narrower, denser title card so the hero stays visible. */
+@media (max-height: 500px) {
+  .title .card {
+    width: min(460px, 58vw);
+    padding: 12px 16px;
+  }
+  .title h1 {
+    font-size: 34px;
+  }
+  .title .lead {
+    font-size: 13px;
+    margin-bottom: 8px;
+  }
+  .title .go,
+  .title .ghost {
+    padding: 8px;
+    font-size: 14px;
+  }
+  .title .controls {
+    display: none;
+  }
+}
