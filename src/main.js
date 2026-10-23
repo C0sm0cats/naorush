@@ -7,7 +7,7 @@ import { Trophies } from './app/trophies.js';
 import { LevelView, boardUrl } from './app/scene.js';
 import { BARKS, PROLOGUE } from './data/barks.js';
 import { CAST } from './data/cast.js';
-import { LEVELS, ROOM_W } from './data/levels/index.js';
+import { CAMPAIGN, LEVELS, ROOM_W } from './data/levels/index.js';
 import { Renderer } from './gfx/renderer.js';
 import { DT, HERO, createSim, step } from './game/sim.js';
 
@@ -90,7 +90,7 @@ function show(next) {
   for (const id of OVERLAYS) $(id).hidden = (id === 'reader' ? 'reading' : id) !== next;
   input.clear();
   if (next === 'title') $('play').focus();
-  if (next === 'won') $(stage < LEVELS.length - 1 ? 'next' : 'menu').focus();
+  if (next === 'won') $(stage < CAMPAIGN - 1 ? 'next' : 'menu').focus();
   if (next === 'gameover') $('goResume').focus();
   if (next === 'pause') $('resume').focus();
 }
@@ -119,7 +119,7 @@ async function loadStage(i) {
 /** Stage title card, dialogue, then play. @param {number} i @param {Line[]} [before] */
 async function beginStage(i, before = []) {
   await loadStage(i);
-  $('stageNum').textContent = `Étape ${i + 1} sur ${LEVELS.length}`;
+  $('stageNum').textContent = i < CAMPAIGN ? `Étape ${i + 1} sur ${CAMPAIGN}` : 'Étape bonus';
   $('stageName').textContent = level.name;
   $('stageSub').textContent = level.subtitle;
   const banner = $('stage');
@@ -253,8 +253,9 @@ for (const card of document.querySelectorAll('.hero-card')) {
   });
 }
 
-const saved = () => Math.min(LEVELS.length - 1, Number(localStorage.getItem(SAVE_KEY)) || 0);
+const saved = () => Math.min(CAMPAIGN - 1, Number(localStorage.getItem(SAVE_KEY)) || 0);
 function updateContinue() {
+  $('bonusBtn').hidden = !trophies.data.got.nao;
   const n = saved();
   $('continue').hidden = n === 0;
   $('continue').textContent = `Continuer · étape ${n + 1} : ${LEVELS[n].name}`;
@@ -344,6 +345,7 @@ $('trophiesBtn').onclick = () => {
   show('trophies');
 };
 $('trophiesClose').onclick = () => show('title');
+$('bonusBtn').onclick = () => startFrom(CAMPAIGN);
 $('optionsClose').onclick = () => show(optionsFrom === 'pause' ? 'pause' : 'title');
 field('volMusic').oninput = () => audio.setVolume('music', Number(field('volMusic').value));
 field('volSfx').oninput = () => {
@@ -431,6 +433,10 @@ const STAGE_END = [
     title: 'NAO sauvées !',
     text: 'L’enveloppe est signée, les négociations peuvent commencer jeudi.',
   },
+  {
+    title: 'Ordre de mission signé !',
+    text: 'Fin de l’intercontrat : départ en mission lundi. Bravo, et bon week-end !',
+  },
 ];
 
 /** @param {number} s */
@@ -441,11 +447,15 @@ function stageWon() {
   run.time += sim.time;
   run.deaths += sim.deaths;
   run.secrets += sim.secrets;
-  const last = stage === LEVELS.length - 1;
-  localStorage.setItem(SAVE_KEY, String(last ? 0 : stage + 1));
+  const last = stage === CAMPAIGN - 1;
+  const bonus = stage >= CAMPAIGN;
+  if (!bonus) localStorage.setItem(SAVE_KEY, String(last ? 0 : stage + 1));
   trophies.stageWon(sim, level.id, last);
   if (last) return credits();
-  $('wonKicker').textContent = `Étape ${stage + 1} sur ${LEVELS.length} terminée`;
+  $('next').hidden = bonus;
+  $('wonKicker').textContent = bonus
+    ? 'Étape bonus terminée'
+    : `Étape ${stage + 1} sur ${CAMPAIGN} terminée`;
   $('wonTitle').textContent = STAGE_END[stage].title;
   $('wonText').textContent = STAGE_END[stage].text;
   // Best time per stage and hero.
