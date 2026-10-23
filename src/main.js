@@ -162,9 +162,13 @@ function talk(lines, done) {
 /** @param {string} who @param {string} moment @param {boolean} [force] */
 const say = (who, moment, force) => bubbles.say(who, moment, force);
 
-/** Where a speech bubble sits: above the hero or the boss. @param {string} who */
+/** Where a speech bubble sits: above the hero, the partner at the exit, or the boss. @param {string} who */
 function bubbleAnchor(who) {
   if (who === heroId) return [sim.hero.x + HERO.w / 2, sim.hero.y + 2.1];
+  if (who === 'partner') {
+    const exit = sim.things.find((t) => t.kind === 'exit');
+    return exit ? [exit.x + 0.35, exit.y + 2.1] : null;
+  }
   const boss = sim.things.find((t) => t.kind === 'boss');
   return boss ? [boss.x, boss.y + 2.7] : null;
 }
@@ -654,6 +658,10 @@ function frame(now) {
         if (level.boss) stageWon();
         else talk(level.outro, stageWon);
       }
+      // The partner waiting at the exit reacts when you arrive.
+      const exit = sim.things.find((t) => t.kind === 'exit');
+      if (exit && Math.abs(sim.hero.x - exit.x) < 4 && Math.abs(sim.hero.y - exit.y) < 2)
+        say('partner', sim.hasKey ? 'welcome' : 'waiting');
       // Standing still for a while earns a quip.
       const h = sim.hero;
       idleTime = h.state === 'ground' && Math.abs(h.vx) < 0.1 ? idleTime + dt : 0;

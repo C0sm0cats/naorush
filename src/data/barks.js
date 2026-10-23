@@ -42,6 +42,13 @@ export const BARKS = {
     respawn: ['On repart sur de bonnes bases.', 'Nouvel essai, nouvelle opportunité.'],
     bossHit: ['Argument imparable !', 'Proposition envoyée !'],
   },
+  partner: {
+    waiting: [
+      'Il nous manque encore l’objet clé de l’étape : regarde dans le HUD !',
+      'Sans lui, on ne passe pas. Il est forcément quelque part derrière toi.',
+    ],
+    welcome: ['Bien joué, binôme !', 'On y est ! Suis-moi.'],
+  },
   techServicesDirector: {
     consult: ['Je consulte PRIMO…', 'Voyons les indicateurs…'],
     bossHit: ['Intéressant. Continuez.', 'Argument tracé.', 'Ça tient la charge.'],

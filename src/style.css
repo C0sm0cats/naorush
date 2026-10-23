@@ -1047,3 +1047,8 @@ body[data-pad='l'] .touch .big {
     display: flex;
   }
 }
+.bark[data-who='partner'] {
+  box-shadow:
+    0 0 0 2px var(--pink),
+    0 8px 20px #0006;
+}
