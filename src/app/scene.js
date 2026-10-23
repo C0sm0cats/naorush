@@ -155,6 +155,9 @@ export class LevelView {
     this.gallery = false;
     this.landAt = -1;
     this.jumpAt = -1;
+    this.throwAt = -1;
+    /** Seconds the hero has stood still. */
+    this.still = 0;
   }
 
   /**
@@ -173,6 +176,7 @@ export class LevelView {
   event(e, time) {
     if (e.type === 'land' || e.type === 'step' || e.type === 'hardland') this.landAt = time;
     if (e.type === 'jump' || e.type === 'airjump') this.jumpAt = time;
+    if (e.type === 'throw') this.throwAt = time;
   }
 
   /**
@@ -291,8 +295,10 @@ export class LevelView {
     const at = (mesh, x, y, z, ...extra) =>
       items.push({ mesh, model: chain(translation(x, y, z), ...extra) });
     const partner = sim.heroId === 'kevin' ? 'charline' : 'kevin';
+    // Off-screen things are skipped (the view is about 15 tiles wide).
+    const near = sim.bossActive ? 30 : 16;
     for (const th of sim.things) {
-      if (!th.alive) continue;
+      if (!th.alive || (Math.abs(th.x - sim.hero.x) > near && th.kind !== 'zone')) continue;
       switch (th.kind) {
         case 'ticket':
           at(
@@ -785,6 +791,18 @@ export class LevelView {
   }
 
   /**
+   * Throwing arm on top of whatever the body is doing.
+   * @param {Pose} pose @param {Sim} sim
+   * @returns {Pose}
+   */
+  overlay(pose, sim) {
+    const k = sim.time - this.throwAt;
+    if (k < 0 || k > 0.28) return pose;
+    const swing = k < 0.08 ? -1.6 * (k / 0.08) : -1.6 + 4.2 * ((k - 0.08) / 0.2);
+    return { ...pose, armR: Math.min(swing, 2.6), lean: (pose.lean ?? 0) + 0.12 };
+  }
+
+  /**
    * Squash on landing, stretch on take-off.
    * @param {Pose} pose @param {number} time
    * @returns {Pose}
@@ -801,6 +819,9 @@ export class LevelView {
   /** @param {DrawItem[]} items @param {Sim} sim @param {number} t */
   drawHero(items, sim, t) {
     const h = sim.hero;
+    const dt = t - (this.lastDraw ?? t);
+    this.lastDraw = t;
+    this.still = h.state === 'ground' && Math.abs(h.vx) < 0.05 && !sim.won ? this.still + dt : 0;
     let hx = h.x + HERO.w / 2;
     let hy = h.y;
     if (h.state === 'climb') {
@@ -817,7 +838,7 @@ export class LevelView {
         hy,
         0,
         h.facing,
-        this.squashed(heroPose(sim, t), sim.time),
+        this.squashed(this.overlay(heroPose(sim, t, this.still), sim), sim.time),
         {
           scale: CAST[sim.heroId].scale,
           turn: h.state === 'hang' || h.state === 'climb' ? 1.45 : 1.0,
@@ -831,9 +852,10 @@ export class LevelView {
 /**
  * @param {Sim} sim
  * @param {number} t
+ * @param {number} still Seconds standing still.
  * @returns {Pose}
  */
-function heroPose(sim, t) {
+function heroPose(sim, t, still) {
   const h = sim.hero;
   if (h.state === 'hang')
     return { legL: 0.15, legR: -0.1, armL: Math.PI * 0.95, armR: Math.PI * 0.95, lean: 0.1 };
@@ -847,8 +869,40 @@ function heroPose(sim, t) {
       lean: 0.4 * k,
     };
   }
-  if (h.state === 'dead')
-    return { legL: 0.3, legR: -0.2, armL: 2.6, armR: 2.4, lean: -0.3, squash: 0.15 };
+  if (h.state === 'dead') {
+    // Surprise first, then a cartoon flop.
+    if (h.stateTime < 0.35)
+      return {
+        legL: 0.4,
+        legR: -0.4,
+        armL: 2.9,
+        armR: 2.9,
+        armSpread: 0.8,
+        squash: -0.12,
+        head: -0.3,
+      };
+    const k = Math.min(1, (h.stateTime - 0.35) / 0.4);
+    return {
+      legL: 1.2 * k,
+      legR: 0.6 * k,
+      armL: 2.4,
+      armR: 1.8,
+      lean: -1.1 * k,
+      squash: 0.2 * k,
+      bob: -6 * k,
+    };
+  }
+  if (sim.won) {
+    const k = t * 7;
+    return {
+      legL: 0,
+      legR: 0,
+      armL: 2.9 + Math.sin(k) * 0.15,
+      armR: 2.9 - Math.sin(k) * 0.15,
+      bob: Math.abs(Math.sin(k)) * 2,
+      head: -0.2,
+    };
+  }
   if (h.state === 'air') {
     const up = h.vy > 0;
     return {
@@ -861,6 +915,9 @@ function heroPose(sim, t) {
     };
   }
   const speed = Math.abs(h.vx);
+  // Skid: still sliding one way while facing the other.
+  if (speed > 2 && Math.sign(h.vx) !== h.facing)
+    return { legL: 0.7, legR: -0.5, armL: -1, armR: 1.2, lean: -0.35, squash: 0.06 };
   if (speed > 0.3) {
     const ph = h.run * 2.3;
     const a = Math.min(1, speed / sim.stats.run);
@@ -872,6 +929,12 @@ function heroPose(sim, t) {
       lean: 0.18 * a,
       bob: Math.abs(Math.cos(ph)) * 1.2 * a,
     };
+  }
+  // Waiting around: a glance at the watch, then at the phone.
+  if (still > 4) {
+    const k = (still - 4) % 6;
+    if (k < 2.5) return { ...idlePose(t), armL: 1.6, armSpread: -0.4, head: 0.35 };
+    if (k > 3.5) return { ...idlePose(t), armR: 1.3, head: 0.3 };
   }
   return idlePose(t);
 }
