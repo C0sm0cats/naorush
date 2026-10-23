@@ -53,6 +53,8 @@ Quand un directeur consulte PRIMO, sa garde tombe : c’est le moment de lui env
 
 Les touches se changent dans **Options**, avec aussi les volumes, les secousses, les flashs, le contraste élevé, les vibrations et la taille des boutons tactiles. Sur mobile, on peut glisser d’un bouton à l’autre sans lever le doigt.
 
+Douze **trophées** attendent les joueurs les plus curieux (secrets, étapes sans faute, boss convaincus sans être touché…). Le jeu s’installe comme une application (PWA) et reste jouable hors ligne une fois chargé.
+
 Badge aux bornes Chronotime : en cas de pépin, tu repars de là. Les ramettes de papier rechargent les comptes rendus, les cafés rendent un cœur. Chaque piège prévient (une secousse, un voyant, une goutte) et se répète à l’identique au deuxième essai. La progression est sauvegardée à chaque étape.
 
 ## Sous le capot
