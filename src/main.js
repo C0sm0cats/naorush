@@ -575,13 +575,16 @@ function onEvent(e) {
   }
 }
 
+/** On touch screens the pads cover the bottom: frame the hero a little higher. */
+const touchLift = matchMedia('(pointer: coarse)').matches ? 1.1 : 0;
+
 /** During a boss fight the camera frames both fighters. */
 function fightFocus() {
   if (!sim.bossActive || sim.bossDone || screen === 'title') return null;
   const b = sim.things.find((t) => t.kind === 'boss');
   if (!b) return null;
   const hx = sim.hero.x + HERO.w / 2;
-  return { x: (hx * 2 + b.x) / 3, y: sim.hero.y, facing: Math.sign(b.x - hx) * 0.4 };
+  return { x: (hx * 2 + b.x) / 3, y: sim.hero.y - touchLift, facing: Math.sign(b.x - hx) * 0.4 };
 }
 
 /** @param {number} now */
@@ -654,7 +657,7 @@ function frame(now) {
     ? { x: 3.5, y: 1.6, facing: 0 }
     : drift
       ? { x: 10 + Math.sin(t * 0.07) * 8, y: 3, facing: 1 }
-      : (fightFocus() ?? { x: h.x + HERO.w / 2, y: h.y, facing: h.facing });
+      : (fightFocus() ?? { x: h.x + HERO.w / 2, y: h.y - touchLift, facing: h.facing });
   const cam = camera.update(dt, renderer.width / renderer.height, focus, { w: sim.w, h: sim.h });
   renderer.render(cam, lighting, view.items(sim, t, particles.list), view.sprites, { flash });
   if (screen === 'play' || screen === 'talk') {

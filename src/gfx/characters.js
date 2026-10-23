@@ -73,7 +73,7 @@ export function buildCharacter(gl, look) {
 
   // Head: origin at the neck joint.
   const head = part(gl, (b) => {
-    b.ellipsoid([0, 0.25, 0], [0.205, 0.215, 0.19], look.skin, { seg: 32 });
+    b.ellipsoid([0, 0.25, 0], [0.205, 0.215, 0.19], look.skin, { seg: 24 });
     b.ellipsoid([-0.2, 0.24, -0.01], [0.035, 0.05, 0.03], look.skin);
     b.ellipsoid([0.2, 0.24, -0.01], [0.035, 0.05, 0.03], look.skin);
     for (const s of [-1, 1]) {
@@ -116,7 +116,7 @@ export function buildCharacter(gl, look) {
             [0.045, 0.006],
           ],
           dark,
-          { seg: 32 },
+          { seg: 24 },
         );
       b.roundedBox([0, 0.275, 0.182], [0.03, 0.005, 0.005], 0.004, dark);
     }
@@ -210,7 +210,7 @@ export function buildCharacter(gl, look) {
           ],
           /** @type {string} */ (look.skirt),
           {
-            seg: 36,
+            seg: 28,
             scaleZ: 0.68,
           },
         ),

@@ -17,3 +17,16 @@ test('loads to the title, starts stage 1 and reaches play', async ({ page }) => 
   await expect(page.locator('#hearts .heart')).not.toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+test('options open from the title and remember settings', async ({ page }) => {
+  await page.goto('./');
+  await expect(page.locator('body')).toHaveAttribute('data-screen', 'title', { timeout: 60000 });
+  await page.locator('#optionsBtn').click();
+  await expect(page.locator('#options')).toBeVisible();
+  await page.locator('#optContrast').check();
+  await expect(page.locator('body')).toHaveClass(/contrast/);
+  await page.locator('#optionsClose').click();
+  await expect(page.locator('body')).toHaveAttribute('data-screen', 'title');
+  await page.reload();
+  await expect(page.locator('body')).toHaveClass(/contrast/, { timeout: 60000 });
+});
