@@ -1,5 +1,5 @@
 /**
- * Character looks. The two heroes and the colleagues of the slice.
+ * Character looks: the two heroes, a colleague and the two level bosses.
  * @type {Record<string, import('../gfx/characters.js').Look & {name: string, title?: string, scale: number}>}
  */
 export const CAST = {
@@ -43,5 +43,35 @@ export const CAST = {
     shoes: '#f1f1f1',
     glasses: true,
     prop: 'phone',
+  },
+  techServicesDirector: {
+    name: 'Directeur Technologies & Services',
+    title: 'Pays de la Loire',
+    scale: 1.06,
+    skin: '#e9bc98',
+    hair: '#4a4f5a',
+    hairStyle: 'short',
+    jacket: '#1f2a44',
+    shirt: '#dfe9f5',
+    tie: '#c6f432',
+    legs: '#262c3a',
+    shoes: '#151515',
+    glasses: true,
+    prop: 'tablet',
+  },
+  regionalDirector: {
+    name: 'Directeur Région Grand Ouest',
+    title: 'Grand Ouest',
+    scale: 1.1,
+    skin: '#f3c9a6',
+    hair: '#c4622d',
+    hairStyle: 'curly',
+    jacket: '#3b3f4a',
+    shirt: '#ffffff',
+    legs: '#2c303a',
+    shoes: '#5a3420',
+    glasses: true,
+    beard: true,
+    prop: 'folder',
   },
 };

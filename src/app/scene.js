@@ -8,6 +8,7 @@ import {
   posterWidth,
 } from '../data/inetum.js';
 import { renderPoster } from '../gfx/posters.js';
+import { buildProps } from '../gfx/props.js';
 import { buildCharacter, poseCharacter } from '../gfx/characters.js';
 import { chain, rotationY, rotationZ, scaling, translation } from '../gfx/mat4.js';
 import { Mesh, Sprite } from '../gfx/renderer.js';
@@ -18,6 +19,29 @@ import { HERO, TILE } from '../game/sim.js';
 import { crop, loadImage } from './assets.js';
 
 const IDENTITY = translation(0, 0, 0);
+const GALLERY = ['kevin', 'charline', 'mathis', 'techServicesDirector', 'regionalDirector'];
+
+/** Meshes shared by every level, built once per GL context. */
+const SHARED = new WeakMap();
+/** @param {WebGL2RenderingContext} gl */
+function sharedMeshes(gl) {
+  if (!SHARED.has(gl)) {
+    /** @type {Record<string, ReturnType<typeof buildCharacter>>} */
+    const cast = {};
+    for (const id of Object.keys(CAST)) cast[id] = buildCharacter(gl, CAST[id]);
+    const v = new Volume(1, 1, 1, 1, [-0.5, -0.5, -0.5]);
+    v.set(0, 0, 0, 0xffffff, MAT.EMISSIVE);
+    SHARED.set(gl, {
+      things: buildThings(gl),
+      props: buildProps(gl),
+      cast,
+      cube: new Mesh(gl, meshVolume(v)),
+    });
+  }
+  return /** @type {{things: ReturnType<typeof buildThings>, props: ReturnType<typeof buildProps>, cast: Record<string, ReturnType<typeof buildCharacter>>, cube: Mesh}} */ (
+    SHARED.get(gl)
+  );
+}
 
 /**
  * @typedef {import('../gfx/renderer.js').DrawItem} DrawItem
@@ -32,28 +56,55 @@ export class LevelView {
   /**
    * @param {WebGL2RenderingContext} gl
    * @param {Sim} sim A fresh simulation of the level (for its layout).
-   * @param {import('../data/slice.js').Decor[]} decor
-   * @param {string[]} map
+   * @param {import('../data/levels/index.js').Level} level
    */
-  constructor(gl, sim, decor, map) {
+  constructor(gl, sim, level) {
     this.gl = gl;
-    this.decor = decor;
-    const office = buildOffice(sim, decor, map);
+    this.levelId = level.id;
+    this.theme = level.theme;
+    this.decor = level.decor;
+    const office = buildOffice(sim, level.decor, level.map, level.theme);
     this.lights = office.lights;
     this.office = new Mesh(gl, office.mesh);
-    this.skyline = new Mesh(gl, buildSkyline(sim.w));
-    this.things = buildThings(gl);
-    /** @type {Record<string, ReturnType<typeof buildCharacter>>} */
-    this.cast = {};
-    for (const id of ['kevin', 'charline', 'mathis']) this.cast[id] = buildCharacter(gl, CAST[id]);
-    const v = new Volume(1, 1, 1, 1, [-0.5, -0.5, -0.5]);
-    v.set(0, 0, 0, 0xffffff, MAT.EMISSIVE);
-    this.cube = new Mesh(gl, meshVolume(v));
+    this.skyline = level.theme === 'datacenter' ? null : new Mesh(gl, buildSkyline(sim.w));
+    const shared = sharedMeshes(gl);
+    this.things = shared.things;
+    this.props = shared.props;
+    this.cast = shared.cast;
+    this.cube = shared.cube;
+    /** Furniture and props standing in the level. @type {DrawItem[]} */
+    this.furniture = [];
+    for (const d of level.decor) {
+      if (d.type === 'desk') this.furniture.push(this.prop('chair', d.x + 4.7, d.y, -1.1));
+      else if (d.type in this.props) {
+        const mesh = /** @type {keyof typeof this.props} */ (d.type);
+        this.furniture.push(this.prop(mesh, d.x, d.y, d.z ?? -1.9));
+        if (d.type === 'lampPost')
+          this.lights.push({ pos: [d.x, d.y + 2.5, -1.4], radius: 5, color: [0.7, 0.5, 0.3] });
+      }
+    }
     /** @type {Sprite[]} */
     this.sprites = [];
     this.ready = this.loadArtwork();
     this.doorT = 0;
     this.gallery = false;
+  }
+
+  /**
+   * @param {keyof ReturnType<typeof buildProps>} id
+   * @param {number} x @param {number} y @param {number} z
+   * @returns {DrawItem}
+   */
+  prop(id, x, y, z) {
+    return { mesh: this.props[id], model: translation(x, y, z) };
+  }
+
+  /** Frees the level's own GPU resources (shared meshes stay). */
+  dispose() {
+    this.office.dispose(this.gl);
+    this.skyline?.dispose(this.gl);
+    for (const s of this.sprites) s.dispose(this.gl);
+    this.sprites = [];
   }
 
   async loadArtwork() {
@@ -125,14 +176,12 @@ export class LevelView {
    */
   items(sim, t, particles) {
     /** @type {DrawItem[]} */
-    const items = [
-      { mesh: this.skyline, model: IDENTITY, noShadow: true },
-      { mesh: this.office, model: IDENTITY },
-    ];
+    const items = [{ mesh: this.office, model: IDENTITY }, ...this.furniture];
+    if (this.skyline) items.push({ mesh: this.skyline, model: IDENTITY, noShadow: true });
     if (this.gallery) {
-      ['kevin', 'charline', 'mathis'].forEach((id, i) =>
+      GALLERY.forEach((id, i) =>
         items.push(
-          ...poseCharacter(this.cast[id], 2.4 + i * 1.1, 3, 0.4, 1, idlePose(t + i), {
+          ...poseCharacter(this.cast[id], 1.2 + i * 1.1, 3, 0.4, 1, idlePose(t + i), {
             scale: CAST[id].scale,
             turn: 0.35,
             rim: 0.4,
@@ -160,6 +209,7 @@ export class LevelView {
           );
           break;
         case 'ammo':
+          if (th.state === 'gone') break;
           at(
             things.ammo,
             th.x,
@@ -252,6 +302,30 @@ export class LevelView {
           );
           break;
         }
+        case 'lift':
+          items.push({
+            mesh: this.props.lift,
+            model: chain(
+              translation(th.x + (th.w ?? 2) / 2, th.y - 0.25, -0.2),
+              scaling(th.w ?? 2, 1, 1),
+            ),
+          });
+          break;
+        case 'kpi':
+          at(this.props.kpi, th.x, th.y, 0.1, rotationZ(th.t * 9));
+          break;
+        case 'wave':
+          at(
+            this.props.wave,
+            th.x,
+            th.y,
+            0,
+            scaling(Math.sign(th.vx) || 1, 1 + Math.sin(th.t * 30) * 0.15, 1),
+          );
+          break;
+        case 'boss':
+          this.drawBoss(items, sim, th, t);
+          break;
         default:
           break;
       }
@@ -280,7 +354,82 @@ export class LevelView {
               -0.6,
             ),
           });
+    // The arena gate drops shut while the boss fight is on.
+    if (sim.bossActive && !sim.bossDone)
+      for (let c = 0; c < sim.w; c++)
+        for (let r = 0; r < sim.h; r++)
+          if (sim.tiles[c + r * sim.w] === TILE.GATE)
+            items.push({ mesh: this.props.gate, model: translation(c + 0.5, r, -0.2) });
     return items;
+  }
+
+  /**
+   * The level boss: throws KPI slides, consults PRIMO on a tablet, leaps (regional),
+   * and cheers once convinced.
+   * @param {DrawItem[]} items @param {Sim} sim @param {import('../game/sim.js').Thing} b @param {number} t
+   */
+  drawBoss(items, sim, b, t) {
+    const id = sim.boss?.id ?? 'techServicesDirector';
+    const hx = sim.hero.x + HERO.w / 2;
+    const facing = b.state === 'convinced' ? 1 : Math.sign(hx - b.x) || -1;
+    let y = b.y;
+    /** @type {Pose} */
+    let pose = idlePose(t);
+    let turn = 1;
+    switch (b.state) {
+      case 'intro':
+        pose = {
+          legL: 0.1,
+          legR: -0.1,
+          armL: 0.6,
+          armR: 0.6,
+          armSpread: 0.9,
+          lean: -0.1,
+          head: -0.15,
+        };
+        turn = 0.5;
+        break;
+      case 'throw': {
+        const k = (b.t % 0.95) / 0.95;
+        pose = { legL: 0.3, legR: -0.3, armL: -0.3, armR: k < 0.8 ? -1.2 * k : 2.6, lean: 0.15 };
+        break;
+      }
+      case 'leap': {
+        const k = Math.min(1, b.t / 0.7);
+        y += Math.sin(Math.PI * k) * 1.6;
+        pose = { legL: 0.9, legR: 0.6, armL: 2.6, armR: 2.6, squash: k > 0.95 ? 0.15 : -0.05 };
+        break;
+      }
+      case 'consult':
+        pose = { legL: 0, legR: 0, armL: 0.2, armR: 1.1, head: 0.45, bob: Math.sin(t * 2) * 0.3 };
+        turn = 0.35;
+        break;
+      case 'hit':
+        pose = { legL: -0.3, legR: 0.4, armL: 2.2, armR: 1.8, lean: -0.35, squash: 0.08 };
+        break;
+      case 'convinced':
+        pose = {
+          legL: 0,
+          legR: 0,
+          armL: 2.9 + Math.sin(t * 8) * 0.15,
+          armR: 2.9 - Math.sin(t * 8) * 0.15,
+          armSpread: 0.3,
+          bob: Math.abs(Math.sin(t * 6)) * 1.5,
+          head: -0.2,
+        };
+        turn = 0.3;
+        break;
+      default:
+        break;
+    }
+    items.push(
+      ...poseCharacter(this.cast[id], b.x, y, -0.1, facing, pose, {
+        scale: CAST[id].scale,
+        turn,
+        rim: b.state === 'consult' ? 0.9 : 0.45,
+        tint: b.state === 'hit' && b.t < 0.2 ? [1.6, 1.2, 1.2] : undefined,
+      }),
+    );
   }
 
   /** @param {DrawItem[]} items @param {Sim} sim @param {number} t */

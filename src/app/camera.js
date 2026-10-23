@@ -18,6 +18,7 @@ export class Camera {
   snap(x, y) {
     this.x = x;
     this.y = y;
+    this.dist = 4.1 / Math.tan(FOV / 2);
   }
 
   /**

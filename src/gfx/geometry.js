@@ -56,7 +56,7 @@ export class MeshBuilder {
    */
   roundedBox(c, h, r, color, o = {}) {
     const col = typeof color === 'string' ? rgb(color) : color;
-    const seg = o.seg ?? 6;
+    const seg = o.seg ?? 10;
     const inner = h.map((x) => Math.max(0, x - r));
     // Six cube faces, each a grid; points are pushed onto the rounded surface.
     const faces = [
@@ -74,8 +74,9 @@ export class MeshBuilder {
         (u, v) => {
           const q = [0, 0, 0];
           q[axis] = sign;
-          q[a1] = (u * 2 - 1) * (sign > 0 ? 1 : -1);
-          q[a2] = v * 2 - 1;
+          // Cosine spacing packs vertices into the rounded edges, where curvature is.
+          q[a1] = Math.sin((u - 0.5) * Math.PI) * (sign > 0 ? 1 : -1);
+          q[a2] = Math.sin((v - 0.5) * Math.PI);
           const p = q.map((x, i) => x * h[i]);
           const k = p.map((x, i) => Math.max(-inner[i], Math.min(inner[i], x)));
           const d = p.map((x, i) => x - k[i]);
@@ -97,7 +98,7 @@ export class MeshBuilder {
    */
   ellipsoid(c, r, color, o = {}) {
     const col = typeof color === 'string' ? rgb(color) : color;
-    const seg = o.seg ?? 14;
+    const seg = o.seg ?? 22;
     const from = o.from ?? 0,
       to = o.to ?? 1;
     this.grid(
@@ -127,7 +128,7 @@ export class MeshBuilder {
    */
   lathe(c, profile, color, o = {}) {
     const col = typeof color === 'string' ? rgb(color) : color;
-    const seg = o.seg ?? 20;
+    const seg = o.seg ?? 32;
     const sz = o.scaleZ ?? 1;
     for (let j = 0; j < profile.length - 1; j++) {
       const [r0, y0] = profile[j],

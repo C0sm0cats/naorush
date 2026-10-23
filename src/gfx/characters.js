@@ -73,7 +73,7 @@ export function buildCharacter(gl, look) {
 
   // Head: origin at the neck joint.
   const head = part(gl, (b) => {
-    b.ellipsoid([0, 0.25, 0], [0.205, 0.215, 0.19], look.skin, { seg: 16 });
+    b.ellipsoid([0, 0.25, 0], [0.205, 0.215, 0.19], look.skin, { seg: 32 });
     b.ellipsoid([-0.2, 0.24, -0.01], [0.035, 0.05, 0.03], look.skin);
     b.ellipsoid([0.2, 0.24, -0.01], [0.035, 0.05, 0.03], look.skin);
     for (const s of [-1, 1]) {
@@ -82,10 +82,10 @@ export function buildCharacter(gl, look) {
         [s * 0.072, 0.27, 0.172],
         [0.028, female ? 0.038 : 0.034, 0.02],
         look.eyes ?? '#2a2236',
-        { seg: 8 },
+        { seg: 14 },
       );
       b.ellipsoid([s * 0.064 + 0.006, 0.284, 0.188], [0.009, 0.009, 0.006], '#ffffff', {
-        seg: 6,
+        seg: 10,
         mat: MAT.EMISSIVE,
       });
       // Brows, lashes for female characters.
@@ -96,12 +96,12 @@ export function buildCharacter(gl, look) {
         female ? dark : look.hair,
       );
       if (female) b.roundedBox([s * 0.105, 0.302, 0.162], [0.014, 0.006, 0.01], 0.005, dark);
-      b.ellipsoid([s * 0.12, 0.2, 0.15], [0.035, 0.022, 0.02], '#f19a92', { seg: 6 });
+      b.ellipsoid([s * 0.12, 0.2, 0.15], [0.035, 0.022, 0.02], '#f19a92', { seg: 10 });
     }
-    b.ellipsoid([0, 0.225, 0.19], [0.022, 0.028, 0.02], shade(look.skin, -0.08), { seg: 6 });
+    b.ellipsoid([0, 0.225, 0.19], [0.022, 0.028, 0.02], shade(look.skin, -0.08), { seg: 10 });
     if (female)
       b.ellipsoid([0, 0.155, 0.168], [0.05, 0.016, 0.02], /** @type {string} */ (look.lips), {
-        seg: 8,
+        seg: 14,
         mat: gloss,
       });
     else b.roundedBox([0, 0.158, 0.172], [0.04, 0.008, 0.01], 0.006, '#8c4a3c');
@@ -116,7 +116,7 @@ export function buildCharacter(gl, look) {
             [0.045, 0.006],
           ],
           dark,
-          { seg: 18 },
+          { seg: 32 },
         );
       b.roundedBox([0, 0.275, 0.182], [0.03, 0.005, 0.005], 0.004, dark);
     }
@@ -183,8 +183,8 @@ export function buildCharacter(gl, look) {
   // Torso: origin at the hip; jacket open over the shirt.
   const torso = part(gl, (b) => {
     // Chest wider than the waist, generously rounded.
-    b.roundedBox([0, 0.34, 0], [0.215, 0.17, 0.13], 0.12, look.jacket);
-    b.roundedBox([0, 0.16, 0], [0.18, 0.15, 0.115], 0.1, look.jacket);
+    b.roundedBox([0, 0.34, 0], [0.215, 0.17, 0.13], 0.128, look.jacket);
+    b.roundedBox([0, 0.16, 0], [0.18, 0.15, 0.115], 0.113, look.jacket);
     b.roundedBox([0, 0.37, 0.12], [0.07, 0.14, 0.04], 0.035, look.shirt);
     for (const s of [-1, 1])
       b.roundedBox([s * 0.08, 0.38, 0.14], [0.025, 0.11, 0.02], 0.018, shade(look.jacket, -0.18));
@@ -210,7 +210,7 @@ export function buildCharacter(gl, look) {
           ],
           /** @type {string} */ (look.skirt),
           {
-            seg: 24,
+            seg: 36,
             scaleZ: 0.68,
           },
         ),

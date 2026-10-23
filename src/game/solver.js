@@ -84,27 +84,46 @@ function key(s) {
     .filter((t) => t.kind === 'colleague' || t.kind === 'loose' || t.kind === 'bottle')
     .map((t) => t.state[0])
     .join('');
-  return `${Math.round(h.x * 2)},${Math.round(h.y * 2)},${h.state},${s.hasKey ? 1 : 0},${s.doorOpen ? 1 : 0},${Math.min(s.ammo, 1)},${flags}`;
+  // Lifts and the boss move on their own: their phase matters only once they are in play.
+  const moving = s.things
+    .filter(
+      (t) => (t.kind === 'lift' && Math.abs(t.x - h.x) < 6) || (t.kind === 'boss' && s.bossActive),
+    )
+    .map((t) =>
+      t.kind === 'lift' ? Math.round(t.y * 2) : `${t.state}${t.hp}${Math.floor(t.t * 4)}`,
+    )
+    .join('');
+  return `${Math.round(h.x * 2)},${Math.round(h.y * 2)},${h.state},${s.hasKey ? 1 : 0},${s.doorOpen ? 1 : 0},${Math.min(s.ammo, 3)},${flags},${moving}`;
 }
 
 /**
- * Distance to the next objective: the badge reader, then the key, then the exit.
+ * Distance to the next objective: the badge reader, the boss, the key, then the exit.
  * @param {import('./sim.js').Sim} s
  */
 function remaining(s) {
   /** @param {string} kind */
-  const find = (kind) => s.things.find((t) => t.kind === kind);
-  const target = !s.doorOpen ? find('reader') : !s.hasKey ? find('key') : find('exit');
-  const stage = (s.doorOpen ? 0 : 2) + (s.hasKey ? 0 : 1);
-  if (!target) return stage * 100;
-  return stage * 100 + Math.abs(target.x - s.hero.x) + Math.abs(target.y - s.hero.y) * 1.5;
+  const find = (kind) => s.things.find((t) => t.kind === kind && t.alive);
+  const boss = s.boss && !s.bossDone ? find('boss') : undefined;
+  const target = !s.doorOpen
+    ? find('reader')
+    : boss
+      ? boss
+      : !s.hasKey
+        ? find('key')
+        : find('exit');
+  const stage =
+    (s.doorOpen ? 0 : 300) + (boss ? 100 + (boss.hp ?? 0) * 60 : 0) + (s.hasKey ? 0 : 100);
+  if (!target) return stage;
+  // Face the boss from a throwing distance rather than walking into it.
+  const tx = boss ? target.x - 4 : target.x;
+  return stage + Math.abs(tx - s.hero.x) + Math.abs(target.y - s.hero.y) * 1.5;
 }
 
 /**
  * Best-first search guided by {@link remaining}; ties go to shorter paths.
  * @param {import('./sim.js').Sim} start
  * @param {{maxNodes?: number, allowDamage?: boolean}} [o]
- * @returns {{won: boolean, inputs: Input[], explored: number}}
+ * @returns {{won: boolean, inputs: Input[], explored: number, closest?: import('./sim.js').Sim}}
  */
 export function solve(start, o = {}) {
   const maxNodes = o.maxNodes ?? 80000;
@@ -113,6 +132,7 @@ export function solve(start, o = {}) {
   const open = [{ sim: structuredClone(start), path: [], score: 0 }];
   const seen = new Set([key(start)]);
   let explored = 0;
+  let best = { left: Infinity, sim: start };
   while (open.length && explored < maxNodes) {
     // Pop the most promising node (small arrays: a linear scan is fine).
     let bi = 0;
@@ -140,10 +160,12 @@ export function solve(start, o = {}) {
       const k = key(s);
       if (seen.has(k)) continue;
       seen.add(k);
-      open.push({ sim: s, path, score: remaining(s) + path.length * 0.35 });
+      const left = remaining(s);
+      if (left < best.left) best = { left, sim: s };
+      open.push({ sim: s, path, score: left + path.length * 0.35 });
     }
   }
-  return { won: false, inputs: [], explored };
+  return { won: false, inputs: [], explored, closest: best.sim };
 }
 
 export const SECONDS_PER_FRAME = DT;

@@ -122,7 +122,7 @@ export function createSim(def, heroId) {
       const c = def.map[row][col];
       const y = h - 1 - row;
       const i = col + y * w;
-      if (c === '#' || c === 'M' || c === 'B') tiles[i] = TILE.SOLID;
+      if ('#MBVH'.includes(c)) tiles[i] = TILE.SOLID;
       else if (c === '-') {
         tiles[i] = TILE.LOOSE;
         thing('loose', col, y);
@@ -183,7 +183,8 @@ export function createSim(def, heroId) {
     ammo: stats.ammo,
     fireHeld: false,
     hasKey: false,
-    doorOpen: false,
+    // Levels without a badge reader have nothing to unlock.
+    doorOpen: !things.some((t) => t.kind === 'reader'),
     won: false,
     time: 0,
     deaths: 0,
@@ -705,8 +706,13 @@ function stepThings(s) {
         break;
       }
       case 'ammo':
-        if (hero.state !== 'dead' && touches(t, 0.4, 0.5)) {
-          t.alive = false;
+        // Reams inside a boss arena come back, so a fight can never run dry.
+        if (t.state === 'gone') {
+          if (t.t > 5) t.state = 'idle';
+        } else if (hero.state !== 'dead' && touches(t, 0.4, 0.5)) {
+          const arena = s.boss && t.x > s.boss.arena[0];
+          if (arena) Object.assign(t, { state: 'gone', t: 0 });
+          else t.alive = false;
           s.ammo = Math.min(9, s.ammo + 3);
           emit(s, 'ammo', t.x, t.y);
         }

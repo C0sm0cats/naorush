@@ -28,9 +28,19 @@
       </div>
       <div class="hud-right">
         <div class="room" id="room"></div>
+        <button class="icon-btn" id="muteBtn" aria-label="Couper le son">♪</button>
         <button class="icon-btn" id="pauseBtn" aria-label="Pause">❚❚</button>
       </div>
     </header>
+    <div class="bossbar" id="bossbar" hidden>
+      <b id="bossName"></b>
+      <div class="bar"><i id="bossHp"></i></div>
+    </div>
+    <div class="stage" id="stage" aria-live="polite">
+      <p class="kicker" id="stageNum"></p>
+      <h2 id="stageName"></h2>
+      <p id="stageSub"></p>
+    </div>
     <div class="hint" id="hint"></div>
     <div class="toast" id="toast" role="status"></div>
 
@@ -51,6 +61,7 @@
           </button>
         </div>
         <button class="go" id="play">Jouer</button>
+        <button class="ghost" id="continue" hidden>Continuer</button>
         <details class="controls">
           <summary>Commandes</summary>
           <ul>
@@ -74,12 +85,22 @@
       </div>
     </section>
 
+    <section class="talk" id="talk" hidden>
+      <div class="talk-box">
+        <div class="talk-who" id="talkWho"><b id="talkName"></b><small id="talkTitle"></small></div>
+        <p id="talkText"></p>
+        <button class="talk-next" id="talkNext" aria-label="Suite">▶</button>
+      </div>
+    </section>
+
     <section class="screen" id="won" hidden>
       <div class="card">
-        <p class="kicker">Étape terminée</p>
-        <h2>Bon de commande livré !</h2>
+        <p class="kicker" id="wonKicker">Étape terminée</p>
+        <h2 id="wonTitle">Bon de commande livré !</h2>
         <p class="lead" id="wonText"></p>
-        <button class="go" id="again">Rejouer</button>
+        <dl class="stats" id="wonStats"></dl>
+        <button class="go" id="next">Étape suivante</button>
+        <button class="ghost" id="again">Rejouer l’étape</button>
         <button class="ghost" id="menu">Menu principal</button>
       </div>
     </section>

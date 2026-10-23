@@ -186,6 +186,12 @@ export class Mesh {
     gl.vertexAttribPointer(3, 1, gl.UNSIGNED_BYTE, false, STRIDE, 20);
     gl.bindVertexArray(null);
   }
+
+  /** @param {WebGL2RenderingContext} gl */
+  dispose(gl) {
+    gl.deleteVertexArray(this.vao);
+    gl.deleteBuffer(this.buffer);
+  }
 }
 
 /**
@@ -212,6 +218,7 @@ export class Sprite {
     this.vao = /** @type {WebGLVertexArrayObject} */ (gl.createVertexArray());
     gl.bindVertexArray(this.vao);
     const buf = gl.createBuffer();
+    this.buffer = buf;
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     // prettier-ignore
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
@@ -224,6 +231,13 @@ export class Sprite {
     gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 20, 12);
     gl.bindVertexArray(null);
     this.bright = 1;
+  }
+
+  /** @param {WebGL2RenderingContext} gl */
+  dispose(gl) {
+    gl.deleteTexture(this.texture);
+    gl.deleteVertexArray(this.vao);
+    gl.deleteBuffer(this.buffer);
   }
 }
 

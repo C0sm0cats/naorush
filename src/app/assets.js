@@ -7,7 +7,7 @@ const URLS = /** @type {Record<string, string>} */ (
   })
 );
 
-/** @param {string} path Path relative to assets/, e.g. `signage/swile.webp`. */
+/** @param {string} path Path relative to assets/, e.g. `signage/Whiteboard01.webp`. */
 export const assetUrl = (path) => URLS[`../../assets/${path}`];
 
 /**

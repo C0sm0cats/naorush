@@ -1,3 +1,4 @@
+import { CAST } from '../data/cast.js';
 import { POSTER_HINTS, posterTitle } from '../data/inetum.js';
 import { HERO } from '../game/sim.js';
 
@@ -11,6 +12,10 @@ const EVENT_TEXT = {
   key: 'Bon de commande signé ! Attention à la bonbonne…',
   collapse: 'Le planning s’effondre !',
   bump: '« Je suis en call, là ! » — un CR (X) l’enverra en réunion.',
+  block: 'Il est concentré : attends qu’il consulte PRIMO.',
+  consult: 'Il consulte PRIMO… c’est le moment !',
+  bossHit: 'Argument reçu !',
+  parry: 'Slide KPI interceptée.',
   meeting: 'Parti en réunion. La voie est libre quelques secondes.',
   empty: 'Plus de CR : trouve une ramette de papier.',
   ammo: '+3 comptes rendus.',
@@ -30,6 +35,9 @@ export class Hud {
     this.toastTime = 0;
     this.lastHearts = -1;
     this.lastPoster = '';
+    this.bossbar = $('bossbar');
+    this.bossName = $('bossName');
+    this.bossHp = $('bossHp');
   }
 
   /** @param {string} text */
@@ -71,6 +79,15 @@ export class Hud {
       Math.floor((sim.hero.x + HERO.w / 2) / level.roomW),
     );
     this.room.textContent = level.rooms[room];
+    // Boss fight: name and remaining conviction.
+    const fight = Boolean(sim.boss && sim.bossActive && !sim.bossDone);
+    this.bossbar.hidden = !fight;
+    document.body.classList.toggle('boss', fight);
+    if (fight && sim.boss) {
+      const boss = sim.things.find((t) => t.kind === 'boss');
+      this.bossName.textContent = CAST[sim.boss.id].name;
+      this.bossHp.style.width = `${(100 * (boss?.hp ?? 0)) / sim.boss.hp}%`;
+    }
     if (this.toastTime > 0 && (this.toastTime -= dt) <= 0) this.toastEl.classList.remove('show');
     // Contextual hint: read a whiteboard, or what a poster means in play.
     const hint = near.board
