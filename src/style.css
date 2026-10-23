@@ -1036,3 +1036,14 @@ body[data-pad='l'] .touch .big {
     display: none;
   }
 }
+
+.room.timer {
+  font-variant-numeric: tabular-nums;
+  color: var(--lime);
+  font-size: 15px;
+}
+@media (max-width: 640px) {
+  .room.timer {
+    display: flex;
+  }
+}

@@ -720,7 +720,7 @@ function frame(now) {
     hud.update(
       dt,
       sim,
-      { rooms: level.rooms, roomW: ROOM_W, keyLabel: level.keyLabel },
+      { rooms: level.rooms, roomW: ROOM_W, keyLabel: level.keyLabel, timer: Boolean(challenge) },
       {
         poster: screen === 'play' ? poster?.id : undefined,
         board: Boolean(view.boardAt(sim)),

@@ -89,7 +89,7 @@ export class Hud {
   /**
    * @param {number} dt
    * @param {import('../game/sim.js').Sim} sim
-   * @param {{rooms: string[], roomW: number, keyLabel: string}} level
+   * @param {{rooms: string[], roomW: number, keyLabel: string, timer?: boolean}} level
    * @param {{poster?: string, board?: boolean, tip?: string}} near
    */
   update(dt, sim, level, near) {
@@ -113,7 +113,11 @@ export class Hud {
       level.rooms.length - 1,
       Math.floor((sim.hero.x + HERO.w / 2) / level.roomW),
     );
-    this.room.textContent = level.rooms[room];
+    // Against the clock (daily challenge): the room label becomes a stopwatch.
+    this.room.textContent = level.timer
+      ? `${Math.floor(sim.time / 60)}:${String(Math.floor(sim.time % 60)).padStart(2, '0')}.${Math.floor((sim.time % 1) * 10)}`
+      : level.rooms[room];
+    this.room.classList.toggle('timer', Boolean(level.timer));
     // Boss fight: name and remaining conviction.
     const fight = Boolean(sim.boss && sim.bossActive && !sim.bossDone);
     this.bossbar.hidden = !fight;
