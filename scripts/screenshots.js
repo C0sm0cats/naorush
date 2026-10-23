@@ -33,6 +33,13 @@ await page.goto(url);
 await until('title');
 await page.waitForTimeout(4000);
 await shot('title');
+// The link preview image (Teams, Slack, social networks).
+await page.screenshot({
+  path: 'public/og.jpg',
+  type: 'jpeg',
+  quality: 85,
+  clip: { x: 40, y: 45, width: 1200, height: 630 },
+});
 
 /** @param {number} stage */
 const start = async (stage) => {
