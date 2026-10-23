@@ -5,3 +5,5 @@ smoke/
 .serena/
 .DS_Store
 *.log
+test-results/
+playwright-report/

@@ -1,0 +1,11 @@
+dist
+node_modules
+docs
+smoke
+test-results
+playwright-report
+assets
+public/icons
+package-lock.json
+.plan
+.serena
