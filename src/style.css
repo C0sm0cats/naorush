@@ -953,3 +953,37 @@ body[data-pad='l'] .touch .big {
     transform: scale(1);
   }
 }
+
+/* Narrow portrait phones: a compact HUD that fits on one line. */
+@media (max-width: 440px) {
+  .hud {
+    gap: 6px;
+  }
+  .hud-left,
+  .hud-right {
+    gap: 4px;
+  }
+  .hearts,
+  .pill {
+    min-height: 30px;
+    padding: 4px 8px;
+    gap: 4px;
+    font-size: 13px;
+  }
+  .heart {
+    width: 14px;
+    height: 13px;
+    clip-path: path('M7 13 L1 6.6 A3.6 3.6 0 0 1 7 2.2 A3.6 3.6 0 0 1 13 6.6 Z');
+  }
+  .icon-btn {
+    width: 32px;
+    height: 32px;
+  }
+  .key:not(.have) {
+    display: none;
+  }
+  .keyrow {
+    font-size: 12px;
+    gap: 6px;
+  }
+}
