@@ -51,7 +51,7 @@ Quand un directeur consulte PRIMO, sa garde tombe : c’est le moment de lui env
 | Lancer un compte rendu          | X       | X ou B       | CR     |
 | Pause                           | Échap   | Start        | ❚❚     |
 
-Les touches se changent dans **Options**, avec aussi les volumes, les secousses, les flashs, le contraste élevé, les vibrations et la taille des boutons tactiles. Sur mobile, on peut glisser d’un bouton à l’autre sans lever le doigt.
+Les touches se changent dans **Options**, avec aussi un **mode détente** (les obstacles ne coûtent pas de cœur), les volumes, les secousses, les flashs, le contraste élevé, les vibrations et la taille des boutons tactiles. Sur mobile, on peut glisser d’un bouton à l’autre sans lever le doigt.
 
 Une fois l’enveloppe signée, une **étape bonus** se débloque : l’Intercontrat, un parcours d’escalade semé de tickets. Treize **trophées** attendent les joueurs les plus curieux (secrets, étapes sans faute, boss convaincus sans être touché…). Le jeu s’installe comme une application (PWA) et reste jouable hors ligne une fois chargé.
 
