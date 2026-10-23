@@ -1,5 +1,6 @@
 import { Audio } from './app/audio.js';
 import { Camera } from './app/camera.js';
+import { applyTwist, dailyChallenge } from './app/daily.js';
 import { Bubbles, Dialogue } from './app/dialogue.js';
 import { Particles } from './app/fx.js';
 import { Hud } from './app/hud.js';
@@ -94,7 +95,8 @@ async function loadStage(i) {
     await view.ready;
   }
   sim = createSim(level, heroId);
-  sim.assist = prefs.assist;
+  sim.assist = prefs.assist && !challenge;
+  if (challenge) applyTwist(sim, challenge);
   particles.clear();
   view.doorT = 0;
   camera.snap(sim.hero.x, sim.hero.y + 3);
@@ -164,20 +166,36 @@ for (const card of document.querySelectorAll('.hero-card')) {
 
 const saved = () => Math.min(CAMPAIGN - 1, Number(localStorage.getItem(SAVE_KEY)) || 0);
 function updateContinue() {
+  const d = today();
+  $('dailyBtn').textContent =
+    `Défi du jour : ${LEVELS[d.stage].name} · ${CAST[d.hero].name} · ${d.twist.label}`;
   $('bonusBtn').hidden = !trophies.data.got.nao;
   const n = saved();
   $('continue').hidden = n === 0;
   $('continue').textContent = `Continuer · étape ${n + 1} : ${LEVELS[n].name}`;
 }
 
+/** Today's challenge while it is being played. @type {import('./app/daily.js').Challenge | null} */
+let challenge = null;
+const today = () => dailyChallenge(CAMPAIGN);
+$('dailyBtn').onclick = () => {
+  challenge = today();
+  heroId = challenge.hero;
+  for (const c of document.querySelectorAll('.hero-card'))
+    c.setAttribute('aria-checked', String(/** @type {HTMLElement} */ (c).dataset.hero === heroId));
+  audio.sfx('confirm');
+  beginStage(challenge.stage);
+};
 /** @param {number} i */
 const startFrom = (i) => {
+  challenge = null;
   audio.sfx('confirm');
   if (i === 0) Object.assign(run, { tickets: 0, time: 0, deaths: 0, secrets: 0 });
   beginStage(i, i === 0 && screen === 'title' ? PROLOGUE : []);
 };
 const toMenu = () => {
   view.party = 0;
+  challenge = null;
   updateContinue();
   audio.music('title');
   audio.intensity(0);
@@ -290,20 +308,22 @@ function stageWon() {
   run.time += sim.time;
   run.deaths += sim.deaths;
   run.secrets += sim.secrets;
-  const last = stage === CAMPAIGN - 1;
-  const bonus = stage >= CAMPAIGN;
+  const last = stage === CAMPAIGN - 1 && !challenge;
+  const bonus = stage >= CAMPAIGN || Boolean(challenge);
   if (!bonus) localStorage.setItem(SAVE_KEY, String(last ? 0 : stage + 1));
   trophies.stageWon(sim, level.id, last);
   if (last) return credits();
   $('next').hidden = bonus;
-  $('wonKicker').textContent = bonus
-    ? 'Étape bonus terminée'
-    : `Étape ${stage + 1} sur ${CAMPAIGN} terminée`;
+  $('wonKicker').textContent = challenge
+    ? `Défi du jour · ${challenge.twist.label}`
+    : bonus
+      ? 'Étape bonus terminée'
+      : `Étape ${stage + 1} sur ${CAMPAIGN} terminée`;
   $('wonTitle').textContent = STAGE_END[stage].title;
   $('wonText').textContent = STAGE_END[stage].text;
   // Best time per stage and hero.
   const bests = JSON.parse(localStorage.getItem(BEST_KEY) ?? '{}');
-  const key = `${level.id}:${heroId}`;
+  const key = challenge ? `daily:${challenge.key}` : `${level.id}:${heroId}`;
   const record = !(bests[key] <= sim.time);
   if (record) {
     bests[key] = sim.time;
@@ -385,7 +405,8 @@ async function share(text, button) {
 $('share').onclick = () => {
   const hero = CAST[heroId].name;
   share(
-    `J’ai fini « ${level.name} » dans NAO Rush avec ${hero} en ${clock(sim.time)}, ` +
+    (challenge ? `Défi du jour du ${challenge.key.split('-').reverse().join('/')} : ` : '') +
+      `j’ai fini « ${level.name} » dans NAO Rush avec ${hero} en ${clock(sim.time)}, ` +
       `${sim.tickets} tickets Swile et ${sim.secrets}/${sim.secretTotal} secrets !`,
     $('share'),
   );

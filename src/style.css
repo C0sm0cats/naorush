@@ -997,3 +997,9 @@ body[data-pad='l'] .touch .big {
   color: #fff;
   background: #ffffff1f;
 }
+
+.ghost.daily {
+  background: #ff4f9a1f;
+  color: #a3124f;
+  font-size: 14px;
+}
