@@ -1,11 +1,12 @@
 import { Audio } from './app/audio.js';
 import { Camera } from './app/camera.js';
+import { Bubbles, Dialogue } from './app/dialogue.js';
 import { Particles } from './app/fx.js';
 import { Hud } from './app/hud.js';
 import { ACTIONS, Input, keyName } from './app/input.js';
 import { Trophies } from './app/trophies.js';
 import { LevelView, boardUrl } from './app/scene.js';
-import { BARKS, PROLOGUE } from './data/barks.js';
+import { PROLOGUE } from './data/barks.js';
 import { CAST } from './data/cast.js';
 import { CAMPAIGN, LEVELS, ROOM_W } from './data/levels/index.js';
 import { Renderer } from './gfx/renderer.js';
@@ -114,7 +115,7 @@ async function loadStage(i) {
   camera.snap(sim.hero.x, sim.hero.y + 3);
   hud.lastHearts = -1;
   hud.clearToast();
-  bark.time = 0;
+  bubbles.clear();
   gameOverTimer = 0;
 }
 
@@ -136,112 +137,33 @@ async function beginStage(i, before = []) {
   });
 }
 
-// ---- Dialogue ------------------------------------------------------------------
-/** @type {{lines: Line[], i: number, shown: number, done: () => void}} */
-const dialogue = { lines: [], i: 0, shown: 0, done: () => {} };
+// ---- Dialogue and speech bubbles ---------------------------------------------------
+const partnerOf = () => (heroId === 'kevin' ? 'charline' : 'kevin');
+const dialogue = new Dialogue(audio, (who) =>
+  who === 'hero'
+    ? heroId
+    : who === 'partner'
+      ? partnerOf()
+      : who === 'boss'
+        ? (level.boss?.id ?? partnerOf())
+        : '',
+);
+const bubbles = new Bubbles();
 
 /** @param {Line[]} lines @param {() => void} done */
 function talk(lines, done) {
-  Object.assign(dialogue, { lines, i: 0, shown: 0, done });
-  if (!lines.length) return done();
-  setSpeaker();
-  show('talk');
+  if (dialogue.start(lines, done)) show('talk');
+  else done();
 }
 
-const partnerOf = () => (heroId === 'kevin' ? 'charline' : 'kevin');
+/** @param {string} who @param {string} moment @param {boolean} [force] */
+const say = (who, moment, force) => bubbles.say(who, moment, force);
 
-function setSpeaker() {
-  const line = dialogue.lines[dialogue.i];
-  const id =
-    line.who === 'hero'
-      ? heroId
-      : line.who === 'partner'
-        ? partnerOf()
-        : line.who === 'boss'
-          ? (level.boss?.id ?? partnerOf())
-          : '';
-  const who = id ? CAST[id] : null;
-  $('talkName').textContent = who?.name ?? (line.who === 'narrator' ? 'NAO Rush' : 'Astuce');
-  $('talkTitle').textContent = who?.title ?? '';
-  $('talkWho').dataset.who = id || line.who;
-  $('talkText').textContent = '';
-}
-
-function advanceTalk() {
-  const line = dialogue.lines[dialogue.i];
-  if (!line || screen !== 'talk') return;
-  if (dialogue.shown < line.text.length) {
-    dialogue.shown = line.text.length;
-    $('talkText').textContent = line.text;
-    return;
-  }
-  audio.sfx('select');
-  if (++dialogue.i >= dialogue.lines.length) return dialogue.done();
-  dialogue.shown = 0;
-  setSpeaker();
-}
-
-/** Typewriter effect. @param {number} dt */
-function updateTalk(dt) {
-  const line = dialogue.lines[dialogue.i];
-  if (!line) return;
-  const before = Math.floor(dialogue.shown);
-  dialogue.shown = Math.min(line.text.length, dialogue.shown + dt * 55);
-  const now = Math.floor(dialogue.shown);
-  if (now !== before) {
-    $('talkText').textContent = line.text.slice(0, now);
-    if (now % 3 === 0 && line.text[now - 1] !== ' ') audio.sfx('talk');
-  }
-}
-
-// ---- Speech bubbles ---------------------------------------------------------------
-const bark = {
-  text: '',
-  who: '',
-  time: 0,
-  /** Last time each speaker said each moment. @type {Record<string, number>} */
-  last: {},
-};
-const barkEl = $('bark');
-
-/**
- * A short line above a character's head. Each moment waits a while before repeating.
- * @param {string} who CAST id @param {string} moment @param {boolean} [force]
- */
-function say(who, moment, force = false) {
-  const lines = BARKS[who]?.[moment];
-  if (!lines) return;
-  const key = who + moment;
-  const now = performance.now() / 1000;
-  if (!force && (now - (bark.last[key] ?? -99) < 8 || bark.time > 0.4)) return;
-  bark.last[key] = now;
-  Object.assign(bark, { text: lines[Math.floor(Math.random() * lines.length)], who, time: 2.6 });
-}
-
-/** World point to CSS pixels. @param {Float32Array} vp @param {number} x @param {number} y */
-function toScreen(vp, x, y) {
-  const cx = vp[0] * x + vp[4] * y + vp[12];
-  const cy = vp[1] * x + vp[5] * y + vp[13];
-  const cw = vp[3] * x + vp[7] * y + vp[15];
-  return [((cx / cw) * 0.5 + 0.5) * innerWidth, (0.5 - (cy / cw) * 0.5) * innerHeight];
-}
-
-/** @param {number} dt @param {Float32Array} vp */
-function updateBark(dt, vp) {
-  if (bark.time <= 0 || screen !== 'play') {
-    barkEl.classList.remove('show');
-    return;
-  }
-  bark.time -= dt;
+/** Where a speech bubble sits: above the hero or the boss. @param {string} who */
+function bubbleAnchor(who) {
+  if (who === heroId) return [sim.hero.x + HERO.w / 2, sim.hero.y + 2.1];
   const boss = sim.things.find((t) => t.kind === 'boss');
-  const self = bark.who === heroId;
-  const x = self ? sim.hero.x + HERO.w / 2 : (boss?.x ?? 0);
-  const y = self ? sim.hero.y + 2.1 : (boss?.y ?? 0) + 2.7;
-  const [sx, sy] = toScreen(vp, x, y);
-  if (barkEl.textContent !== bark.text) barkEl.textContent = bark.text;
-  barkEl.dataset.who = bark.who;
-  barkEl.style.transform = `translate(${Math.round(sx)}px, ${Math.round(sy)}px) translate(-50%, -100%)`;
-  barkEl.classList.toggle('show', bark.time > 0.15);
+  return boss ? [boss.x, boss.y + 2.7] : null;
 }
 
 // ---- Title, options, menus -----------------------------------------------------
@@ -294,7 +216,7 @@ $('goResume').onclick = () => {
 $('quit').onclick = $('menu').onclick = $('goMenu').onclick = $('creditsClose').onclick = toMenu;
 $('pauseBtn').onclick = () => screen === 'play' && pause();
 $('readerClose').onclick = () => show('play');
-$('talk').onclick = () => advanceTalk();
+$('talk').onclick = () => screen === 'talk' && dialogue.advance();
 function pause() {
   $('pauseInfo').textContent =
     `${level.name} · ${sim.tickets} tickets · secrets ${sim.secrets}/${sim.secretTotal} · ` +
@@ -624,7 +546,7 @@ function onEvent(e) {
     case 'bossPhase':
       audio.intensity(1);
       shake(0.8);
-      Object.assign(bark, { text: level.phaseLine ?? '', who: boss, time: 2.6 });
+      bubbles.line(boss, level.phaseLine ?? '');
       break;
     case 'consult':
       say(boss, 'consult');
@@ -741,8 +663,9 @@ function frame(now) {
     if ((screen === 'pause' || screen === 'reading') && input.pressed('pause')) show('play');
     else if (screen === 'title' && input.pressed('confirm')) startFrom(0);
     else if (screen === 'talk') {
-      updateTalk(dt);
-      if (input.pressed('confirm') || input.pressed('jump') || input.pressed('fire')) advanceTalk();
+      dialogue.update(dt);
+      if (input.pressed('confirm') || input.pressed('jump') || input.pressed('fire'))
+        dialogue.advance();
     }
   }
 
@@ -789,7 +712,7 @@ function frame(now) {
       },
     );
   }
-  updateBark(dt, cam.viewProj);
+  bubbles.update(dt, cam.viewProj, bubbleAnchor, screen === 'play');
   input.endFrame();
   requestAnimationFrame(frame);
 }
