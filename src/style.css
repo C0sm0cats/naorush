@@ -940,3 +940,16 @@ body[data-pad='l'] .touch .big {
   text-align: left;
   max-width: min(560px, 60vw);
 }
+
+/* Last heart: a gentle pulse. */
+.hearts.low .heart:not(.empty) {
+  animation: heartbeat 0.9s ease-in-out infinite;
+}
+@keyframes heartbeat {
+  20% {
+    transform: scale(1.25);
+  }
+  40% {
+    transform: scale(1);
+  }
+}

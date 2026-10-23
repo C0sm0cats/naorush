@@ -96,6 +96,7 @@ export class Hud {
     const max = sim.stats.hearts;
     if (sim.hero.hearts !== this.lastHearts) {
       this.lastHearts = sim.hero.hearts;
+      this.hearts.classList.toggle('low', sim.hero.hearts === 1 && max > 1);
       this.hearts.replaceChildren(
         ...Array.from({ length: max }, (_, i) => {
           const el = document.createElement('span');
