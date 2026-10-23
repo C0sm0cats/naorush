@@ -30,3 +30,13 @@ test('options open from the title and remember settings', async ({ page }) => {
   await page.reload();
   await expect(page.locator('body')).toHaveClass(/contrast/, { timeout: 60000 });
 });
+
+test('the title offers the daily challenge and the trophies', async ({ page }) => {
+  await page.goto('./');
+  await expect(page.locator('body')).toHaveAttribute('data-screen', 'title', { timeout: 60000 });
+  await expect(page.locator('#dailyBtn')).toContainText('Défi du jour :');
+  await page.locator('#trophiesBtn').click();
+  await expect(page.locator('#trophyList li')).toHaveCount(13);
+  await page.locator('#trophiesClose').click();
+  await expect(page.locator('body')).toHaveAttribute('data-screen', 'title');
+});
