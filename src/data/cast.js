@@ -6,7 +6,7 @@ export const CAST = {
   kevin: {
     name: 'Kévin',
     title: 'Directeur de Projets',
-    scale: 0.82,
+    scale: 1,
     skin: '#f2c7a1',
     hair: '#5a3a22',
     hairStyle: 'quiff',
@@ -19,7 +19,7 @@ export const CAST = {
   charline: {
     name: 'Charline',
     title: 'Business Manager',
-    scale: 0.8,
+    scale: 0.98,
     skin: '#f4cdb0',
     hair: '#2b1a12',
     hairStyle: 'long',
@@ -33,7 +33,7 @@ export const CAST = {
   },
   mathis: {
     name: 'Mathis',
-    scale: 0.8,
+    scale: 0.98,
     skin: '#e8b48f',
     hair: '#c79a3a',
     hairStyle: 'short',

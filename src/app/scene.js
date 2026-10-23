@@ -45,6 +45,7 @@ export class LevelView {
     this.sprites = [];
     this.ready = this.loadArtwork();
     this.doorT = 0;
+    this.gallery = false;
   }
 
   async loadArtwork() {
@@ -129,6 +130,18 @@ export class LevelView {
       { mesh: this.skyline, model: IDENTITY, noShadow: true },
       { mesh: this.office, model: IDENTITY },
     ];
+    if (this.gallery) {
+      ['kevin', 'charline', 'mathis'].forEach((id, i) =>
+        items.push(
+          ...poseCharacter(this.cast[id], 2.4 + i * 1.1, 3, 0.4, 1, idlePose(t + i), {
+            scale: CAST[id].scale,
+            turn: 0.35,
+            rim: 0.4,
+          }),
+        ),
+      );
+      return items;
+    }
     this.drawHero(items, sim, t);
     const things = this.things;
     /** @param {Mesh} mesh @param {number} x @param {number} y @param {number} z @param {...Float32Array} extra */

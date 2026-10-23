@@ -1,11 +1,12 @@
-import { Volume, meshVolume, rgb, MAT } from './voxels.js';
-import { Mesh } from './renderer.js';
+import { MeshBuilder } from './geometry.js';
 import { chain, rotationX, rotationY, rotationZ, scaling, translation } from './mat4.js';
+import { Mesh } from './renderer.js';
+import { MAT } from './voxels.js';
 
 /**
- * Voxel characters built part by part (head, torso, arms, legs) so they can be
- * animated with simple joint rotations. One voxel = 1/16 of a tile; a hero is
- * about 28 voxels tall, with a slightly large head for readability on phones.
+ * Smooth "designer toy" characters built from rounded primitives, split into
+ * parts so they can be animated with joint rotations. Units are tiles; a hero
+ * stands about 1.75 tiles tall, with a large head for readability on phones.
  *
  * @typedef {Object} Look
  * @property {string} skin
@@ -21,304 +22,24 @@ import { chain, rotationX, rotationY, rotationZ, scaling, translation } from './
  * @property {boolean} [beard]
  * @property {boolean} [earrings]
  * @property {string} [lips]
+ * @property {string} [eyes]
  * @property {string} [prop] Held item: 'tablet' | 'laptop' | 'phone' | 'mug' | 'folder'.
+ *
+ * @typedef {{mesh: Mesh}} Part
  */
 
-export const VOXEL = 1 / 16;
-
-/**
- * @typedef {Object} Part
- * @property {Mesh} mesh
- * @property {number[]} pivot Joint position in model space (world units).
- */
-
-/**
- * Builds a small volume and returns its mesh, offset so `pivot` is the origin.
- * @param {WebGL2RenderingContext} gl @param {number} sx @param {number} sy @param {number} sz
- * @param {(v: Volume) => void} paint @param {number[]} pivot
- */
-function part(gl, sx, sy, sz, paint, pivot) {
-  const vol = new Volume(sx, sy, sz, VOXEL, [
-    -pivot[0] * VOXEL,
-    -pivot[1] * VOXEL,
-    -pivot[2] * VOXEL,
-  ]);
-  paint(vol);
-  return new Mesh(gl, meshVolume(vol));
-}
-
-/**
- * @param {WebGL2RenderingContext} gl
- * @param {Look} look
- * @returns {Record<string, Part>}
- */
-export function buildCharacter(gl, look) {
-  const skin = rgb(look.skin);
-  const hair = rgb(look.hair);
-  const jacket = rgb(look.jacket);
-  const shirt = rgb(look.shirt);
-  const legs = rgb(look.legs);
-  const shoes = rgb(look.shoes);
-  const dark = rgb('#1b1a24');
-  const white = rgb('#fbfbf6');
-
-  // Head: 10 wide, 10 tall, 9 deep; pivot at the bottom centre (neck).
-  const head = part(
-    gl,
-    12,
-    13,
-    11,
-    (v) => {
-      v.box(1, 0, 1, 11, 10, 10, skin);
-      const female = Boolean(look.lips);
-      // Eyes: two tall dark pupils with a tiny catch-light on top.
-      for (const ex of [3, 8]) {
-        v.box(ex, 4, 10, ex + 1, 7, 11, dark);
-        v.set(ex, 6, 10, rgb('#6b7ea8'));
-      }
-      if (female) {
-        // Lashes flick outwards; arched brows.
-        v.set(2, 7, 10, dark);
-        v.set(9, 7, 10, dark);
-        v.box(3, 8, 10, 5, 9, 11, hair);
-        v.box(7, 8, 10, 9, 9, 11, hair);
-      } else {
-        v.box(2, 8, 10, 5, 9, 11, hair);
-        v.box(7, 8, 10, 10, 9, 11, hair);
-      }
-      v.box(5, 3, 10, 7, 4, 11, rgb(shade(look.skin, -0.1)));
-      if (female) {
-        v.box(4, 1, 10, 8, 2, 11, rgb(/** @type {string} */ (look.lips)));
-        v.box(5, 2, 10, 7, 3, 11, rgb(shade(/** @type {string} */ (look.lips), 0.25)));
-      } else v.box(4, 1, 10, 8, 2, 11, rgb('#a2614f'));
-      v.box(1, 2, 10, 3, 3, 11, rgb('#f2a39a'));
-      v.box(9, 2, 10, 11, 3, 11, rgb('#f2a39a'));
-      if (look.beard) {
-        v.box(1, 0, 6, 11, 3, 10, hair);
-        v.box(2, 0, 9, 10, 3, 11, hair);
-        v.box(4, 1, 10, 8, 2, 11, rgb('#8a4a3a'));
-      }
-      if (look.glasses) {
-        // Thin frames around each eye and a bridge; lenses stay transparent-looking.
-        for (const ex of [1, 7]) {
-          v.box(ex, 3, 10, ex + 4, 4, 11, dark);
-          v.box(ex, 7, 10, ex + 4, 8, 11, dark);
-          v.box(ex, 3, 10, ex + 1, 8, 11, dark);
-          v.box(ex + 3, 3, 10, ex + 4, 8, 11, dark);
-        }
-        v.box(5, 6, 10, 7, 7, 11, dark);
-        v.box(1, 6, 4, 2, 7, 10, dark);
-        v.box(10, 6, 4, 11, 7, 10, dark);
-      }
-      if (look.earrings) {
-        v.box(0, 1, 5, 1, 3, 6, rgb('#ffd166'), MAT.GLOSSY);
-        v.box(11, 1, 5, 12, 3, 6, rgb('#ffd166'), MAT.GLOSSY);
-      }
-      // Hair.
-      const s = look.hairStyle;
-      if (s !== 'bald') {
-        v.box(0, 9, 0, 12, 12, 11, hair);
-        v.box(0, 3, 0, 12, 12, 2, hair);
-        v.box(0, 6, 0, 1, 12, 9, hair);
-        v.box(11, 6, 0, 12, 12, 9, hair);
-      } else {
-        v.box(0, 5, 2, 1, 8, 7, hair);
-        v.box(11, 5, 2, 12, 8, 7, hair);
-      }
-      if (s === 'quiff') v.box(2, 11, 4, 10, 13, 11, hair);
-      if (s === 'curly') {
-        for (let x = 0; x < 12; x += 2) v.box(x, 12, 1, x + 2, 13, 10, hair);
-        v.box(0, 7, 0, 12, 13, 2, hair);
-      }
-      if (s === 'bob' || s === 'long') {
-        v.box(0, 2, 0, 2, 12, 8, hair);
-        v.box(10, 2, 0, 12, 12, 8, hair);
-        v.box(1, 9, 9, 7, 11, 11, hair); // side-swept fringe
-        v.box(7, 10, 9, 11, 11, 11, hair);
-      }
-      if (s === 'quiff') v.box(1, 10, 9, 11, 11, 11, hair);
-      if (s === 'bun') v.box(4, 11, 2, 8, 13, 6, hair);
-      if (s === 'ponytail') v.box(4, 6, 0, 8, 11, 1, hair);
-    },
-    [6, 0, 5.5],
-  );
-
-  // Long hair: a back curtain plus two strands falling over the shoulders (torso frame).
-  const longHair =
-    look.hairStyle === 'long'
-      ? part(
-          gl,
-          14,
-          12,
-          12,
-          (v) => {
-            v.box(1, 0, 0, 13, 12, 3, hair);
-            v.box(0, 2, 0, 2, 12, 9, hair);
-            v.box(12, 2, 0, 14, 12, 9, hair);
-            v.box(0, 0, 3, 2, 3, 7, hair);
-            v.box(12, 0, 3, 14, 3, 7, hair);
-            // A few lighter streaks.
-            v.box(4, 2, 0, 5, 11, 1, rgb(shade(look.hair, 0.18)));
-            v.box(9, 4, 0, 10, 12, 1, rgb(shade(look.hair, 0.18)));
-          },
-          [7, 12, 6],
-        )
-      : look.hairStyle === 'ponytail'
-        ? part(gl, 4, 9, 3, (v) => v.box(0, 0, 0, 4, 9, 3, hair), [2, 9, 1.5])
-        : null;
-
-  // Torso: jacket with an open front showing the shirt (and tie).
-  const torso = part(
-    gl,
-    10,
-    11,
-    6,
-    (v) => {
-      v.box(0, 0, 0, 10, 11, 6, jacket);
-      v.box(3, 3, 5, 7, 11, 6, shirt);
-      if (look.tie) v.box(4, 2, 5, 6, 10, 6, rgb(look.tie), MAT.GLOSSY);
-      v.box(4, 10, 5, 6, 11, 6, shirt);
-      // Lapels.
-      v.set(2, 9, 5, rgb(shade(look.jacket, -0.25)));
-      v.set(7, 9, 5, rgb(shade(look.jacket, -0.25)));
-      // Neck.
-      v.box(4, 11, 2, 6, 11, 4, skin);
-      if (!look.skirt) v.box(0, 0, 0, 10, 1, 6, dark);
-    },
-    [5, 0, 3],
-  );
-  const neck = part(gl, 4, 2, 4, (v) => v.box(0, 0, 0, 4, 2, 4, skin), [2, 0, 2]);
-
-  const arm = part(
-    gl,
-    3,
-    10,
-    3,
-    (v) => {
-      v.box(0, 2, 0, 3, 10, 3, jacket);
-      v.box(0, 1, 0, 3, 2, 3, shirt);
-      v.box(0, 0, 0, 3, 1, 3, skin);
-    },
-    [1.5, 10, 1.5],
-  );
-
-  const leg = part(
-    gl,
-    4,
-    11,
-    5,
-    (v) => {
-      if (look.skirt) {
-        // Slim legs in tights, court shoes with a heel at the back.
-        v.box(1, 2, 1, 3, 11, 4, legs);
-        v.box(1, 1, 1, 3, 2, 5, shoes, MAT.GLOSSY);
-        v.box(1, 0, 3, 3, 1, 5, shoes, MAT.GLOSSY);
-        v.box(1, 0, 0, 3, 1, 1, shoes);
-      } else {
-        v.box(0, 2, 0, 4, 11, 5, legs);
-        v.box(0, 0, 0, 4, 2, 5, shoes, MAT.GLOSSY);
-      }
-    },
-    [2, 11, 2.5],
-  );
-  const skirt = look.skirt
-    ? part(
-        gl,
-        12,
-        6,
-        8,
-        (v) => {
-          v.box(1, 3, 1, 11, 6, 7, rgb(/** @type {string} */ (look.skirt)));
-          v.box(0, 0, 0, 12, 3, 8, rgb(/** @type {string} */ (look.skirt)));
-          v.box(0, 0, 0, 12, 1, 8, rgb(shade(/** @type {string} */ (look.skirt), -0.2)));
-        },
-        [6, 6, 4],
-      )
-    : null;
-
-  /** @type {Mesh | null} */
-  let prop = null;
-  if (look.prop === 'tablet')
-    prop = part(
-      gl,
-      6,
-      8,
-      1,
-      (v) => {
-        v.box(0, 0, 0, 6, 8, 1, dark);
-        v.box(1, 1, 0, 5, 7, 1, rgb('#4cc9f0'), MAT.EMISSIVE);
-      },
-      [3, 8, 0],
-    );
-  else if (look.prop === 'laptop')
-    prop = part(
-      gl,
-      8,
-      1,
-      6,
-      (v) => {
-        v.box(0, 0, 0, 8, 1, 6, rgb('#9aa3ad'), MAT.GLOSSY);
-      },
-      [4, 1, 3],
-    );
-  else if (look.prop === 'folder')
-    prop = part(
-      gl,
-      6,
-      8,
-      1,
-      (v) => {
-        v.box(0, 0, 0, 6, 8, 1, rgb('#ffd166'));
-        v.box(1, 2, 0, 5, 3, 1, white);
-      },
-      [3, 8, 0],
-    );
-  else if (look.prop === 'phone')
-    prop = part(
-      gl,
-      2,
-      4,
-      1,
-      (v) => {
-        v.box(0, 0, 0, 2, 4, 1, dark);
-        v.box(0, 1, 0, 2, 3, 1, rgb('#58d5ff'), MAT.EMISSIVE);
-      },
-      [1, 4, 0],
-    );
-  else if (look.prop === 'mug')
-    prop = part(
-      gl,
-      3,
-      3,
-      3,
-      (v) => {
-        v.box(0, 0, 0, 3, 3, 3, white);
-        v.box(1, 2, 1, 2, 3, 2, rgb('#6b3e26'));
-      },
-      [1.5, 0, 1.5],
-    );
-
-  /** @type {Record<string, Part>} */
-  const parts = {
-    head: { mesh: head, pivot: [0, 23, 0] },
-    neck: { mesh: neck, pivot: [0, 22, 0] },
-    torso: { mesh: torso, pivot: [0, 11, 0] },
-    armL: { mesh: arm, pivot: [-6.5, 21, 0] },
-    armR: { mesh: arm, pivot: [6.5, 21, 0] },
-    legL: { mesh: leg, pivot: [-2.5, 11, 0] },
-    legR: { mesh: leg, pivot: [2.5, 11, 0] },
-  };
-  if (longHair) parts.hair = { mesh: longHair, pivot: [0, 0, 0] };
-  if (prop) parts.prop = { mesh: prop, pivot: [0, 0, 0] };
-  if (skirt) parts.skirt = { mesh: skirt, pivot: [0, 0, 0] };
-  return parts;
-}
+// Joint positions (model space, feet at y = 0, facing +z).
+const HIP_Y = 0.62;
+const HIP_X = 0.1;
+const SHOULDER_Y = 0.48; // above the hip
+const SHOULDER_X = 0.235;
+const NECK_Y = 0.52;
 
 /**
  * @param {string} hex
  * @param {number} amount -1..1
  */
-function shade(hex, amount) {
+export function shade(hex, amount) {
   const n = parseInt(hex.slice(1), 16);
   /** @param {number} c */
   const f = (c) =>
@@ -330,6 +51,226 @@ function shade(hex, amount) {
 }
 
 /**
+ * @param {WebGL2RenderingContext} gl
+ * @param {(b: MeshBuilder) => void} draw
+ * @returns {Part}
+ */
+const part = (gl, draw) => {
+  const b = new MeshBuilder();
+  draw(b);
+  return { mesh: new Mesh(gl, b.build()) };
+};
+
+/**
+ * @param {WebGL2RenderingContext} gl
+ * @param {Look} look
+ * @returns {Record<string, Part>}
+ */
+export function buildCharacter(gl, look) {
+  const female = Boolean(look.lips);
+  const dark = '#1d1a24';
+  const gloss = MAT.GLOSSY;
+
+  // Head: origin at the neck joint.
+  const head = part(gl, (b) => {
+    b.ellipsoid([0, 0.25, 0], [0.205, 0.215, 0.19], look.skin, { seg: 16 });
+    b.ellipsoid([-0.2, 0.24, -0.01], [0.035, 0.05, 0.03], look.skin);
+    b.ellipsoid([0.2, 0.24, -0.01], [0.035, 0.05, 0.03], look.skin);
+    for (const s of [-1, 1]) {
+      // Eyes: dark ovals with a catch-light.
+      b.ellipsoid(
+        [s * 0.072, 0.27, 0.172],
+        [0.028, female ? 0.038 : 0.034, 0.02],
+        look.eyes ?? '#2a2236',
+        { seg: 8 },
+      );
+      b.ellipsoid([s * 0.064 + 0.006, 0.284, 0.188], [0.009, 0.009, 0.006], '#ffffff', {
+        seg: 6,
+        mat: MAT.EMISSIVE,
+      });
+      // Brows, lashes for female characters.
+      b.roundedBox(
+        [s * 0.075, 0.335, 0.166],
+        [0.038, female ? 0.007 : 0.011, 0.012],
+        0.007,
+        female ? dark : look.hair,
+      );
+      if (female) b.roundedBox([s * 0.105, 0.302, 0.162], [0.014, 0.006, 0.01], 0.005, dark);
+      b.ellipsoid([s * 0.12, 0.2, 0.15], [0.035, 0.022, 0.02], '#f19a92', { seg: 6 });
+    }
+    b.ellipsoid([0, 0.225, 0.19], [0.022, 0.028, 0.02], shade(look.skin, -0.08), { seg: 6 });
+    if (female)
+      b.ellipsoid([0, 0.155, 0.168], [0.05, 0.016, 0.02], /** @type {string} */ (look.lips), {
+        seg: 8,
+        mat: gloss,
+      });
+    else b.roundedBox([0, 0.158, 0.172], [0.04, 0.008, 0.01], 0.006, '#8c4a3c');
+    if (look.beard)
+      b.ellipsoid([0, 0.13, 0.08], [0.17, 0.11, 0.12], look.hair, { from: 0, to: 0.62 });
+    if (look.glasses) {
+      for (const s of [-1, 1])
+        b.lathe(
+          [s * 0.075, 0.268, 0.178],
+          [
+            [0.045, -0.006],
+            [0.045, 0.006],
+          ],
+          dark,
+          { seg: 18 },
+        );
+      b.roundedBox([0, 0.275, 0.182], [0.03, 0.005, 0.005], 0.004, dark);
+    }
+    if (look.earrings)
+      for (const s of [-1, 1])
+        b.ellipsoid([s * 0.2, 0.17, 0], [0.018, 0.018, 0.018], '#ffd166', { mat: gloss });
+    const s = look.hairStyle;
+    if (s !== 'bald') {
+      // Hair cap: slightly larger shells over the top and back of the skull.
+      b.ellipsoid([0, 0.29, -0.025], [0.222, 0.2, 0.2], look.hair, {
+        from: 0.42,
+        to: 1,
+        mat: gloss,
+      });
+      b.ellipsoid([0, 0.25, -0.05], [0.215, 0.2, 0.17], look.hair, {
+        from: 0.15,
+        to: 0.6,
+        mat: gloss,
+      });
+    }
+    if (s === 'quiff') {
+      b.ellipsoid([0.03, 0.47, 0.08], [0.15, 0.07, 0.11], look.hair, { mat: gloss });
+      b.ellipsoid([-0.06, 0.44, 0.13], [0.1, 0.05, 0.07], look.hair, { mat: gloss });
+    }
+    if (s === 'short') b.ellipsoid([0, 0.44, 0.06], [0.17, 0.05, 0.13], look.hair, { mat: gloss });
+    if (s === 'curly')
+      for (let i = 0; i < 9; i++) {
+        const a = (i / 9) * Math.PI * 2;
+        b.ellipsoid(
+          [Math.sin(a) * 0.15, 0.42 + Math.cos(a * 2) * 0.02, Math.cos(a) * 0.13 - 0.02],
+          [0.08, 0.07, 0.08],
+          look.hair,
+        );
+      }
+    if (s === 'long' || s === 'bob') {
+      // Side-swept fringe and locks framing the face.
+      b.ellipsoid([-0.06, 0.42, 0.13], [0.17, 0.07, 0.08], look.hair, { mat: gloss });
+      for (const side of [-1, 1]) {
+        b.roundedBox(
+          [side * 0.2, 0.22, 0.02],
+          [0.05, s === 'long' ? 0.17 : 0.12, 0.12],
+          0.05,
+          look.hair,
+          { mat: gloss },
+        );
+        if (s === 'long')
+          b.ellipsoid([side * 0.19, 0.06, -0.02], [0.07, 0.09, 0.1], look.hair, { mat: gloss });
+      }
+    }
+    if (s === 'bun') b.ellipsoid([0, 0.5, -0.08], [0.09, 0.08, 0.09], look.hair, { mat: gloss });
+  });
+
+  // Long hair down the back, as its own part so it sways with the body.
+  const longHair =
+    look.hairStyle === 'long'
+      ? part(gl, (b) => {
+          b.roundedBox([0, -0.12, 0], [0.2, 0.2, 0.07], 0.07, look.hair, { mat: gloss });
+          b.roundedBox([0, -0.31, 0.01], [0.16, 0.06, 0.05], 0.05, look.hair, { mat: gloss });
+        })
+      : look.hairStyle === 'ponytail'
+        ? part(gl, (b) => b.roundedBox([0, -0.12, 0], [0.05, 0.16, 0.05], 0.05, look.hair))
+        : null;
+
+  // Torso: origin at the hip; jacket open over the shirt.
+  const torso = part(gl, (b) => {
+    // Chest wider than the waist, generously rounded.
+    b.roundedBox([0, 0.34, 0], [0.215, 0.17, 0.13], 0.12, look.jacket);
+    b.roundedBox([0, 0.16, 0], [0.18, 0.15, 0.115], 0.1, look.jacket);
+    b.roundedBox([0, 0.37, 0.12], [0.07, 0.14, 0.04], 0.035, look.shirt);
+    for (const s of [-1, 1])
+      b.roundedBox([s * 0.08, 0.38, 0.14], [0.025, 0.11, 0.02], 0.018, shade(look.jacket, -0.18));
+    if (look.tie) {
+      b.roundedBox([0, 0.33, 0.16], [0.03, 0.12, 0.012], 0.012, look.tie, { mat: gloss });
+      b.roundedBox([0, 0.47, 0.158], [0.034, 0.025, 0.014], 0.012, look.tie);
+    }
+    if (!look.skirt) b.roundedBox([0, 0.035, 0], [0.19, 0.035, 0.11], 0.03, look.legs);
+    b.roundedBox([0, 0.52, 0], [0.055, 0.05, 0.05], 0.045, look.skin);
+    for (const y of [0.18, 0.1])
+      b.ellipsoid([0.06, y, 0.125], [0.014, 0.014, 0.008], shade(look.jacket, -0.35));
+  });
+
+  const skirt = look.skirt
+    ? part(gl, (b) =>
+        b.lathe(
+          [0, 0, 0],
+          [
+            [0.2, 0.05],
+            [0.2, 0],
+            [0.24, -0.2],
+            [0.25, -0.24],
+          ],
+          /** @type {string} */ (look.skirt),
+          {
+            seg: 24,
+            scaleZ: 0.68,
+          },
+        ),
+      )
+    : null;
+
+  // Arm: origin at the shoulder, hanging down.
+  const arm = part(gl, (b) => {
+    b.roundedBox([0, -0.17, 0], [0.058, 0.2, 0.06], 0.056, look.jacket);
+    b.roundedBox([0, -0.37, 0], [0.05, 0.025, 0.052], 0.024, look.shirt);
+    b.ellipsoid([0, -0.42, 0.005], [0.048, 0.055, 0.05], look.skin);
+  });
+
+  // Leg: origin at the hip joint; court shoes with a heel under a skirt.
+  const leg = part(gl, (b) => {
+    if (look.skirt) {
+      b.roundedBox([0, -0.3, 0], [0.05, 0.28, 0.05], 0.05, look.legs);
+      b.roundedBox([0, -0.585, 0.035], [0.05, 0.03, 0.09], 0.03, look.shoes, { mat: gloss });
+      b.roundedBox([0, -0.6, -0.04], [0.02, 0.025, 0.02], 0.015, look.shoes);
+    } else {
+      b.roundedBox([0, -0.28, 0], [0.075, 0.29, 0.08], 0.07, look.legs);
+      b.roundedBox([0, -0.585, 0.04], [0.075, 0.04, 0.115], 0.04, look.shoes, { mat: gloss });
+    }
+  });
+
+  /** @type {Part | null} */
+  let prop = null;
+  if (look.prop === 'phone')
+    prop = part(gl, (b) => {
+      b.roundedBox([0, 0, 0], [0.035, 0.07, 0.008], 0.008, dark, { mat: gloss });
+      b.roundedBox([0, 0, 0.007], [0.028, 0.06, 0.002], 0.002, '#58d5ff', { mat: MAT.EMISSIVE });
+    });
+  else if (look.prop === 'tablet')
+    prop = part(gl, (b) => {
+      b.roundedBox([0, 0, 0], [0.12, 0.16, 0.012], 0.012, dark);
+      b.roundedBox([0, 0, 0.011], [0.1, 0.14, 0.002], 0.002, '#4cc9f0', { mat: MAT.EMISSIVE });
+    });
+  else if (look.prop === 'folder')
+    prop = part(gl, (b) => b.roundedBox([0, 0, 0], [0.11, 0.15, 0.015], 0.01, '#ffd166'));
+  else if (look.prop === 'mug')
+    prop = part(gl, (b) =>
+      b.lathe(
+        [0, 0, 0],
+        [
+          [0.04, 0],
+          [0.045, 0.1],
+        ],
+        '#ffffff',
+      ),
+    );
+
+  /** @type {Record<string, Part>} */
+  const parts = { head, torso, armL: arm, armR: arm, legL: leg, legR: leg };
+  if (longHair) parts.hair = longHair;
+  if (skirt) parts.skirt = skirt;
+  if (prop) parts.prop = prop;
+  return parts;
+}
+
+/**
  * @typedef {Object} Pose
  * @property {number} legL Swing angle (radians, + = forward).
  * @property {number} legR
@@ -337,7 +278,7 @@ function shade(hex, amount) {
  * @property {number} armR
  * @property {number} [armSpread] Sideways raise of both arms.
  * @property {number} [lean] Torso lean forward.
- * @property {number} [bob] Vertical body offset (voxels).
+ * @property {number} [bob] Vertical body offset (1/16 tile).
  * @property {number} [head] Head nod.
  * @property {number} [squash] Vertical squash (−0.2..0.2).
  */
@@ -355,43 +296,61 @@ function shade(hex, amount) {
  */
 export function poseCharacter(parts, x, y, z, facing, pose, o = {}) {
   const scale = o.scale ?? 1;
-  // Three-quarter turn: the face stays visible to the camera while walking sideways.
+  // Three-quarter turn: the face stays visible while running sideways.
   const yaw = facing * (o.turn ?? 1.05);
   const sq = pose.squash ?? 0;
   const root = chain(
     translation(x, y, z),
     rotationY(yaw),
     scaling(scale * (1 + sq * 0.5), scale * (1 - sq), scale * (1 + sq * 0.5)),
-    translation(0, (pose.bob ?? 0) * VOXEL, 0),
+    translation(0, (pose.bob ?? 0) / 16, 0),
   );
-  const lean = rotationX(pose.lean ?? 0);
-  /** @param {number[]} p */
-  const v = (p) => translation(p[0] * VOXEL, p[1] * VOXEL, p[2] * VOXEL);
   const base = { rim: o.rim ?? 0.35, tint: o.tint };
   /** @param {string} name @param {...Float32Array} ms */
   const at = (name, ...ms) => ({ mesh: parts[name].mesh, model: chain(root, ...ms), ...base });
-  const hip = [0, 11, 0];
-  const torsoM = [v(hip), lean];
+  const torso = [translation(0, HIP_Y, 0), rotationX(pose.lean ?? 0)];
+  const spread = pose.armSpread ?? 0;
   /** @type {import('./renderer.js').DrawItem[]} */
   const items = [
-    at('legL', v(parts.legL.pivot), rotationX(-pose.legL)),
-    at('legR', v(parts.legR.pivot), rotationX(-pose.legR)),
-    at('torso', ...torsoM),
-    at('neck', ...torsoM, v([0, 11, 0])),
-    at('head', ...torsoM, v([0, 12, 0]), rotationX(pose.head ?? 0)),
+    at('legL', translation(-HIP_X, HIP_Y, 0), rotationX(-pose.legL)),
+    at('legR', translation(HIP_X, HIP_Y, 0), rotationX(-pose.legR)),
+    at('torso', ...torso),
+    at('head', ...torso, translation(0, NECK_Y, 0), rotationX(pose.head ?? 0)),
     at(
       'armL',
-      ...torsoM,
-      v([-6.5, 10, 0]),
-      rotationZ(-(pose.armSpread ?? 0)),
+      ...torso,
+      translation(-SHOULDER_X, SHOULDER_Y, 0),
+      rotationZ(-spread),
       rotationX(-pose.armL),
     ),
-    at('armR', ...torsoM, v([6.5, 10, 0]), rotationZ(pose.armSpread ?? 0), rotationX(-pose.armR)),
+    at(
+      'armR',
+      ...torso,
+      translation(SHOULDER_X, SHOULDER_Y, 0),
+      rotationZ(spread),
+      rotationX(-pose.armR),
+    ),
   ];
   if (parts.hair)
-    items.push(at('hair', ...torsoM, v([0, 21, -1.5]), rotationX(0.06 + (pose.lean ?? 0) * -0.4)));
-  if (parts.skirt) items.push(at('skirt', v(hip), v([0, 1, 0]), lean));
+    items.push(
+      at(
+        'hair',
+        ...torso,
+        translation(0, NECK_Y + 0.28, -0.1),
+        rotationX(0.08 - (pose.lean ?? 0) * 0.5),
+      ),
+    );
+  if (parts.skirt) items.push(at('skirt', ...torso, translation(0, 0.06, 0)));
   if (parts.prop)
-    items.push(at('prop', ...torsoM, v([6.5, 10, 0]), rotationX(-pose.armR), v([0, -10, 2.5])));
+    items.push(
+      at(
+        'prop',
+        ...torso,
+        translation(SHOULDER_X, SHOULDER_Y, 0),
+        rotationZ(spread),
+        rotationX(-pose.armR),
+        translation(0, -0.43, 0.06),
+      ),
+    );
   return items;
 }

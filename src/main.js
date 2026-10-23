@@ -135,8 +135,9 @@ function frame(now) {
   particles.update(dt);
   const h = sim.hero;
   // Behind the title screen the camera drifts slowly along the office.
-  const focus =
-    screen === 'title' || screen === 'loading'
+  const focus = gallery
+    ? { x: 3.5, y: 1.6, facing: 0 }
+    : screen === 'title' || screen === 'loading'
       ? { x: 10 + Math.sin(t * 0.07) * 8, y: 3, facing: 1 }
       : { x: h.x + HERO.w / 2, y: h.y, facing: h.facing };
   const cam = camera.update(dt, renderer.width / renderer.height, focus, { w: sim.w, h: sim.h });
@@ -153,6 +154,10 @@ function frame(now) {
   input.endFrame();
   requestAnimationFrame(frame);
 }
+
+// Art review: ?gallery shows the cast close up on the title screen.
+const gallery = new URLSearchParams(location.search).has('gallery');
+view.gallery = gallery;
 
 view.ready.then(() => {
   camera.snap(10, 6);
