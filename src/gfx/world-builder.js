@@ -257,7 +257,9 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
           if (cc < 0 || cc >= sim.w || rr < 0 || rr >= sim.h) return TILE.SOLID;
           return sim.tiles[cc + rr * sim.w];
         };
-        const above = at(0, 1),
+        // Cars and meeting tables are props: the floor under them still gets its finish.
+        const propAbove = 'QY'.includes(styleAt(c, r + 1));
+        const above = propAbove ? TILE.EMPTY : at(0, 1),
           below = at(0, -1);
         const isCeiling = (r === sim.h - 1 && !roof) || (park && r >= 9 && above === TILE.SOLID);
         const isBase = r <= 1 || (roof && r <= 2);
