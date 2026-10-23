@@ -3,7 +3,8 @@ import { Camera } from './app/camera.js';
 import { Bubbles, Dialogue } from './app/dialogue.js';
 import { Particles } from './app/fx.js';
 import { Hud } from './app/hud.js';
-import { ACTIONS, Input, keyName } from './app/input.js';
+import { Input } from './app/input.js';
+import { applyPrefs, prefs, setupOptions } from './app/options.js';
 import { Trophies } from './app/trophies.js';
 import { LevelView, boardUrl } from './app/scene.js';
 import { PROLOGUE } from './data/barks.js';
@@ -35,24 +36,8 @@ const trophies = new Trophies((t) => {
   audio.sfx('secret');
 });
 const SAVE_KEY = 'naorush.stage';
-const PREFS_KEY = 'naorush.prefs';
 const BEST_KEY = 'naorush.best';
 
-/** Player preferences, saved locally. */
-const prefs = {
-  shake: true,
-  flash: true,
-  contrast: false,
-  vibrate: true,
-  assist: false,
-  pad: 'm',
-  ...JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}'),
-};
-const savePrefs = () => localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
-const applyPrefs = () => {
-  document.body.classList.toggle('contrast', prefs.contrast);
-  document.body.dataset.pad = prefs.pad;
-};
 applyPrefs();
 
 /** @type {'kevin'|'charline'} */
@@ -236,20 +221,10 @@ muteBtn.onclick = () => {
   syncMute();
 };
 syncMute();
-/** @param {string} id */
-const field = (id) => /** @type {HTMLInputElement} */ ($(id));
-const padSelect = /** @type {HTMLSelectElement} */ ($('optPad'));
+const refreshOptions = setupOptions(audio, input, () => (sim.assist = prefs.assist));
 function openOptions() {
   optionsFrom = screen;
-  field('volMusic').value = String(audio.getVolume('music'));
-  field('volSfx').value = String(audio.getVolume('sfx'));
-  field('optShake').checked = prefs.shake;
-  field('optFlash').checked = prefs.flash;
-  field('optContrast').checked = prefs.contrast;
-  field('optVibrate').checked = prefs.vibrate;
-  field('optAssist').checked = prefs.assist;
-  padSelect.value = prefs.pad;
-  renderKeys();
+  refreshOptions();
   show('options');
 }
 $('optionsBtn').onclick = $('pauseOptions').onclick = openOptions;
@@ -272,65 +247,6 @@ $('trophiesBtn').onclick = () => {
 $('trophiesClose').onclick = () => show('title');
 $('bonusBtn').onclick = () => startFrom(CAMPAIGN);
 $('optionsClose').onclick = () => show(optionsFrom === 'pause' ? 'pause' : 'title');
-field('volMusic').oninput = () => audio.setVolume('music', Number(field('volMusic').value));
-field('volSfx').oninput = () => {
-  audio.setVolume('sfx', Number(field('volSfx').value));
-  audio.sfx('ticket');
-};
-for (const [id, k] of /** @type {const} */ ([
-  ['optShake', 'shake'],
-  ['optFlash', 'flash'],
-  ['optContrast', 'contrast'],
-  ['optVibrate', 'vibrate'],
-  ['optAssist', 'assist'],
-]))
-  field(id).onchange = () => {
-    prefs[k] = field(id).checked;
-    sim.assist = prefs.assist;
-    savePrefs();
-    applyPrefs();
-  };
-padSelect.onchange = () => {
-  prefs.pad = padSelect.value;
-  savePrefs();
-  applyPrefs();
-};
-const ACTION_LABELS = {
-  left: 'Gauche',
-  right: 'Droite',
-  up: 'Grimper / lire',
-  down: 'Lâcher',
-  jump: 'Sauter',
-  fire: 'Lancer un CR',
-  pause: 'Pause',
-};
-function renderKeys() {
-  $('keyList').replaceChildren(
-    ...Object.keys(ACTIONS).map((a) => {
-      const action = /** @type {keyof typeof ACTIONS} */ (a);
-      const row = document.createElement('button');
-      row.className = 'keyrow';
-      const label = document.createElement('span');
-      label.textContent = ACTION_LABELS[action];
-      const key = document.createElement('kbd');
-      key.textContent = keyName(input.binding(action));
-      row.append(label, key);
-      row.onclick = () => {
-        key.textContent = '…';
-        input.capture = (code) => {
-          input.bind(action, code);
-          audio.sfx('select');
-          renderKeys();
-        };
-      };
-      return row;
-    }),
-  );
-}
-$('keysReset').onclick = () => {
-  input.resetBindings();
-  renderKeys();
-};
 // Browsers only allow sound after a user gesture.
 for (const type of ['pointerdown', 'keydown'])
   addEventListener(type, () => audio.unlock(), { once: true, capture: true });
