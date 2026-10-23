@@ -111,6 +111,7 @@ async function loadStage(i) {
   view.doorT = 0;
   camera.snap(sim.hero.x, sim.hero.y + 3);
   hud.lastHearts = -1;
+  hud.clearToast();
   bark.time = 0;
   gameOverTimer = 0;
 }

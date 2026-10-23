@@ -61,6 +61,11 @@ export class Hud {
     this.bossHp = $('bossHp');
   }
 
+  clearToast() {
+    this.toastTime = 0;
+    this.toastEl.classList.remove('show');
+  }
+
   /** @param {string} text */
   toast(text) {
     this.toastEl.textContent = text;
