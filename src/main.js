@@ -745,6 +745,10 @@ view.ready.then(() => {
 });
 requestAnimationFrame(frame);
 
+// Installable and playable offline once loaded (production builds only).
+if (import.meta.env.PROD && 'serviceWorker' in navigator)
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+
 if (import.meta.env.DEV)
   Object.assign(globalThis, {
     __nao: {

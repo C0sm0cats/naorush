@@ -1,0 +1,21 @@
+{
+  "name": "NAO Rush",
+  "short_name": "NAO Rush",
+  "description": "Un jeu de plateforme dans les bureaux d’Inetum : fais signer l’enveloppe des NAO.",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0e1424",
+  "theme_color": "#0e1424",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
