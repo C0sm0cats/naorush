@@ -1052,3 +1052,15 @@ body[data-pad='l'] .touch .big {
     0 0 0 2px var(--pink),
     0 8px 20px #0006;
 }
+
+.keys-hint {
+  margin: 0 0 6px;
+  color: #5a6680;
+  font-size: 13px;
+  line-height: 2;
+}
+@media (pointer: coarse) {
+  .keys-hint {
+    display: none;
+  }
+}
