@@ -29,6 +29,20 @@ const goto = async (x, y, facing = 1) => {
   await page.waitForTimeout(4000);
 };
 
+// Clean captures: tips already seen, no first-time toasts.
+await page.addInitScript(() => {
+  const seen = [
+    'chairRoll',
+    'drawerOut',
+    'sprayOn',
+    'paperShot',
+    'trapdoor',
+    'invite',
+    'vacuumBounce',
+  ];
+  seen.push('internStun', 'archive', 'rackDrop', 'cableWarn', 'zoneWarn', 'dash', 'secret');
+  localStorage.setItem('naorush.tips', JSON.stringify(seen));
+});
 await page.goto(url);
 await until('title');
 await page.waitForTimeout(4000);
@@ -49,6 +63,7 @@ const start = async (stage) => {
 };
 
 await start(0);
+await page.waitForTimeout(2500);
 await shot('dialogue');
 await skipTalk();
 await goto(9, 4);
