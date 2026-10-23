@@ -26,6 +26,15 @@ import { DT, HERO, createSim, step } from './game/sim.js';
 /** @param {string} id */
 const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 const canvas = /** @type {HTMLCanvasElement} */ ($('game'));
+// Without WebGL2 there is no game: say so kindly instead of failing silently.
+if (!document.createElement('canvas').getContext('webgl2')) {
+  $('loading').innerHTML =
+    '<p>NAO Rush a besoin de WebGL2.<br />Essaie un navigateur récent (Chrome, Edge, Firefox, Safari 15+).</p>';
+  throw new Error('WebGL2 unavailable');
+}
+// Phones may drop the GPU context in the background: reload cleanly when it comes back.
+canvas.addEventListener('webglcontextlost', (e) => e.preventDefault());
+canvas.addEventListener('webglcontextrestored', () => location.reload());
 const renderer = new Renderer(canvas);
 const input = new Input();
 const hud = new Hud();
