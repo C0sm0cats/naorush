@@ -596,6 +596,16 @@ function frame(now) {
     for (const th of sim.things)
       if (th.kind === 'cr' && th.alive) particles.emit('trail', th.x, th.y);
   }
+  // A little life in the air, around what the camera sees.
+  if (screen === 'play' || screen === 'title') {
+    const rate = level.theme === 'parking' ? 4 : 7;
+    if (Math.random() < rate * dt)
+      particles.emit(
+        `air-${level.theme}`,
+        h.x + (Math.random() - 0.4) * 16,
+        h.y + Math.random() * 7,
+      );
+  }
   particles.update(dt);
   // The title shows the chosen hero up close; the credits drift along the stage.
   const drift = screen === 'loading';
