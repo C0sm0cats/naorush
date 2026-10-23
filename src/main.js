@@ -614,6 +614,8 @@ const SHOWCASE_LIGHT = {
 /** Puts the hero in the title-screen spot (the run restarts from S anyway). */
 const showcase = () => Object.assign(sim.hero, { x: SHOWCASE.x, y: SHOWCASE.y, facing: -1, vx: 0 });
 
+/** Current music intensity outside boss fights. */
+let musicLevel = 0.2;
 /** Stage intro camera glide. @type {{t: number, from: number} | null} */
 let flyover = null;
 
@@ -721,6 +723,11 @@ function frame(now) {
         // Stages without a boss end on a word with your partner at the exit.
         if (level.boss) stageWon();
         else talk(level.outro, stageWon);
+      }
+      // The music tenses up on the last heart (boss fights set their own level).
+      if (!sim.bossActive || sim.bossDone) {
+        const want = sim.hero.hearts <= 1 && sim.maxHearts > 1 ? 0.7 : 0.25;
+        if (want !== musicLevel) audio.intensity((musicLevel = want));
       }
       // The partner waiting at the exit reacts when you arrive.
       const exit = sim.things.find((t) => t.kind === 'exit');
