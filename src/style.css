@@ -928,3 +928,15 @@ body[data-pad='l'] .touch .big {
 .trophy-list span {
   font-size: 13px;
 }
+
+/* The credits leave room for the party on the right. */
+#credits {
+  place-items: center start;
+  padding-left: max(18px, 6vw);
+  background: linear-gradient(90deg, #0e1424ee, #0e142488 55%, transparent 80%);
+  backdrop-filter: none;
+}
+#credits .roll {
+  text-align: left;
+  max-width: min(560px, 60vw);
+}

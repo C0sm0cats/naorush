@@ -265,6 +265,7 @@ const startFrom = (i) => {
   beginStage(i, i === 0 && screen === 'title' ? PROLOGUE : []);
 };
 const toMenu = () => {
+  view.party = 0;
   updateContinue();
   audio.music('title');
   audio.intensity(0);
@@ -496,6 +497,7 @@ function credits() {
   );
   audio.music('credits');
   audio.sfx('sign');
+  view.party = (level.boss?.arena[0] ?? 80) + 8;
   show('credits');
 }
 
@@ -708,14 +710,16 @@ function frame(now) {
   }
   particles.update(dt);
   // The title shows the chosen hero up close; the credits drift along the stage.
-  const drift = screen === 'loading' || screen === 'credits';
+  const drift = screen === 'loading';
   const focus = gallery
     ? { x: 4.1, y: 1.6, facing: 0 }
-    : screen === 'title'
-      ? { x: SHOWCASE.x - 0.8 + Math.sin(t * 0.25) * 0.15, y: SHOWCASE.y - 1.4, facing: 0 }
-      : drift
-        ? { x: 10 + Math.sin(t * 0.07) * 8, y: 3, facing: 1 }
-        : (fightFocus() ?? { x: h.x + HERO.w / 2, y: h.y - touchLift, facing: h.facing });
+    : screen === 'credits'
+      ? { x: view.party - 3.2, y: 3, facing: 0.001 }
+      : screen === 'title'
+        ? { x: SHOWCASE.x - 0.8 + Math.sin(t * 0.25) * 0.15, y: SHOWCASE.y - 1.4, facing: 0 }
+        : drift
+          ? { x: 10 + Math.sin(t * 0.07) * 8, y: 3, facing: 1 }
+          : (fightFocus() ?? { x: h.x + HERO.w / 2, y: h.y - touchLift, facing: h.facing });
   const cam = camera.update(dt, renderer.width / renderer.height, focus, { w: sim.w, h: sim.h });
   view.showcase = screen === 'title';
   // A soft key light on the hero posing behind the title card.
@@ -773,5 +777,6 @@ if (import.meta.env.DEV)
       input,
       /** @param {number} i */
       stage: (i) => startFrom(i),
+      credits: () => credits(),
     },
   });

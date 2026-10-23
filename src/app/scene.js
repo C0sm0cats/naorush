@@ -164,6 +164,8 @@ export class LevelView {
     this.gallery = false;
     /** Title screen: the hero poses for the camera. */
     this.showcase = false;
+    /** End party: x where the cast dances (0 = no party). */
+    this.party = 0;
     this.landAt = -1;
     this.jumpAt = -1;
     this.throwAt = -1;
@@ -287,6 +289,41 @@ export class LevelView {
     /** @type {DrawItem[]} */
     const items = [{ mesh: this.office, model: IDENTITY }, ...this.furniture];
     if (this.skyline) items.push({ mesh: this.skyline, model: IDENTITY, noShadow: true });
+    if (this.party) {
+      // The end: everybody celebrates the signed envelope at the Espace VIP.
+      const crowd = [
+        'regionalDirector',
+        'charline',
+        'kevin',
+        'techServicesDirector',
+        'intern',
+        'visio',
+        'mathis',
+      ];
+      crowd.forEach((id, i) => {
+        const ph = t * 6 + i * 1.3;
+        items.push(
+          ...poseCharacter(
+            this.cast[id],
+            this.party + (i - 3) * 1.15,
+            3,
+            (i % 2) * -0.6,
+            1,
+            {
+              legL: Math.max(0, Math.sin(ph)) * 0.7,
+              legR: Math.max(0, -Math.sin(ph)) * 0.7,
+              armL: 2.6 + Math.sin(ph) * 0.4,
+              armR: 2.6 - Math.sin(ph) * 0.4,
+              armSpread: 0.5,
+              bob: Math.abs(Math.sin(ph)) * 2,
+              head: Math.sin(ph * 0.5) * 0.2,
+            },
+            { scale: CAST[id].scale, turn: 0.3, rim: 0.4 },
+          ),
+        );
+      });
+      return items;
+    }
     if (this.gallery) {
       GALLERY.forEach((id, i) =>
         items.push(
