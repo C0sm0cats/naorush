@@ -99,6 +99,8 @@ const chords = (s) =>
   /** @type {[number, boolean][]} */ (s.split(' ').map((x) => [parseInt(x), x.endsWith('m')]));
 /** @param {string} s */
 const bars = (s) => s.split(' ');
+/** @param {number} db */
+const dbToGain = (db) => 10 ** (db / 20);
 /** @param {number} x */
 const clamp01 = (x) => Math.min(1, Math.max(0, Number.isFinite(x) ? x : 0));
 
@@ -689,6 +691,94 @@ const SFX = {
   },
 };
 
+/* AUDIT-TRIM-START */
+/** Loudness trim per effect (dB), measured so all effects sit at a similar RMS. @type {Record<string, number>} */
+const SFX_TRIM_DB = {
+  jump: 21,
+  airjump: 9,
+  land: 20,
+  hardland: 4,
+  ticket: 10,
+  ammo: 13,
+  checkpoint: 12,
+  door: 10,
+  key: 9,
+  collapse: 18,
+  smash: 7,
+  splash: 17,
+  hurt: 8,
+  zap: 9,
+  bump: 4,
+  meeting: 9,
+  empty: 12,
+  fire: 19,
+  parry: 7,
+  block: 1,
+  bossStart: 4,
+  bossThrow: 21,
+  bossHit: 2,
+  bossDone: 10,
+  consult: 6,
+  slam: 2,
+  poof: 16,
+  win: 15,
+  talk: 13,
+  select: 8,
+  confirm: 8,
+  step: 13,
+  grab: 10,
+  climb: 12,
+  death: 11,
+  respawn: 17,
+  chairRoll: 24,
+  drawerOut: 8,
+  sprayOn: 10,
+  paperShot: 18,
+  trapdoor: 8,
+  binderFall: 6,
+  internStun: 13,
+  vacuumBounce: 6,
+  invite: 8,
+  visioMute: 7,
+  heart: 11,
+  crack: 22,
+  secret: 13,
+  bossPhase: 5,
+  telegraph: 11,
+  rackDrop: 11,
+  rackLand: 4,
+  teleport: 14,
+  cableWarn: 17,
+  cableZap: 11,
+  fan: 20,
+  dash: 15,
+  zoneWarn: 13,
+  zoneHit: 4,
+  spot: 5,
+  curtain: 18,
+  fireworks: 11,
+  sign: 9,
+  pause: 11,
+  resume: 11,
+  gameover: 12,
+  menuMove: 15,
+};
+/** Loudness trim per track (dB), measured so all tracks sit at a similar RMS. @type {Record<TrackName, number>} */
+const TRACK_TRIM_DB = {
+  title: 4,
+  parking: 4,
+  office: 2,
+  datacenter: 4,
+  copil: 2,
+  rooftop: 1,
+  bossJulien: 2,
+  bossRodolphe: 1,
+  win: 2,
+  gameover: 8,
+  credits: 4,
+};
+/* AUDIT-TRIM-END */
+
 /** Every sound effect name. */
 export const SFX_TYPES = Object.keys(SFX);
 
@@ -769,7 +859,7 @@ export class Audio {
     comp.attack.value = 0.003;
     comp.release.value = 0.2;
     const limiter = ctx.createDynamicsCompressor();
-    limiter.threshold.value = -2;
+    limiter.threshold.value = -6;
     limiter.knee.value = 0;
     limiter.ratio.value = 20;
     limiter.attack.value = 0.001;
@@ -840,7 +930,11 @@ export class Audio {
   sfx(type) {
     const play = Object.hasOwn(SFX, type) ? SFX[type] : undefined;
     if (!play || !this.ctx || !this.sfxBus) return;
-    play(this.#voice(this.sfxBus, 1 + (Math.random() - 0.5) * 0.08));
+    // Per-sound loudness trim, so every effect lands at a comparable level.
+    const trim = this.ctx.createGain();
+    trim.gain.value = dbToGain(SFX_TRIM_DB[type] ?? 0);
+    trim.connect(this.sfxBus);
+    play(this.#voice(trim, 1 + (Math.random() - 0.5) * 0.08));
   }
 
   /** @param {TrackName | 'boss' | null} track 'boss' is an alias of 'bossJulien' */
@@ -860,7 +954,10 @@ export class Audio {
     const bus = ctx.createGain();
     bus.gain.setValueAtTime(0, now);
     bus.gain.linearRampToValueAtTime(1, now + FADE);
-    bus.connect(this.musicBus);
+    const trim = ctx.createGain();
+    trim.gain.value = dbToGain(TRACK_TRIM_DB[name]);
+    trim.connect(this.musicBus);
+    bus.connect(trim);
     const [d0, l0] = this.#layerTargets();
     const layer = (/** @type {number} */ g) => {
       const n = ctx.createGain();
@@ -874,7 +971,7 @@ export class Audio {
     const wet = ctx.createGain();
     wet.connect(base);
     /** @type {AudioNode[]} */
-    const nodes = [bus, base, drive, lead, wet];
+    const nodes = [bus, trim, base, drive, lead, wet];
     if (def.echo) {
       const delay = ctx.createDelay(1);
       delay.delayTime.value = (60 / def.bpm) * 0.75;
