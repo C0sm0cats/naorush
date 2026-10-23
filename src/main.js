@@ -127,7 +127,11 @@ async function beginStage(i, before = []) {
   banner.classList.add('show');
   audio.music(level.music);
   audio.intensity(0.2);
+  // While the intro plays, the camera glides from the exit back to the start.
+  flyover = { t: 0, from: Math.max(sim.hero.x, sim.w - 12) };
+  camera.snap(flyover.from, 6);
   talk([...before, ...level.intro], () => {
+    flyover = null;
     show('play');
     say(heroId, 'start');
   });
@@ -570,8 +574,20 @@ const SHOWCASE_LIGHT = {
 /** Puts the hero in the title-screen spot (the run restarts from S anyway). */
 const showcase = () => Object.assign(sim.hero, { x: SHOWCASE.x, y: SHOWCASE.y, facing: -1, vx: 0 });
 
+/** Stage intro camera glide. @type {{t: number, from: number} | null} */
+let flyover = null;
+
 /** On touch screens the pads cover the bottom: frame the hero a little higher. */
 const touchLift = matchMedia('(pointer: coarse)').matches ? 1.1 : 0;
+
+/** @param {number} dt */
+function flyoverFocus(dt) {
+  const f = /** @type {{t: number, from: number}} */ (flyover);
+  f.t += dt;
+  const k = Math.min(1, f.t / 5);
+  const e = k * k * (3 - 2 * k);
+  return { x: f.from + (sim.hero.x - f.from) * e, y: 3, facing: 0.001 };
+}
 
 /** During a boss fight the camera frames both fighters. */
 function fightFocus() {
@@ -686,7 +702,9 @@ function frame(now) {
         ? { x: SHOWCASE.x - 0.8 + Math.sin(t * 0.25) * 0.15, y: SHOWCASE.y - 1.4, facing: 0 }
         : drift
           ? { x: 10 + Math.sin(t * 0.07) * 8, y: 3, facing: 1 }
-          : (fightFocus() ?? { x: h.x + HERO.w / 2, y: h.y - touchLift, facing: h.facing });
+          : flyover && screen === 'talk'
+            ? flyoverFocus(dt)
+            : (fightFocus() ?? { x: h.x + HERO.w / 2, y: h.y - touchLift, facing: h.facing });
   const cam = camera.update(dt, renderer.width / renderer.height, focus, { w: sim.w, h: sim.h });
   view.showcase = screen === 'title';
   // A soft key light on the hero posing behind the title card.
