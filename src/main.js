@@ -677,7 +677,7 @@ function frame(now) {
   // The title shows the chosen hero up close; the credits drift along the stage.
   const drift = screen === 'loading' || screen === 'credits';
   const focus = gallery
-    ? { x: 3.5, y: 1.6, facing: 0 }
+    ? { x: 4.1, y: 1.6, facing: 0 }
     : screen === 'title'
       ? { x: SHOWCASE.x - 0.8 + Math.sin(t * 0.25) * 0.15, y: SHOWCASE.y - 1.4, facing: 0 }
       : drift
