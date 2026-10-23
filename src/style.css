@@ -636,7 +636,7 @@ body[data-screen='loading'] .stage {
   left: 50%;
   top: max(64px, calc(env(safe-area-inset-top) + 56px));
   transform: translateX(-50%);
-  width: min(420px, 80vw);
+  width: min(560px, 80vw);
   display: grid;
   gap: 6px;
   justify-items: center;
@@ -644,7 +644,11 @@ body[data-screen='loading'] .stage {
   text-shadow: 0 2px 8px #000a;
 }
 .bossbar b {
-  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  font-size: 12px;
   letter-spacing: 1px;
   text-transform: uppercase;
 }
@@ -691,4 +695,192 @@ body:not([data-screen='play']) .bossbar {
 }
 body.boss .toast {
   top: 112px;
+}
+
+/* Speech bubbles above characters */
+.bark {
+  position: fixed;
+  left: 0;
+  top: 0;
+  max-width: min(320px, 70vw);
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 800;
+  font-size: 14px;
+  line-height: 1.3;
+  text-align: center;
+  box-shadow: 0 8px 20px #0006;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+  z-index: 2;
+}
+.bark::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  margin-left: -7px;
+  border: 7px solid transparent;
+  border-bottom: 0;
+  border-top-color: var(--paper);
+}
+.bark.show {
+  opacity: 1;
+}
+.bark[data-who='techServicesDirector'],
+.bark[data-who='regionalDirector'] {
+  background: #1f2a44;
+  color: #fff;
+  box-shadow:
+    0 0 0 2px var(--lime),
+    0 8px 20px #0006;
+}
+.bark[data-who='techServicesDirector']::after,
+.bark[data-who='regionalDirector']::after {
+  border-top-color: #1f2a44;
+}
+.talk-who[data-who='narrator'] {
+  background: var(--ink-2);
+  box-shadow: inset 0 0 0 2px var(--pink);
+}
+
+/* Options */
+.options {
+  display: grid;
+  gap: 12px;
+  max-height: 92vh;
+  overflow: auto;
+}
+.options label {
+  display: grid;
+  grid-template-columns: 9em 1fr;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+}
+.options label.check {
+  display: flex;
+}
+.options input[type='range'] {
+  accent-color: var(--pink);
+}
+.options select {
+  padding: 6px 10px;
+  border-radius: 10px;
+  font: inherit;
+}
+.keys {
+  border: 2px solid #141a2c1a;
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+.keys legend {
+  padding: 0 6px;
+  color: #5a6680;
+  font-size: 13px;
+  font-weight: 700;
+}
+#keyList {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.keyrow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: #141a2c0d;
+  color: #141a2c;
+  font: 700 14px system-ui;
+  cursor: pointer;
+}
+.keyrow:focus-visible {
+  outline: 3px solid var(--pink);
+}
+.ghost.small {
+  padding: 8px;
+  font-size: 13px;
+}
+
+/* Credits */
+.credits {
+  grid-template-rows: 1fr auto;
+  background: radial-gradient(circle at 50% 30%, #1b2340e6, #0e1424f2);
+}
+.roll {
+  max-width: 640px;
+  text-align: center;
+  animation: roll 3s ease-out both;
+}
+.roll h2 {
+  font-size: clamp(42px, 9vw, 72px);
+  letter-spacing: -2px;
+  margin: 0 0 8px;
+  color: var(--lime);
+}
+.roll h3 {
+  margin: 22px 0 6px;
+  color: var(--pink);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-size: 14px;
+}
+.roll p {
+  margin: 4px 0;
+  font-weight: 600;
+}
+@keyframes roll {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+}
+#creditsClose {
+  width: auto;
+  padding: 12px 30px;
+}
+
+/* Accessibility: high contrast */
+body.contrast .card,
+body.contrast .talk-box,
+body.contrast .bark {
+  background: #fff;
+  color: #000;
+}
+body.contrast .hint,
+body.contrast .pill,
+body.contrast .hearts,
+body.contrast .room {
+  background: #000;
+  color: #fff;
+  outline: 2px solid #fff;
+}
+
+/* Touch pad sizes */
+body[data-pad='s'] .touch button {
+  width: 50px;
+  height: 50px;
+}
+body[data-pad='s'] .touch .big {
+  width: 70px;
+  height: 70px;
+}
+body[data-pad='l'] .touch button {
+  width: 76px;
+  height: 76px;
+  font-size: 22px;
+}
+body[data-pad='l'] .touch .big {
+  width: 104px;
+  height: 104px;
+}
+.touch .pad {
+  touch-action: none;
 }

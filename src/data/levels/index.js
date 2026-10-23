@@ -1,4 +1,6 @@
+import { COPIL } from './copil.js';
 import { LCP7 } from './lcp7.js';
+import { PARKING } from './parking.js';
 import { ROOFTOP } from './rooftop.js';
 import { TS } from './ts.js';
 
@@ -11,7 +13,10 @@ import { TS } from './ts.js';
  *   'S' start          'C' Chronotime badge (checkpoint)    '$' Swile ticket
  *   'p' badge reader (opens the doors)   'D' door           'K' signed purchase order
  *   'F' ceiling panel that falls         'R' rolling water-cooler bottle
- *   'n' colleague in a call              'a' ream of paper (+3 CR)
+ *   'n' colleague in a call              'a' ream of paper (+3 CR)   'h' coffee (+1 heart)
+ *   'i' intern (hurts; a CR stuns)       'v' robot vacuum (jump on it)   'z' video call (invites)
+ *   'c' rolling chair   'd' drawer (wall)   'w' sprinkler (ceiling)   'P' printer (paper)
+ *   'L' hidden trapdoor 'O' falling binders
  *   'X' level boss     'E' exit (needs the purchase order)
  *
  * @typedef {Object} Decor
@@ -22,7 +27,7 @@ import { TS } from './ts.js';
  * @property {number} [z] Depth of a prop (default: against the back wall).
  * @property {boolean} [front] Hung on the front face of a block instead of the back wall.
  *
- * @typedef {{who: 'hero'|'partner'|'boss'|'hint', text: string}} Line
+ * @typedef {{who: 'hero'|'partner'|'boss'|'hint'|'narrator', text: string}} Line
  *
  * @typedef {Object} Lighting
  * @property {number[]} sunDir
@@ -35,8 +40,10 @@ import { TS } from './ts.js';
  *
  * @typedef {import('../../game/sim.js').LevelDef & {
  *   id: string,
- *   theme: 'office'|'datacenter'|'rooftop',
- *   music: 'office'|'datacenter'|'rooftop',
+ *   theme: 'office'|'datacenter'|'rooftop'|'parking',
+ *   music: 'office'|'datacenter'|'rooftop'|'parking'|'copil',
+ *   keyLabel: string,
+ *   phaseLine?: string,
  *   name: string,
  *   subtitle: string,
  *   rooms: string[],
@@ -51,4 +58,4 @@ import { TS } from './ts.js';
 export const ROOM_W = 20;
 
 /** @type {Level[]} */
-export const LEVELS = [LCP7, TS, ROOFTOP];
+export const LEVELS = [PARKING, LCP7, TS, COPIL, ROOFTOP];

@@ -56,14 +56,29 @@ function sharedMeshes(gl) {
     for (const id of Object.keys(CAST)) cast[id] = buildCharacter(gl, CAST[id]);
     const v = new Volume(1, 1, 1, 1, [-0.5, -0.5, -0.5]);
     v.set(0, 0, 0, 0xffffff, MAT.EMISSIVE);
+    /**
+     * A floor tile in disguise (hidden trapdoor): top at y = 0, spanning the full depth.
+     * @param {(x: number, z: number) => number} top
+     */
+    const floor = (top) => {
+      const f = new Volume(8, 8, 30, 1 / 8, [-0.5, -1, -2.4]);
+      f.box(0, 0, 0, 8, 6, 30, 0xbdb4a6);
+      f.box(0, 6, 0, 8, 8, 30, (x, _y, z) => top(x, z));
+      f.box(0, 6, 29, 8, 7, 30, 0xc6f432);
+      return new Mesh(gl, meshVolume(f));
+    };
     SHARED.set(gl, {
       things: buildThings(gl),
       props: buildProps(gl),
       cast,
       cube: new Mesh(gl, meshVolume(v)),
+      hiddenFloor: {
+        office: floor(() => 0x3e5170),
+        dc: floor((x, z) => (((x >> 2) + (z >> 2)) % 2 ? 0xa3acb7 : 0x8d96a2)),
+      },
     });
   }
-  return /** @type {{things: ReturnType<typeof buildThings>, props: ReturnType<typeof buildProps>, cast: Record<string, ReturnType<typeof buildCharacter>>, cube: Mesh}} */ (
+  return /** @type {{things: ReturnType<typeof buildThings>, props: ReturnType<typeof buildProps>, cast: Record<string, ReturnType<typeof buildCharacter>>, cube: Mesh, hiddenFloor: {office: Mesh, dc: Mesh}}} */ (
     SHARED.get(gl)
   );
 }
@@ -91,14 +106,39 @@ export class LevelView {
     const office = buildOffice(sim, level.decor, level.map, level.theme);
     this.lights = office.lights;
     this.office = new Mesh(gl, office.mesh);
-    this.skyline = level.theme === 'datacenter' ? null : new Mesh(gl, buildSkyline(sim.w));
+    this.skyline =
+      level.theme === 'datacenter' || level.theme === 'parking'
+        ? null
+        : new Mesh(gl, buildSkyline(sim.w));
     const shared = sharedMeshes(gl);
     this.things = shared.things;
     this.props = shared.props;
     this.cast = shared.cast;
     this.cube = shared.cube;
+    this.hiddenFloor = shared.hiddenFloor;
     /** Furniture and props standing in the level. @type {DrawItem[]} */
     this.furniture = [];
+    // Parked cars ('Q' runs) and meeting tables ('Y') stand on their tiles.
+    const cars = /** @type {const} */ (['carBlue', 'carRed', 'carWhite']);
+    let carCount = 0;
+    level.map.forEach((row, i) => {
+      const y = sim.h - 1 - i;
+      for (let c = 0; c < row.length; c++) {
+        if (row[c] === 'Y')
+          this.furniture.push({
+            mesh: this.props.copilTable,
+            model: chain(translation(c + 0.5, y + 0.1, -0.5), scaling(1, 1, 1.6)),
+          });
+        if (row[c] === 'Q' && row[c - 1] !== 'Q') {
+          let n = 0;
+          while (row[c + n] === 'Q') n++;
+          this.furniture.push({
+            mesh: this.props[cars[carCount++ % cars.length]],
+            model: chain(translation(c + n / 2, y - 0.35, -0.6), scaling(n / 3.6, 1, 1)),
+          });
+        }
+      }
+    });
     for (const d of level.decor) {
       if (d.type === 'desk') this.furniture.push(this.prop('chair', d.x + 4.7, d.y, -1.1));
       else if (d.type in this.props) {
@@ -133,6 +173,20 @@ export class LevelView {
   event(e, time) {
     if (e.type === 'land' || e.type === 'step' || e.type === 'hardland') this.landAt = time;
     if (e.type === 'jump' || e.type === 'airjump') this.jumpAt = time;
+  }
+
+  /**
+   * A small glowing cube (warning lights, drips).
+   * @param {number} x @param {number} y @param {number} z @param {number} size @param {number[]} color
+   * @returns {DrawItem}
+   */
+  glow(x, y, z, size, color) {
+    return {
+      mesh: this.cube,
+      model: chain(translation(x, y, z), scaling(size, size, size)),
+      tint: color,
+      noShadow: true,
+    };
   }
 
   /** Frees the level's own GPU resources (shared meshes stay). */
@@ -232,6 +286,7 @@ export class LevelView {
     }
     this.drawHero(items, sim, t);
     const things = this.things;
+    const P = this.props;
     /** @param {Mesh} mesh @param {number} x @param {number} y @param {number} z @param {...Float32Array} extra */
     const at = (mesh, x, y, z, ...extra) =>
       items.push({ mesh, model: chain(translation(x, y, z), ...extra) });
@@ -271,7 +326,15 @@ export class LevelView {
           );
           break;
         case 'loose':
-          if (th.state !== 'gone')
+          // Hidden trapdoors look exactly like the floor until they shake.
+          if (th.hidden && th.state !== 'gone' && th.state !== 'falling')
+            at(
+              this.theme === 'datacenter' ? this.hiddenFloor.dc : this.hiddenFloor.office,
+              th.x + 0.5 + (th.state === 'shaking' ? Math.sin(t * 90) * 0.04 : 0),
+              th.y + 1,
+              0,
+            );
+          else if (th.state !== 'gone')
             at(
               things.loose,
               th.x + 0.5 + (th.state === 'shaking' ? Math.sin(t * 90) * 0.04 : 0),
@@ -280,6 +343,16 @@ export class LevelView {
             );
           break;
         case 'panel':
+          if (th.variant === 'binders') {
+            if (th.state !== 'broken' || th.t < 0.6)
+              at(
+                P.binders,
+                th.x + 0.5 + (th.state === 'shaking' ? Math.sin(t * 70) * 0.04 : 0),
+                th.y,
+                -0.2,
+              );
+            break;
+          }
           if (th.state !== 'broken')
             at(
               things.panel,
@@ -366,6 +439,170 @@ export class LevelView {
         case 'boss':
           this.drawBoss(items, sim, th, t);
           break;
+        case 'chair':
+          at(
+            P.chair,
+            th.x + (th.state === 'wobble' ? Math.sin(t * 60) * 0.04 : 0),
+            th.y,
+            -0.15,
+            rotationY(th.state === 'rolling' ? th.x * 2.2 : 0.5),
+          );
+          break;
+        case 'drawer': {
+          const dir = th.dir ?? 1;
+          const base = dir > 0 ? th.x - 0.5 : th.x + 0.5;
+          const shake = th.state === 'rattle' ? Math.sin(t * 70) * 0.03 : 0;
+          at(
+            P.drawer,
+            base + dir * ((th.w ?? 0) - 0.92 + shake),
+            th.y + 0.75,
+            -0.2,
+            scaling(dir, 1, 1),
+          );
+          break;
+        }
+        case 'sprinkler': {
+          const top = th.y1 ?? th.y + 1;
+          at(P.sprinkler, th.x, top, -0.3);
+          if (th.state === 'on') {
+            const h = top - 0.15 - (th.y0 ?? 0);
+            items.push({
+              mesh: P.spray,
+              model: chain(
+                translation(th.x, top - 0.15, -0.3),
+                scaling(0.8 + Math.sin(t * 40) * 0.05, h, 0.8),
+              ),
+              tint: [0.75, 0.9, 1.25],
+              noShadow: true,
+            });
+          } else if (th.state === 'drip') {
+            const k = ((t * 1.6) % 1) * (top - (th.y0 ?? 0));
+            items.push(this.glow(th.x, top - 0.2 - k, -0.3, 0.06, [0.5, 0.8, 1]));
+          }
+          break;
+        }
+        case 'printer':
+          at(P.printer, th.x, th.y, -0.4, scaling(th.dir ?? 1, 1, 1));
+          if (th.state === 'blink' && Math.floor(t * 12) % 2 === 0)
+            items.push(
+              this.glow(th.x + (th.dir ?? 1) * 0.35, th.y + 1.02, -0.1, 0.09, [1, 0.25, 0.2]),
+            );
+          break;
+        case 'paper':
+          at(P.paper, th.x, th.y, 0, rotationZ(Math.sin(th.t * 20) * 0.25));
+          break;
+        case 'crate':
+          at(P.archive, th.x + 0.5, th.y, -0.5, scaling(1, 1, 1.9));
+          break;
+        case 'cup':
+          if (th.state !== 'gone')
+            at(
+              P.cup,
+              th.x,
+              th.y + Math.sin(t * 2.4 + th.x) * 0.06,
+              0,
+              rotationY(Math.sin(t) * 0.6),
+            );
+          break;
+        case 'intern': {
+          const stunned = th.state === 'stunned';
+          const ph = t * 9;
+          items.push(
+            ...poseCharacter(
+              this.cast.intern,
+              th.x,
+              th.y,
+              -0.1,
+              stunned ? 1 : Math.sign(th.vx) || 1,
+              stunned
+                ? { legL: 1.5, legR: 1.5, armL: 0.9, armR: 1.4, bob: -6, head: 0.2 }
+                : {
+                    legL: Math.sin(ph) * 0.9,
+                    legR: -Math.sin(ph) * 0.9,
+                    armL: 1.5,
+                    armR: 1.5,
+                    lean: 0.25,
+                    bob: Math.abs(Math.cos(ph)),
+                  },
+              { scale: CAST.intern.scale, rim: 0.3, turn: stunned ? 0.4 : 1 },
+            ),
+          );
+          if (!stunned)
+            at(
+              P.binders,
+              th.x + (Math.sign(th.vx) || 1) * 0.28,
+              th.y + 0.95,
+              0.25,
+              scaling(0.6, 0.6, 0.6),
+            );
+          else at(P.cup, th.x + 0.35, th.y, 0.2);
+          break;
+        }
+        case 'vacuum':
+          at(P.vacuum, th.x, th.y, 0, rotationY(th.t * 3));
+          break;
+        case 'visio': {
+          const dir = th.dir ?? -1;
+          const muted = th.state === 'muted';
+          items.push(
+            ...poseCharacter(
+              this.cast.visio,
+              th.x - dir * 0.15,
+              th.y,
+              -0.5,
+              dir,
+              muted
+                ? { legL: 0, legR: 0, armL: 0.1, armR: 0.1, head: 0.35 }
+                : th.state === 'ring'
+                  ? { legL: 0, legR: 0, armL: 0.4, armR: 2.6, head: -0.2 }
+                  : { ...idlePose(t), armR: 1.2 + Math.sin(t * 5) * 0.4 },
+              { scale: CAST.visio.scale, rim: 0.3, turn: 0.7 },
+            ),
+          );
+          at(P.laptopStand, th.x + dir * 0.35, th.y, -0.3);
+          break;
+        }
+        case 'invite':
+          at(P.invite, th.x, th.y, 0, rotationZ(Math.sin(th.t * 12) * 0.2));
+          break;
+        case 'rack': {
+          const floor = th.y0 ?? th.y;
+          if (th.state === 'warn') {
+            const k = Math.min(1, th.t / 0.9);
+            at(P.shadow, th.x, floor + 0.02, 0, scaling(0.4 + k * 0.8, 1, 0.4 + k * 0.8));
+            items.push(this.glow(th.x, floor + 0.05, 0.6, 0.12, [1, 0.5, 0.15]));
+          } else at(P.rackFall, th.x, th.y, -0.1);
+          break;
+        }
+        case 'zone': {
+          const floor = th.y0 ?? th.y;
+          const w = th.w ?? 1;
+          if (th.variant === 'arrow') {
+            const dir = th.dir ?? 1;
+            for (let x = th.x + 0.8; x < th.x + w; x += 2)
+              items.push({
+                mesh: P.arrow,
+                model: chain(translation(x, floor + 0.01, 0.2), scaling(dir, 1, 1)),
+                tint: [1, 0.6 + Math.sin(t * 12) * 0.3, 0.3],
+                noShadow: true,
+              });
+            break;
+          }
+          const live = th.state === 'live';
+          const pulse = 0.6 + Math.sin(t * (live ? 40 : 14)) * 0.4;
+          const color = live
+            ? th.variant === 'cable'
+              ? [0.6 * pulse + 0.6, 0.9, 1.6]
+              : [1.6, 0.5, 0.6 * pulse]
+            : [1.2 * pulse, 0.55 * pulse, 0.15];
+          items.push({
+            mesh: P.warn,
+            model: chain(translation(th.x + w / 2, floor + 0.01, -0.4), scaling(w, 1, 2.4)),
+            tint: color,
+            noShadow: true,
+          });
+          break;
+        }
         default:
           break;
       }
@@ -404,18 +641,22 @@ export class LevelView {
   }
 
   /**
-   * The level boss: throws KPI slides, consults PRIMO on a tablet, leaps (regional),
-   * and cheers once convinced.
+   * The level boss. Every attack has its own pose, held during the wind-up so it
+   * reads as a warning: arm cocked for a volley, arms raised to lower the racks,
+   * crouch before a leap, lean before the dash.
    * @param {DrawItem[]} items @param {Sim} sim @param {import('../game/sim.js').Thing} b @param {number} t
    */
   drawBoss(items, sim, b, t) {
     const id = sim.boss?.id ?? 'techServicesDirector';
     const hx = sim.hero.x + HERO.w / 2;
-    const facing = b.state === 'convinced' ? 1 : Math.sign(hx - b.x) || -1;
+    const done = b.state === 'convinced' || b.state === 'sign';
+    const facing = b.state === 'dash' ? (b.dir ?? 1) : done ? 1 : Math.sign(hx - b.x) || -1;
     let y = b.y;
     /** @type {Pose} */
     let pose = idlePose(t);
     let turn = 1;
+    /** @type {number[] | undefined} */
+    let tint;
     switch (b.state) {
       case 'intro':
         pose = {
@@ -429,23 +670,86 @@ export class LevelView {
         };
         turn = 0.5;
         break;
-      case 'throw': {
-        const k = (b.t % 0.95) / 0.95;
-        pose = { legL: 0.3, legR: -0.3, armL: -0.3, armR: k < 0.8 ? -1.2 * k : 2.6, lean: 0.15 };
+      case 'volley': {
+        const k = ((b.t + 0.05) % 0.55) / 0.55;
+        pose =
+          b.t < 0.5
+            ? { legL: 0.3, legR: -0.3, armL: -0.3, armR: -1.3, lean: -0.1 }
+            : { legL: 0.3, legR: -0.3, armL: -0.3, armR: k < 0.7 ? -1.2 * k : 2.6, lean: 0.15 };
         break;
       }
+      case 'fan':
+        pose =
+          b.t < 0.55
+            ? { legL: 0.4, legR: -0.4, armL: -1.4, armR: -1.4, armSpread: 0.6, lean: -0.15 }
+            : { legL: 0.2, legR: -0.2, armL: 2.4, armR: 2.4, armSpread: 1, lean: 0.2 };
+        break;
+      case 'rackDrop':
+      case 'cables':
+        pose = {
+          legL: 0.2,
+          legR: -0.2,
+          armL: 2.8 + Math.sin(t * 10) * 0.1,
+          armR: 2.8 - Math.sin(t * 10) * 0.1,
+          armSpread: 0.4,
+          head: -0.3,
+        };
+        turn = 0.6;
+        break;
+      case 'teleport':
+        pose = { legL: 0, legR: 0, armL: 1.6, armR: 1.6, armSpread: 1.2, head: -0.2 };
+        tint = b.t < 0.55 ? [1 + b.t * 2, 1 + b.t * 2.4, 1 + b.t * 3] : undefined;
+        turn = 0.5 + b.t * 4;
+        break;
       case 'leap': {
-        const k = Math.min(1, b.t / 0.7);
-        y += Math.sin(Math.PI * k) * 1.6;
-        pose = { legL: 0.9, legR: 0.6, armL: 2.6, armR: 2.6, squash: k > 0.95 ? 0.15 : -0.05 };
+        if (b.t < 0.5)
+          pose = { legL: 1.1, legR: 1.1, armL: -0.6, armR: -0.6, squash: 0.18, lean: 0.3 };
+        else {
+          const k = Math.min(1, (b.t - 0.5) / 0.6);
+          y += Math.sin(Math.PI * k) * 1.8;
+          pose = { legL: 0.9, legR: 0.6, armL: 2.6, armR: 2.6, squash: k > 0.95 ? 0.18 : -0.06 };
+        }
         break;
       }
+      case 'dash':
+        if (b.t < 0.85)
+          pose = { legL: 0.8, legR: -0.6, armL: -0.9, armR: 0.9, lean: 0.45, squash: 0.08 };
+        else {
+          const ph = t * 22;
+          pose = {
+            legL: Math.sin(ph) * 1.1,
+            legR: -Math.sin(ph) * 1.1,
+            armL: -Math.sin(ph) * 1.1,
+            armR: Math.sin(ph) * 1.1,
+            lean: 0.4,
+          };
+        }
+        break;
+      case 'zones':
+        pose = { legL: 0.3, legR: -0.3, armL: 1.5, armR: 2.7, armSpread: 1.1, head: -0.25 };
+        turn = 0.4;
+        break;
       case 'consult':
         pose = { legL: 0, legR: 0, armL: 0.2, armR: 1.1, head: 0.45, bob: Math.sin(t * 2) * 0.3 };
         turn = 0.35;
         break;
       case 'hit':
         pose = { legL: -0.3, legR: 0.4, armL: 2.2, armR: 1.8, lean: -0.35, squash: 0.08 };
+        tint = b.t < 0.2 ? [1.6, 1.3, 1.2] : undefined;
+        break;
+      case 'phase':
+        // Second wind: a power pose and a glow.
+        pose = {
+          legL: 0.5,
+          legR: -0.5,
+          armL: 2.9,
+          armR: 2.9,
+          armSpread: 0.9,
+          head: -0.35,
+          squash: -0.05,
+        };
+        tint = [1.2 + Math.sin(t * 18) * 0.2, 1.15, 1.3];
+        turn = 0.3;
         break;
       case 'convinced':
         pose = {
@@ -459,6 +763,14 @@ export class LevelView {
         };
         turn = 0.3;
         break;
+      case 'sign':
+        // Signs the envelope, then offers a handshake.
+        pose =
+          b.t < 1.2
+            ? { legL: 0, legR: 0, armL: 0.9, armR: 1.2 + Math.sin(t * 16) * 0.12, head: 0.4 }
+            : { legL: 0, legR: 0, armL: 0.1, armR: 1.4, head: -0.05, bob: Math.sin(t * 2) * 0.3 };
+        turn = b.t < 1.2 ? 0.4 : 0.8;
+        break;
       default:
         break;
     }
@@ -467,7 +779,7 @@ export class LevelView {
         scale: CAST[id].scale,
         turn,
         rim: b.state === 'consult' ? 0.9 : 0.45,
-        tint: b.state === 'hit' && b.t < 0.2 ? [1.6, 1.2, 1.2] : undefined,
+        tint,
       }),
     );
   }

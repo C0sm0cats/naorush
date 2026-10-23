@@ -21,10 +21,18 @@ const IDS = [
   'summer-party',
   'cooptation',
   'espace-vip',
+  'your-digital-hub',
+  'my-way',
+  'spark',
+  'gofluent',
+  'primo',
+  'copil',
+  'covoiturage',
+  'note-de-frais',
 ];
 
 describe('POSTER_LIST', () => {
-  it('lists the 19 poster ids exactly once', () => {
+  it('lists the 27 poster ids exactly once', () => {
     const ids = POSTER_LIST.map((p) => p.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect([...ids].sort()).toEqual([...IDS].sort());

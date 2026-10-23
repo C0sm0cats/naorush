@@ -2,8 +2,9 @@ import { Audio } from './app/audio.js';
 import { Camera } from './app/camera.js';
 import { Particles } from './app/fx.js';
 import { Hud } from './app/hud.js';
-import { Input } from './app/input.js';
+import { ACTIONS, Input, keyName } from './app/input.js';
 import { LevelView, boardUrl } from './app/scene.js';
+import { BARKS, PROLOGUE } from './data/barks.js';
 import { CAST } from './data/cast.js';
 import { LEVELS, ROOM_W } from './data/levels/index.js';
 import { Renderer } from './gfx/renderer.js';
@@ -11,10 +12,10 @@ import { DT, HERO, createSim, step } from './game/sim.js';
 
 /**
  * NAO Rush entry point: loading → title (hero choice) → stage intro (dialogue) →
- * play ⇄ pause / reading / dialogue → stage won → next stage … → the end.
+ * play ⇄ pause / options / reading / dialogue / game over → stage won → … → credits.
  * The level keeps rendering behind every screen.
  *
- * @typedef {'loading'|'title'|'play'|'pause'|'reading'|'talk'|'won'} Screen
+ * @typedef {'loading'|'title'|'play'|'pause'|'options'|'reading'|'talk'|'won'|'gameover'|'credits'} Screen
  * @typedef {import('./data/levels/index.js').Line} Line
  */
 
@@ -28,6 +29,23 @@ const camera = new Camera();
 const particles = new Particles();
 const audio = new Audio();
 const SAVE_KEY = 'naorush.stage';
+const PREFS_KEY = 'naorush.prefs';
+
+/** Player preferences, saved locally. */
+const prefs = {
+  shake: true,
+  flash: true,
+  contrast: false,
+  vibrate: true,
+  pad: 'm',
+  ...JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}'),
+};
+const savePrefs = () => localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+const applyPrefs = () => {
+  document.body.classList.toggle('contrast', prefs.contrast);
+  document.body.dataset.pad = prefs.pad;
+};
+applyPrefs();
 
 /** @type {'kevin'|'charline'} */
 let heroId = 'kevin';
@@ -42,22 +60,32 @@ const lightingFor = (l) => {
   return { ...l.lighting, sunDir: d.map((x) => x / n), lights: view.lights };
 };
 let lighting = lightingFor(level);
-/** Totals over the whole run, for the final screen. */
+/** Totals over the whole run, for the credits. */
 const run = { tickets: 0, time: 0, deaths: 0 };
 
 /** @type {Screen} */
 let screen = 'loading';
+/** Screen to return to when options close. @type {Screen} */
+let optionsFrom = 'title';
+const OVERLAYS = /** @type {const} */ ([
+  'pause',
+  'options',
+  'reader',
+  'won',
+  'talk',
+  'gameover',
+  'credits',
+]);
 /** @param {Screen} next */
 function show(next) {
   screen = next;
   document.body.dataset.screen = next;
-  $('pause').hidden = next !== 'pause';
-  $('reader').hidden = next !== 'reading';
-  $('won').hidden = next !== 'won';
-  $('talk').hidden = next !== 'talk';
+  for (const id of OVERLAYS) $(id).hidden = (id === 'reader' ? 'reading' : id) !== next;
   input.clear();
   if (next === 'title') $('play').focus();
   if (next === 'won') $(stage < LEVELS.length - 1 ? 'next' : 'menu').focus();
+  if (next === 'gameover') $('goResume').focus();
+  if (next === 'pause') $('resume').focus();
 }
 
 /** Rebuilds the scene when the stage changes; restarts the simulation either way. @param {number} i */
@@ -76,10 +104,12 @@ async function loadStage(i) {
   view.doorT = 0;
   camera.snap(sim.hero.x, sim.hero.y + 3);
   hud.lastHearts = -1;
+  bark.time = 0;
+  gameOverTimer = 0;
 }
 
-/** Stage title card, dialogue, then play. @param {number} i */
-async function beginStage(i) {
+/** Stage title card, dialogue, then play. @param {number} i @param {Line[]} [before] */
+async function beginStage(i, before = []) {
   await loadStage(i);
   $('stageNum').textContent = `Étape ${i + 1} sur ${LEVELS.length}`;
   $('stageName').textContent = level.name;
@@ -89,7 +119,11 @@ async function beginStage(i) {
   void banner.offsetWidth;
   banner.classList.add('show');
   audio.music(level.music);
-  talk(level.intro, () => show('play'));
+  audio.intensity(0.2);
+  talk([...before, ...level.intro], () => {
+    show('play');
+    say(heroId, 'start');
+  });
 }
 
 // ---- Dialogue ------------------------------------------------------------------
@@ -104,21 +138,22 @@ function talk(lines, done) {
   show('talk');
 }
 
+const partnerOf = () => (heroId === 'kevin' ? 'charline' : 'kevin');
+
 function setSpeaker() {
   const line = dialogue.lines[dialogue.i];
-  const partner = heroId === 'kevin' ? 'charline' : 'kevin';
   const id =
     line.who === 'hero'
       ? heroId
       : line.who === 'partner'
-        ? partner
+        ? partnerOf()
         : line.who === 'boss'
-          ? (level.boss?.id ?? partner)
+          ? (level.boss?.id ?? partnerOf())
           : '';
   const who = id ? CAST[id] : null;
-  $('talkName').textContent = who?.name ?? 'Astuce';
+  $('talkName').textContent = who?.name ?? (line.who === 'narrator' ? 'NAO Rush' : 'Astuce');
   $('talkTitle').textContent = who?.title ?? '';
-  $('talkWho').dataset.who = line.who === 'hint' ? 'hint' : id;
+  $('talkWho').dataset.who = id || line.who;
   $('talkText').textContent = '';
 }
 
@@ -127,6 +162,7 @@ function advanceTalk() {
   if (!line || screen !== 'talk') return;
   if (dialogue.shown < line.text.length) {
     dialogue.shown = line.text.length;
+    $('talkText').textContent = line.text;
     return;
   }
   audio.sfx('select');
@@ -148,7 +184,57 @@ function updateTalk(dt) {
   }
 }
 
-// ---- Title: hero choice --------------------------------------------------------
+// ---- Speech bubbles ---------------------------------------------------------------
+const bark = {
+  text: '',
+  who: '',
+  time: 0,
+  /** Last time each speaker said each moment. @type {Record<string, number>} */
+  last: {},
+};
+const barkEl = $('bark');
+
+/**
+ * A short line above a character's head. Each moment waits a while before repeating.
+ * @param {string} who CAST id @param {string} moment @param {boolean} [force]
+ */
+function say(who, moment, force = false) {
+  const lines = BARKS[who]?.[moment];
+  if (!lines) return;
+  const key = who + moment;
+  const now = performance.now() / 1000;
+  if (!force && (now - (bark.last[key] ?? -99) < 8 || bark.time > 0.4)) return;
+  bark.last[key] = now;
+  Object.assign(bark, { text: lines[Math.floor(Math.random() * lines.length)], who, time: 2.6 });
+}
+
+/** World point to CSS pixels. @param {Float32Array} vp @param {number} x @param {number} y */
+function toScreen(vp, x, y) {
+  const cx = vp[0] * x + vp[4] * y + vp[12];
+  const cy = vp[1] * x + vp[5] * y + vp[13];
+  const cw = vp[3] * x + vp[7] * y + vp[15];
+  return [((cx / cw) * 0.5 + 0.5) * innerWidth, (0.5 - (cy / cw) * 0.5) * innerHeight];
+}
+
+/** @param {number} dt @param {Float32Array} vp */
+function updateBark(dt, vp) {
+  if (bark.time <= 0 || screen !== 'play') {
+    barkEl.classList.remove('show');
+    return;
+  }
+  bark.time -= dt;
+  const boss = sim.things.find((t) => t.kind === 'boss');
+  const self = bark.who === heroId;
+  const x = self ? sim.hero.x + HERO.w / 2 : (boss?.x ?? 0);
+  const y = self ? sim.hero.y + 2.1 : (boss?.y ?? 0) + 2.7;
+  const [sx, sy] = toScreen(vp, x, y);
+  if (barkEl.textContent !== bark.text) barkEl.textContent = bark.text;
+  barkEl.dataset.who = bark.who;
+  barkEl.style.transform = `translate(${Math.round(sx)}px, ${Math.round(sy)}px) translate(-50%, -100%)`;
+  barkEl.classList.toggle('show', bark.time > 0.15);
+}
+
+// ---- Title, options, menus -----------------------------------------------------
 for (const card of document.querySelectorAll('.hero-card')) {
   card.addEventListener('click', () => {
     heroId = /** @type {'kevin'|'charline'} */ (/** @type {HTMLElement} */ (card).dataset.hero);
@@ -163,28 +249,43 @@ const saved = () => Math.min(LEVELS.length - 1, Number(localStorage.getItem(SAVE
 function updateContinue() {
   const n = saved();
   $('continue').hidden = n === 0;
-  $('continue').textContent = `Continuer · étape ${n + 1}`;
+  $('continue').textContent = `Continuer · étape ${n + 1} : ${LEVELS[n].name}`;
 }
 
 /** @param {number} i */
 const startFrom = (i) => {
   audio.sfx('confirm');
   if (i === 0) Object.assign(run, { tickets: 0, time: 0, deaths: 0 });
-  beginStage(i);
+  beginStage(i, i === 0 && screen === 'title' ? PROLOGUE : []);
+};
+const toMenu = () => {
+  updateContinue();
+  audio.music('title');
+  audio.intensity(0);
+  loadStage(stage).then(() => show('title'));
 };
 $('play').onclick = () => startFrom(0);
 $('continue').onclick = () => startFrom(saved());
 $('next').onclick = () => startFrom(stage + 1);
-$('again').onclick = $('restart').onclick = () => startFrom(stage);
-$('resume').onclick = () => show('play');
-$('quit').onclick = $('menu').onclick = () => {
-  updateContinue();
-  audio.music('title');
-  loadStage(stage).then(() => show('title'));
+$('again').onclick = $('restart').onclick = $('goRestart').onclick = () => startFrom(stage);
+$('resume').onclick = () => {
+  audio.sfx('resume');
+  show('play');
 };
-$('pauseBtn').onclick = () => screen === 'play' && show('pause');
+$('goResume').onclick = () => {
+  audio.music(level.music);
+  show('play');
+};
+$('quit').onclick = $('menu').onclick = $('goMenu').onclick = $('creditsClose').onclick = toMenu;
+$('pauseBtn').onclick = () => screen === 'play' && pause();
 $('readerClose').onclick = () => show('play');
 $('talk').onclick = () => advanceTalk();
+function pause() {
+  audio.sfx('pause');
+  show('pause');
+}
+
+// Options.
 const muteBtn = $('muteBtn');
 const syncMute = () => {
   muteBtn.textContent = audio.muted ? '♪̸' : '♪';
@@ -195,6 +296,80 @@ muteBtn.onclick = () => {
   syncMute();
 };
 syncMute();
+/** @param {string} id */
+const field = (id) => /** @type {HTMLInputElement} */ ($(id));
+const padSelect = /** @type {HTMLSelectElement} */ ($('optPad'));
+function openOptions() {
+  optionsFrom = screen;
+  field('volMusic').value = String(audio.getVolume('music'));
+  field('volSfx').value = String(audio.getVolume('sfx'));
+  field('optShake').checked = prefs.shake;
+  field('optFlash').checked = prefs.flash;
+  field('optContrast').checked = prefs.contrast;
+  field('optVibrate').checked = prefs.vibrate;
+  padSelect.value = prefs.pad;
+  renderKeys();
+  show('options');
+}
+$('optionsBtn').onclick = $('pauseOptions').onclick = openOptions;
+$('optionsClose').onclick = () => show(optionsFrom === 'pause' ? 'pause' : 'title');
+field('volMusic').oninput = () => audio.setVolume('music', Number(field('volMusic').value));
+field('volSfx').oninput = () => {
+  audio.setVolume('sfx', Number(field('volSfx').value));
+  audio.sfx('ticket');
+};
+for (const [id, k] of /** @type {const} */ ([
+  ['optShake', 'shake'],
+  ['optFlash', 'flash'],
+  ['optContrast', 'contrast'],
+  ['optVibrate', 'vibrate'],
+]))
+  field(id).onchange = () => {
+    prefs[k] = field(id).checked;
+    savePrefs();
+    applyPrefs();
+  };
+padSelect.onchange = () => {
+  prefs.pad = padSelect.value;
+  savePrefs();
+  applyPrefs();
+};
+const ACTION_LABELS = {
+  left: 'Gauche',
+  right: 'Droite',
+  up: 'Grimper / lire',
+  down: 'Lâcher',
+  jump: 'Sauter',
+  fire: 'Lancer un CR',
+  pause: 'Pause',
+};
+function renderKeys() {
+  $('keyList').replaceChildren(
+    ...Object.keys(ACTIONS).map((a) => {
+      const action = /** @type {keyof typeof ACTIONS} */ (a);
+      const row = document.createElement('button');
+      row.className = 'keyrow';
+      const label = document.createElement('span');
+      label.textContent = ACTION_LABELS[action];
+      const key = document.createElement('kbd');
+      key.textContent = keyName(input.binding(action));
+      row.append(label, key);
+      row.onclick = () => {
+        key.textContent = '…';
+        input.capture = (code) => {
+          input.bind(action, code);
+          audio.sfx('select');
+          renderKeys();
+        };
+      };
+      return row;
+    }),
+  );
+}
+$('keysReset').onclick = () => {
+  input.resetBindings();
+  renderKeys();
+};
 // Browsers only allow sound after a user gesture.
 for (const type of ['pointerdown', 'keydown'])
   addEventListener(type, () => audio.unlock(), { once: true, capture: true });
@@ -203,25 +378,31 @@ function openBoard() {
   const board = view.boardAt(sim);
   if (!board?.id) return false;
   /** @type {HTMLImageElement} */ ($('readerImg')).src = boardUrl(board.id);
+  audio.sfx('select');
   show('reading');
   return true;
 }
 
-// ---- Stage end -------------------------------------------------------------------
+// ---- Stage end and credits -------------------------------------------------------
 const STAGE_END = [
+  { title: 'Badge récupéré !', text: 'Les ascenseurs mènent à l’open space LCP7.' },
   {
     title: 'Bon de commande signé !',
     text: 'Direction la salle serveurs de Technologies & Services.',
   },
   {
-    title: 'Enveloppe validée !',
-    text: 'Plus qu’une signature : rendez-vous au Power UP Tour, sur le toit.',
+    title: 'Enveloppe validée par Julien !',
+    text: 'Demain, le comité de pilotage doit acter le dossier.',
   },
+  { title: 'Compte rendu validé !', text: 'Ce soir, Rodolphe ouvre le Power UP Tour sur le toit.' },
   {
     title: 'NAO sauvées !',
-    text: 'L’enveloppe est signée, les négociations peuvent commencer jeudi. Et le buffet est ouvert.',
+    text: 'L’enveloppe est signée, les négociations peuvent commencer jeudi.',
   },
 ];
+
+/** @param {number} s */
+const clock = (s) => `${Math.floor(s / 60)} min ${String(Math.floor(s % 60)).padStart(2, '0')} s`;
 
 function stageWon() {
   run.tickets += sim.tickets;
@@ -229,24 +410,15 @@ function stageWon() {
   run.deaths += sim.deaths;
   const last = stage === LEVELS.length - 1;
   localStorage.setItem(SAVE_KEY, String(last ? 0 : stage + 1));
-  $('wonKicker').textContent = last
-    ? 'Fin de la partie'
-    : `Étape ${stage + 1} sur ${LEVELS.length} terminée`;
+  if (last) return credits();
+  $('wonKicker').textContent = `Étape ${stage + 1} sur ${LEVELS.length} terminée`;
   $('wonTitle').textContent = STAGE_END[stage].title;
   $('wonText').textContent = STAGE_END[stage].text;
-  /** @param {number} s */
-  const clock = (s) => `${Math.floor(s / 60)} min ${String(Math.floor(s % 60)).padStart(2, '0')} s`;
-  const rows = last
-    ? [
-        ['Tickets Swile', run.tickets],
-        ['Temps total', clock(run.time)],
-        ['Retours au badge', run.deaths],
-      ]
-    : [
-        ['Tickets Swile', sim.tickets],
-        ['Temps', clock(sim.time)],
-        ['Retours au badge', sim.deaths],
-      ];
+  const rows = [
+    ['Tickets Swile', sim.tickets],
+    ['Temps', clock(sim.time)],
+    ['Retours au badge', sim.deaths],
+  ];
   $('wonStats').replaceChildren(
     ...rows.flatMap(([k, v]) => {
       const dt = document.createElement('dt');
@@ -256,10 +428,41 @@ function stageWon() {
       return [dt, dd];
     }),
   );
-  $('next').hidden = last;
-  audio.music(last ? 'win' : null);
+  audio.music('win');
   audio.sfx('win');
   show('won');
+}
+
+function credits() {
+  const hero = CAST[heroId];
+  /** @type {Array<[string, string?]>} */
+  const lines = [
+    ['NAO Rush', 't'],
+    ['Les NAO sont sauvées !', 'h'],
+    [`${hero.name}, ${hero.title}, a fait signer l’enveloppe.`],
+    [`${run.tickets} tickets Swile · ${clock(run.time)} · ${run.deaths} retours au badge`],
+    ['Avec', 'h'],
+    ['Kévin · Directeur de Projets'],
+    ['Charline · Business Manager'],
+    ['Julien · Directeur Technologies & Services Pays de la Loire'],
+    ['Rodolphe · Directeur Région Ouest'],
+    ['Le stagiaire et ses dossiers · Le chef de projet en visio'],
+    ['Le robot aspirateur · La bonbonne d’eau · Les fauteuils à roulettes'],
+    ['Fabriqué avec', 'h'],
+    ['Un moteur WebGL2 maison · des affiches dessinées en code'],
+    ['Une musique et des bruitages synthétisés en direct'],
+    ['Merci d’avoir joué. Bonnes NAO !', 'h'],
+  ];
+  $('creditsRoll').replaceChildren(
+    ...lines.map(([text, kind]) => {
+      const el = document.createElement(kind === 't' ? 'h2' : kind === 'h' ? 'h3' : 'p');
+      el.textContent = text;
+      return el;
+    }),
+  );
+  audio.music('credits');
+  audio.sfx('sign');
+  show('credits');
 }
 
 // ---- Loop -------------------------------------------------------------------------
@@ -267,21 +470,44 @@ let last = performance.now();
 let acc = 0;
 let flash = 0;
 let wonTimer = 0;
+let idleTime = 0;
+let gameOverTimer = 0;
 /** Freeze time per event, in seconds. @type {Record<string, number>} */
 const HITSTOP = {
   hurt: 0.12,
   zap: 0.15,
   hardland: 0.08,
   bossHit: 0.14,
-  bossDone: 0.25,
+  bossDone: 0.3,
+  bossPhase: 0.25,
   meeting: 0.05,
   parry: 0.05,
+  internStun: 0.05,
 };
 let hitstop = 0;
 let dustTimer = 0;
-
 /** Lines to say once the current frame's events are handled. @type {{lines: Line[], then: () => void} | null} */
 let pending = null;
+const QUIPS = new Set([
+  'checkpoint',
+  'key',
+  'ammo',
+  'meeting',
+  'internStun',
+  'visioMute',
+  'crack',
+  'vacuumBounce',
+  'heart',
+]);
+
+/** @param {number} amount */
+const shake = (amount) => {
+  if (prefs.shake) camera.shake = Math.max(camera.shake, amount);
+};
+/** @param {number | number[]} pattern */
+const vibrate = (pattern) => {
+  if (prefs.vibrate) navigator.vibrate?.(pattern);
+};
 
 /** @param {import('./game/sim.js').SimEvent} e */
 function onEvent(e) {
@@ -291,25 +517,71 @@ function onEvent(e) {
   audio.sfx(e.type === 'throw' ? 'fire' : e.type);
   // A few frames of freeze sell the impact.
   hitstop = Math.max(hitstop, HITSTOP[e.type] ?? 0);
-  if (e.type === 'hurt' || e.type === 'hardland' || e.type === 'zap') {
-    flash = 0.35;
-    camera.shake = 1;
-    navigator.vibrate?.(e.type === 'zap' ? [40, 30, 60] : 50);
+  const boss = level.boss?.id ?? '';
+  switch (e.type) {
+    case 'hurt':
+    case 'zap':
+    case 'hardland':
+      if (prefs.flash) flash = 0.35;
+      shake(1);
+      vibrate(e.type === 'zap' ? [40, 30, 60] : 50);
+      if (sim.bossActive && !sim.bossDone && Math.random() < 0.5) say(boss, 'hurt');
+      else say(heroId, 'hurt');
+      break;
+    case 'bossHit':
+      shake(0.7);
+      vibrate(30);
+      say(Math.random() < 0.6 ? boss : heroId, 'bossHit', true);
+      break;
+    case 'collapse':
+    case 'smash':
+    case 'slam':
+    case 'rackLand':
+    case 'trapdoor':
+      shake(0.5);
+      break;
+    case 'death':
+      if (sim.gameOver) gameOverTimer = 1.1;
+      break;
+    case 'respawn':
+      say(heroId, 'respawn');
+      break;
+    case 'bossStart':
+      audio.music(boss === 'regionalDirector' ? 'bossRodolphe' : 'bossJulien');
+      audio.intensity(0.5);
+      pending = { lines: level.bossIntro ?? [], then: () => show('play') };
+      break;
+    case 'bossPhase':
+      audio.intensity(1);
+      shake(0.8);
+      Object.assign(bark, { text: level.phaseLine ?? '', who: boss, time: 2.6 });
+      break;
+    case 'consult':
+      say(boss, 'consult');
+      break;
+    case 'bossDone':
+      audio.music(level.music);
+      audio.intensity(0.3);
+      pending = { lines: level.outro, then: () => show('play') };
+      break;
+    case 'sign':
+      shake(0.4);
+      break;
+    case 'block':
+      if (e.y - sim.hero.y < 2.5) say(heroId, 'block');
+      break;
+    default:
+      if (QUIPS.has(e.type)) say(heroId, e.type);
   }
-  if (e.type === 'bossHit' || e.type === 'bossDone') {
-    camera.shake = Math.max(camera.shake, 0.7);
-    navigator.vibrate?.(30);
-  }
-  if (e.type === 'collapse' || e.type === 'smash' || e.type === 'slam')
-    camera.shake = Math.max(camera.shake, 0.5);
-  if (e.type === 'bossStart') {
-    audio.music('boss');
-    pending = { lines: level.bossIntro ?? [], then: () => show('play') };
-  }
-  if (e.type === 'bossDone') {
-    audio.music(level.music);
-    pending = { lines: level.outro, then: () => show('play') };
-  }
+}
+
+/** During a boss fight the camera frames both fighters. */
+function fightFocus() {
+  if (!sim.bossActive || sim.bossDone || screen === 'title') return null;
+  const b = sim.things.find((t) => t.kind === 'boss');
+  if (!b) return null;
+  const hx = sim.hero.x + HERO.w / 2;
+  return { x: (hx * 2 + b.x) / 3, y: sim.hero.y, facing: Math.sign(b.x - hx) * 0.4 };
 }
 
 /** @param {number} now */
@@ -318,21 +590,25 @@ function frame(now) {
   const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
   last = now;
   const t = now / 1000;
+  input.pollGamepad();
 
   if (screen === 'play') {
-    if (input.pressed('pause')) show('pause');
+    if (input.pressed('pause')) pause();
     else if (!(input.pressed('up') && sim.hero.state === 'ground' && openBoard())) {
       if (hitstop > 0) {
         hitstop -= dt;
         acc = 0;
       } else acc += dt;
-      while (acc >= DT && !pending && hitstop <= 0) {
+      while (acc >= DT && !pending && hitstop <= 0 && gameOverTimer <= 0) {
         step(sim, input.state());
         if (sim.doorOpen) view.doorT += DT;
         for (const e of sim.events) onEvent(e);
         acc -= DT;
       }
-      if (pending) {
+      if (gameOverTimer > 0 && (gameOverTimer -= dt) <= 0) {
+        audio.music('gameover');
+        show('gameover');
+      } else if (pending) {
         const p = pending;
         pending = null;
         talk(p.lines, p.then);
@@ -341,6 +617,13 @@ function frame(now) {
         // Stages without a boss end on a word with your partner at the exit.
         if (level.boss) stageWon();
         else talk(level.outro, stageWon);
+      }
+      // Standing still for a while earns a quip.
+      const h = sim.hero;
+      idleTime = h.state === 'ground' && Math.abs(h.vx) < 0.1 ? idleTime + dt : 0;
+      if (idleTime > 7) {
+        idleTime = -6;
+        say(heroId, 'idle');
       }
     }
   } else {
@@ -366,11 +649,12 @@ function frame(now) {
   }
   particles.update(dt);
   // Behind the title screen the camera drifts slowly along the stage.
+  const drift = screen === 'title' || screen === 'loading' || screen === 'credits';
   const focus = gallery
     ? { x: 3.5, y: 1.6, facing: 0 }
-    : screen === 'title' || screen === 'loading'
+    : drift
       ? { x: 10 + Math.sin(t * 0.07) * 8, y: 3, facing: 1 }
-      : { x: h.x + HERO.w / 2, y: h.y, facing: h.facing };
+      : (fightFocus() ?? { x: h.x + HERO.w / 2, y: h.y, facing: h.facing });
   const cam = camera.update(dt, renderer.width / renderer.height, focus, { w: sim.w, h: sim.h });
   renderer.render(cam, lighting, view.items(sim, t, particles.list), view.sprites, { flash });
   if (screen === 'play' || screen === 'talk') {
@@ -378,17 +662,21 @@ function frame(now) {
     hud.update(
       dt,
       sim,
-      { rooms: level.rooms, roomW: ROOM_W },
+      { rooms: level.rooms, roomW: ROOM_W, keyLabel: level.keyLabel },
       { poster: screen === 'play' ? poster?.id : undefined, board: Boolean(view.boardAt(sim)) },
     );
   }
+  updateBark(dt, cam.viewProj);
   input.endFrame();
   requestAnimationFrame(frame);
 }
 
+const params = new URLSearchParams(location.search);
 // Art review: ?gallery shows the cast close up on the title screen.
-const gallery = new URLSearchParams(location.search).has('gallery');
+const gallery = params.has('gallery');
 view.gallery = gallery;
+// Sound review: ?sounds opens a panel with every track and sound effect.
+if (params.has('sounds')) import('./app/soundtest.js').then((m) => m.mountSoundTest(audio));
 
 view.ready.then(() => {
   camera.snap(10, 6);
@@ -407,7 +695,6 @@ if (import.meta.env.DEV)
       get screen() {
         return screen;
       },
-
       input,
       /** @param {number} i */
       stage: (i) => startFrom(i),

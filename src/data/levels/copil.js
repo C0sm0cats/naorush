@@ -1,0 +1,78 @@
+/**
+ * Stage 3: the steering committee. Long meeting tables ('Y', solid) to run on,
+ * video calls sending invites, sprinklers, printers and a validated report to win.
+ * @type {import('./index.js').Level}
+ */
+export const COPIL = {
+  id: 'copil',
+  theme: 'office',
+  music: 'copil',
+  name: 'Comité de pilotage',
+  subtitle: 'Siège régional · mercredi, 10 h 00',
+  keyLabel: 'CR validé',
+  rooms: [
+    'Salle Erdre',
+    'Couloir des visios',
+    'Grande salle du COPIL',
+    'Régie',
+    'Escalier du toit',
+  ],
+  map: [
+    '####################################################################################################',
+    '#                       w   w                O       O                      w       w              #',
+    '#                                              $h$                                                 #',
+    '#                                              ###                    #                            #',
+    '#                                                                     #                            #',
+    '#                                                               $  a  #                            #',
+    '#                                #                              #######                            #',
+    '#        $ $ $                   #          $    i      $             A                            #',
+    '# S  C   YYYYY  v  P           a #d   z  C YYYYYYYYYYYYYY     c       A$$       C       K   z    E #',
+    '##########################################################LL########################################',
+    '##########################################################^^########################################',
+    '####################################################################################################',
+  ],
+  decor: [
+    { type: 'poster', id: 'copil', x: 2.4, y: 5 },
+    { type: 'poster', id: 'gofluent', x: 21.6, y: 4 },
+    { type: 'plant', x: 31.8, y: 3 },
+    { type: 'projector', x: 49.5, y: 4.4, z: -2.2 },
+    { type: 'chair', x: 60.6, y: 3, z: -1.3 },
+    { type: 'monitor', x: 66, y: 6, z: -2 },
+    { type: 'coffee', x: 74.5, y: 3 },
+    { type: 'plant', x: 78.6, y: 3 },
+    { type: 'printer', x: 86.5, y: 3 },
+    { type: 'plantSmall', x: 90.4, y: 3, z: -2 },
+  ],
+  lighting: {
+    sunDir: [-0.6, -0.4, 0.7],
+    sunColor: [1.8, 1.35, 0.95],
+    sky: [0.52, 0.55, 0.7],
+    ground: [0.26, 0.22, 0.22],
+    fog: [0.8, 0.78, 0.82],
+    fogRange: [45, 110],
+    backdrop: {
+      top: [0.3, 0.48, 0.8],
+      mid: [0.7, 0.8, 0.92],
+      bottom: [0.98, 0.9, 0.78],
+      sun: [0.2, 0.75],
+      glow: [1, 0.9, 0.7],
+    },
+  },
+  intro: [
+    {
+      who: 'partner',
+      text: 'Mercredi, 10 h : comité de pilotage. Sans compte rendu validé, Rodolphe ne pourra pas signer.',
+    },
+    {
+      who: 'hero',
+      text: 'Visios qui sonnent, sprinklers capricieux, imprimantes en rafale… un COPIL classique.',
+    },
+  ],
+  outro: [
+    {
+      who: 'partner',
+      text: 'Compte rendu validé à l’unanimité ! Rodolphe nous attend ce soir au Power UP Tour, sur le toit.',
+    },
+    { who: 'hero', text: 'Dernière ligne droite. En route pour l’Espace VIP !' },
+  ],
+};

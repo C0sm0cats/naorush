@@ -25,6 +25,14 @@ export const POSTER_HINTS = {
   'charity-day': 'Des petits gestes, de grands impacts.',
   'summer-party': 'Le buffet attendra la fin des négociations.',
   cooptation: 'Ton binôme t’attend au bout de chaque étage.',
+  'your-digital-hub': 'Le portail de tout. Ici : les bornes Chronotime sont tes amies.',
+  'my-way': 'Chaque étape compte : la suivante est juste au bout du couloir.',
+  spark: 'Les imprimantes clignotent avant de tirer : regarde le voyant.',
+  gofluent: 'Les invitations en visio volent bas : saute-les, ou réponds par un CR.',
+  primo: 'Les directeurs consultent PRIMO : c’est là qu’ils baissent la garde.',
+  copil: 'En COPIL, tout est planifié… même les pièges. Observe, puis passe.',
+  covoiturage: 'Le toit des voitures fait un excellent trottoir.',
+  'note-de-frais': 'Les cafés rendent un cœur. Les notes de frais, plus tard.',
   'espace-vip': 'Rodolphe, le Directeur Région Ouest, négocie ici. Vise pendant qu’il consulte.',
 };
 

@@ -46,22 +46,25 @@
 
     <section class="screen title" id="title">
       <div class="card">
-        <p class="kicker">Un jeu de plateforme · Open space LCP7</p>
+        <p class="kicker">Un jeu de plateforme chez Inetum</p>
         <h1>NAO <span>Rush</span></h1>
         <p class="lead">
-          Les NAO commencent jeudi. L’enveloppe des augmentations a disparu.<br />Trouve le bon de
-          commande signé et rejoins ton binôme.
+          Les NAO commencent jeudi et l’enveloppe des augmentations a disparu. Cinq étapes, deux
+          directeurs à convaincre, une seule signature.
         </p>
         <div class="heroes" role="radiogroup" aria-label="Choisis ton héros">
           <button class="hero-card" data-hero="kevin" role="radio" aria-checked="true">
-            <b>Kévin</b><small>Directeur de Projets</small><em>4 cœurs · s’accroche plus haut</em>
+            <b>Kévin</b><small>Directeur de Projets</small
+            ><em>4 cœurs · s’accroche plus haut · ses CR cassent les cartons</em>
           </button>
           <button class="hero-card pink" data-hero="charline" role="radio" aria-checked="false">
-            <b>Charline</b><small>Business Manager</small><em>Plus rapide · double saut</em>
+            <b>Charline</b><small>Business Manager</small
+            ><em>Plus rapide · double saut · CR plus rapides</em>
           </button>
         </div>
         <button class="go" id="play">Jouer</button>
         <button class="ghost" id="continue" hidden>Continuer</button>
+        <button class="ghost" id="optionsBtn">Options</button>
         <details class="controls">
           <summary>Commandes</summary>
           <ul>
@@ -81,9 +84,59 @@
         <h2>Pause café</h2>
         <button class="go" id="resume">Reprendre</button>
         <button class="ghost" id="restart">Recommencer</button>
+        <button class="ghost" id="pauseOptions">Options</button>
         <button class="ghost" id="quit">Menu principal</button>
       </div>
     </section>
+
+    <section class="screen" id="options" hidden>
+      <div class="card options">
+        <h2>Options</h2>
+        <label>Musique <input type="range" id="volMusic" min="0" max="1" step="0.05" /></label>
+        <label>Bruitages <input type="range" id="volSfx" min="0" max="1" step="0.05" /></label>
+        <label class="check"><input type="checkbox" id="optShake" /> Secousses de l’écran</label>
+        <label class="check"
+          ><input type="checkbox" id="optFlash" /> Flashs rouges quand on est touché</label
+        >
+        <label class="check"><input type="checkbox" id="optContrast" /> Contraste élevé</label>
+        <label class="check"><input type="checkbox" id="optVibrate" /> Vibrations (mobile)</label>
+        <label
+          >Boutons tactiles
+          <select id="optPad">
+            <option value="s">Petits</option>
+            <option value="m">Moyens</option>
+            <option value="l">Grands</option>
+          </select></label
+        >
+        <fieldset class="keys">
+          <legend>Touches (clique puis appuie sur une touche)</legend>
+          <div id="keyList"></div>
+          <button class="ghost small" id="keysReset">Touches par défaut</button>
+        </fieldset>
+        <button class="go" id="optionsClose">Fermer</button>
+      </div>
+    </section>
+
+    <section class="screen" id="gameover" hidden>
+      <div class="card small">
+        <p class="kicker">Plus de cœurs</p>
+        <h2>Pause forcée</h2>
+        <p class="lead" id="gameoverText">
+          Un café, une respiration, et on y retourne : ta progression jusqu’au dernier badge est
+          gardée.
+        </p>
+        <button class="go" id="goResume">Reprendre au dernier badge</button>
+        <button class="ghost" id="goRestart">Recommencer l’étape</button>
+        <button class="ghost" id="goMenu">Menu principal</button>
+      </div>
+    </section>
+
+    <section class="screen credits" id="credits" hidden>
+      <div class="roll" id="creditsRoll"></div>
+      <button class="go" id="creditsClose">Retour au menu</button>
+    </section>
+
+    <div class="bark" id="bark" aria-live="polite"></div>
 
     <section class="talk" id="talk" hidden>
       <div class="talk-box">

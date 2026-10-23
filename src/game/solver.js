@@ -1,4 +1,5 @@
 import { DT, step } from './sim.js';
+import { PERIOD, phaseOf } from './traps.js';
 
 /**
  * Breadth-first search over short input "moves" on the real simulation.
@@ -75,25 +76,33 @@ export const MOVES = [
   { name: 'fireR', frames: [I({ right: true }), I({ fire: true }), ...repeat(6, {})] },
   { name: 'fireL', frames: [I({ left: true }), I({ fire: true }), ...repeat(6, {})] },
   { name: 'wait', frames: repeat(30, {}) },
+  { name: 'pause', frames: repeat(8, {}) },
 ];
+
+const FLAGGED = new Set(['colleague', 'loose', 'bottle', 'intern', 'visio', 'crate', 'panel']);
+const PERIODIC = /** @type {Record<string, number>} */ (PERIOD);
 
 /** @param {import('./sim.js').Sim} s */
 function key(s) {
   const h = s.hero;
   const flags = s.things
-    .filter((t) => t.kind === 'colleague' || t.kind === 'loose' || t.kind === 'bottle')
-    .map((t) => t.state[0])
+    .filter((t) => FLAGGED.has(t.kind))
+    .map((t) => (t.alive ? t.state[0] : 'x'))
     .join('');
-  // Lifts and the boss move on their own: their phase matters only once they are in play.
+  // Things that move on their own matter only once they are near (or in play).
+  const near = (/** @type {{x: number}} */ t) => Math.abs(t.x - h.x) < 7;
   const moving = s.things
-    .filter(
-      (t) => (t.kind === 'lift' && Math.abs(t.x - h.x) < 6) || (t.kind === 'boss' && s.bossActive),
-    )
-    .map((t) =>
-      t.kind === 'lift' ? Math.round(t.y * 2) : `${t.state}${t.hp}${Math.floor(t.t * 4)}`,
-    )
+    .map((t) => {
+      if (t.kind === 'lift' && near(t)) return Math.round(t.y * 2);
+      if (t.kind === 'boss' && s.bossActive) return `${t.state}${t.hp}${Math.floor(t.t * 4)}`;
+      if (t.kind in PERIODIC && near(t))
+        return Math.floor((phaseOf(s, t, PERIODIC[t.kind]) / PERIODIC[t.kind]) * 8);
+      if ((t.kind === 'chair' || t.kind === 'vacuum') && near(t))
+        return `${t.state[0]}${Math.round(t.x)}`;
+      return '';
+    })
     .join('');
-  return `${Math.round(h.x * 2)},${Math.round(h.y * 2)},${h.state},${s.hasKey ? 1 : 0},${s.doorOpen ? 1 : 0},${Math.min(s.ammo, 3)},${flags},${moving}`;
+  return `${Math.round(h.x * 2)},${Math.round(h.y * 2)},${h.state},${h.hearts},${s.hasKey ? 1 : 0},${s.doorOpen ? 1 : 0},${Math.min(s.ammo, 3)},${flags},${moving}`;
 }
 
 /**

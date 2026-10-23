@@ -66,16 +66,21 @@ export const PALETTE = {
  * @param {import('../data/levels/index.js').Decor[]} decor
  * @param {string[]} [map] Level rows, used for tile styles ('M' meeting room, 'B' paper reams,
  *   'V' server rack, 'H' HVAC unit).
- * @param {'office'|'datacenter'|'rooftop'} [theme]
+ * @param {'office'|'datacenter'|'rooftop'|'parking'} [theme]
  */
 export function buildOffice(sim, decor, map = [], theme = 'office') {
   const roof = theme === 'rooftop';
   const dc = theme === 'datacenter';
+  const park = theme === 'parking';
+  const concrete = vary(rgb('#7b818c'), 0.08, 2);
   /** Floor finish: carpet in offices, raised-floor tiles in the server hall. */
-  const floorTop = dc
-    ? /** @param {number} x @param {number} _y @param {number} z */ (x, _y, z) =>
-        ((x >> 2) + (z >> 2)) % 2 ? rgb('#a3acb7') : rgb('#8d96a2')
-    : vary(PALETTE.carpet, 0.14, 2);
+  const floorTop = park
+    ? /** @param {number} x @param {number} y @param {number} z */ (x, y, z) =>
+        x % (3 * V) < 1 && z > zv(-1.8) ? rgb('#e9e6dc') : vary(rgb('#3b3f47'), 0.18, 1)(x, y, z)
+    : dc
+      ? /** @param {number} x @param {number} _y @param {number} z */ (x, _y, z) =>
+          ((x >> 2) + (z >> 2)) % 2 ? rgb('#a3acb7') : rgb('#8d96a2')
+      : vary(PALETTE.carpet, 0.14, 2);
   /** Visual style of a solid tile, from the level's ASCII map. */
   /** @param {number} c @param {number} r */
   const styleAt = (c, r) => map[sim.h - 1 - r]?.[c] ?? '#';
@@ -112,6 +117,22 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
       for (let y = 0; y < sy; y++) {
         const ty = y / V;
         const inWindowBand = ty > 4.2 && ty < 9.6;
+        if (park) {
+          // Bare concrete, a blue level band and hazard stripes along the floor.
+          const stripe = ty > 3.05 && ty < 3.45;
+          const band = ty > 5.6 && ty < 6.1;
+          const c = stripe
+            ? (x >> 2) % 2
+              ? rgb('#f2c230')
+              : rgb('#1c1c1c')
+            : band
+              ? rgb('#2f6fd6')
+              : panel && inWindowBand
+                ? rgb('#8e949e')
+                : vary(rgb('#6b717c'), 0.07, 3)(x, y, 0);
+          vol.box(x, y, 0, x + 1, y + 1, 3, c);
+          continue;
+        }
         if (dc && inWindowBand && !panel) {
           // Server hall: rows of racks behind glass, LEDs blinking in the dark.
           const col = x % (V * 2);
@@ -144,7 +165,7 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
           vol.box(x, y, 3, x + 1, y + 1, 4, PALETTE.accent, MAT.EMISSIVE);
       }
     }
-  if (!roof) {
+  if (!roof && !park) {
     // Panel edges: thin dark reveals so the wall panels read as built.
     for (const [a, b] of panels)
       for (const x of [a, b - 1]) vol.box(x, 4.2 * V, 3, x + 1, 9.6 * V, 4, PALETTE.mullion);
@@ -159,6 +180,8 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
       const x0 = c * V,
         y0 = r * V;
       const style = t === TILE.SOLID ? styleAt(c, r) : '';
+      // Parked cars and meeting tables are drawn as props over their tiles.
+      if (style === 'Q' || style === 'Y') continue;
       if (style === 'V') {
         // Server rack: graphite case, drive bays and status LEDs.
         vol.box(x0, y0, zv(-2.2), x0 + V, y0 + V, sz - 1, rgb('#232a36'));
@@ -236,7 +259,7 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
         };
         const above = at(0, 1),
           below = at(0, -1);
-        const isCeiling = r === sim.h - 1 && !roof;
+        const isCeiling = (r === sim.h - 1 && !roof) || (park && r >= 9 && above === TILE.SOLID);
         const isBase = r <= 1 || (roof && r <= 2);
         const floats = below !== TILE.SOLID && below !== TILE.HAZARD && !isCeiling;
         const depthBack = isCeiling || isBase ? 0 : zv(-2.4);
@@ -268,6 +291,12 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
             r === 1 ? vary(PALETTE.concrete, 0.05, V) : rgb('#1a2132'),
           );
           if (r === 1) vol.box(x0, y0, sz - 1, x0 + V, y0 + 1, sz, rgb('#5c6170'));
+        } else if (floats && park) {
+          // Concrete slab with a painted safety edge.
+          vol.box(x0, y0, depthBack, x0 + V, y0 + V, sz, concrete);
+          vol.box(x0, y0, sz - 1, x0 + V, y0 + 2, sz, (x) =>
+            (x >> 1) % 2 ? rgb('#f2c230') : rgb('#1c1c1c'),
+          );
         } else if (floats) {
           // Free-standing run of filing cabinets: drawers with chrome handles.
           vol.box(x0, y0, depthBack, x0 + V, y0 + V, sz - 1, rgb('#c9cfd6'));
@@ -293,7 +322,15 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
           }
         } else if (!isCeiling) {
           // Walls and pillars: painted plaster with a darker skirting.
-          vol.box(x0, y0, depthBack, x0 + V, y0 + V, sz, vary(rgb('#bdb4a6'), 0.05, V));
+          vol.box(
+            x0,
+            y0,
+            depthBack,
+            x0 + V,
+            y0 + V,
+            sz,
+            park ? concrete : vary(rgb('#bdb4a6'), 0.05, V),
+          );
           if (above !== TILE.SOLID && roof) {
             // Raised roof terrace: gravel and a pale parapet.
             vol.box(x0, y0 + V - 2, depthBack, x0 + V, y0 + V, sz, vary(rgb('#7d7a75'), 0.2, 1));
@@ -307,23 +344,25 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
           vol.box(x0, y0 + V - 2, sz - 1, x0 + V, y0 + V - 1, sz, PALETTE.accent);
         }
         if (isCeiling) {
-          vol.box(x0, y0, 0, x0 + V, y0 + V, sz, rgb('#1a2132'));
-          vol.box(x0, y0, 0, x0 + V, y0 + 1, sz, PALETTE.ceiling);
-          if (c % 5 === 2) {
+          vol.box(x0, y0, 0, x0 + V, y0 + V, sz, park ? concrete : rgb('#1a2132'));
+          vol.box(x0, y0, 0, x0 + V, y0 + 1, sz, park ? rgb('#8a909a') : PALETTE.ceiling);
+          const lamp = park ? c % 6 === 3 && below !== TILE.SOLID : c % 5 === 2;
+          if (lamp) {
+            // Office ceiling lights, cool tubes in the server room, neon in the car park.
             vol.box(
-              x0 + 1,
+              x0 + (park ? 0 : 1),
               y0 - 1,
-              zv(-1.6),
-              x0 + V - 1,
+              zv(park ? -1.2 : -1.6),
+              x0 + V - (park ? 0 : 1),
               y0,
-              zv(0.4),
-              dc ? rgb('#bfe9ff') : PALETTE.lamp,
+              zv(park ? -0.6 : 0.4),
+              dc ? rgb('#bfe9ff') : park ? rgb('#e6f6ff') : PALETTE.lamp,
               MAT.EMISSIVE,
             );
             lights.push({
               pos: [c + 0.5, r - 0.6, -0.6],
-              radius: 6.5,
-              color: dc ? [0.3, 0.45, 0.6] : [0.55, 0.5, 0.42],
+              radius: park ? 7 : 6.5,
+              color: dc ? [0.3, 0.45, 0.6] : park ? [0.42, 0.5, 0.62] : [0.55, 0.5, 0.42],
             });
           }
         }

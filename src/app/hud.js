@@ -56,7 +56,7 @@ export class Hud {
   /**
    * @param {number} dt
    * @param {import('../game/sim.js').Sim} sim
-   * @param {{rooms: string[], roomW: number}} level
+   * @param {{rooms: string[], roomW: number, keyLabel: string}} level
    * @param {{poster?: string, board?: boolean}} near
    */
   update(dt, sim, level, near) {
@@ -74,6 +74,7 @@ export class Hud {
     this.tickets.textContent = String(sim.tickets);
     this.ammo.textContent = String(sim.ammo);
     this.key.classList.toggle('have', sim.hasKey);
+    if (this.key.textContent !== level.keyLabel) this.key.textContent = level.keyLabel;
     const room = Math.min(
       level.rooms.length - 1,
       Math.floor((sim.hero.x + HERO.w / 2) / level.roomW),
