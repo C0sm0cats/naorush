@@ -230,11 +230,19 @@ export function heroPose(sim, t, still) {
       bob: Math.abs(Math.cos(ph)) * 1.2 * a,
     };
   }
-  // Waiting around: a glance at the watch, then at the phone.
+  // Waiting around, each in character: Kévin checks his watch (the planning!) and
+  // taps his foot; Charline checks her phone (a client!) and stretches.
   if (still > 4) {
-    const k = (still - 4) % 6;
-    if (k < 2.5) return { ...idlePose(t), armL: 1.6, armSpread: -0.4, head: 0.35 };
-    if (k > 3.5) return { ...idlePose(t), armR: 1.3, head: 0.3 };
+    const k = (still - 4) % 7;
+    if (sim.heroId === 'kevin') {
+      if (k < 2.5) return { ...idlePose(t), armL: 1.6, armSpread: -0.4, head: 0.35, mood: 'focus' };
+      if (k > 4)
+        return { ...idlePose(t), legR: Math.max(0, Math.sin(t * 9)) * 0.3, armL: 0.3, armR: 0.3 };
+    } else {
+      if (k < 3) return { ...idlePose(t), armR: 1.4, head: 0.3, mood: 'happy' };
+      if (k > 4.5)
+        return { ...idlePose(t), armL: 2.9, armR: 2.9, armSpread: 0.2, lean: -0.15, squash: -0.05 };
+    }
   }
   return idlePose(t);
 }
