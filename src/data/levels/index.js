@@ -44,6 +44,7 @@ import { TS } from './ts.js';
  *   theme: 'office'|'datacenter'|'rooftop'|'parking',
  *   music: 'office'|'datacenter'|'rooftop'|'parking'|'copil',
  *   keyLabel: string,
+ *   keyModel?: 'key'|'badge'|'envelope',
  *   phaseLine?: string,
  *   tips?: Array<{x0: number, x1: number, keys: string, touch: string}>,
  *   name: string,

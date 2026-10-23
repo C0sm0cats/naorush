@@ -44,6 +44,32 @@ export function buildThings(gl) {
       },
       6.5,
     ),
+    // Visitor badge on a lanyard.
+    badge: model(
+      10,
+      16,
+      2,
+      (v) => {
+        v.box(4, 10, 0, 6, 16, 1, rgb('#ff4f9a'));
+        v.box(0, 0, 0, 10, 10, 2, rgb('#fbfbf6'), MAT.GLOSSY);
+        v.box(1, 6, 1, 9, 9, 2, rgb('#27408b'));
+        v.box(2, 1, 1, 5, 5, 2, rgb('#c6f432'));
+        v.box(6, 2, 1, 9, 3, 2, rgb('#9aa3ad'));
+      },
+      8,
+    ),
+    // The NAO envelope: white, pink flap, lime seal.
+    envelope: model(
+      14,
+      10,
+      2,
+      (v) => {
+        v.box(0, 0, 0, 14, 10, 2, rgb('#fffaf0'), MAT.GLOSSY);
+        for (let i = 0; i < 7; i++) v.box(i, 9 - i, 1, 14 - i, 10 - i, 2, rgb('#ff4f9a'));
+        v.box(6, 3, 1, 8, 5, 2, rgb('#c6f432'), MAT.EMISSIVE);
+      },
+      5,
+    ),
     loose: model(
       16,
       3,

@@ -196,6 +196,8 @@ export class LevelView {
     }
     /** @type {Sprite[]} */
     this.sprites = [];
+    /** What the stage's key item looks like. */
+    this.keyMesh = this.things[level.keyModel ?? 'key'];
     const exit = sim.things.find((t) => t.kind === 'exit');
     /** Where the stage ends, for the exit sign. */
     this.exitAt = exit ? { x: exit.x, y: exit.y } : null;
@@ -419,7 +421,7 @@ export class LevelView {
           break;
         case 'key':
           at(
-            things.key,
+            this.keyMesh,
             th.x,
             th.y + Math.sin(t * 2.5) * 0.1,
             0,

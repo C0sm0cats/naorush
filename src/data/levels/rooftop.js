@@ -9,6 +9,7 @@ export const ROOFTOP = {
   music: 'rooftop',
   name: 'Power UP Tour',
   subtitle: 'Rooftop, Nantes · mercredi, 18 h 30',
+  keyModel: 'envelope',
   keyLabel: 'Signature',
   open: true,
   rooms: [

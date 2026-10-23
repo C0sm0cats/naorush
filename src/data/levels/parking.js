@@ -9,6 +9,7 @@ export const PARKING = {
   music: 'parking',
   name: 'Parking B2',
   subtitle: 'La Chapelle-sur-Erdre · lundi, 8 h 40',
+  keyModel: 'badge',
   keyLabel: 'Badge',
   rooms: ['Entrée B2', 'Allée des archives', 'Places visiteurs', 'Ascenseurs'],
   map: [

@@ -10,6 +10,7 @@ export const TS = {
   music: 'datacenter',
   name: 'Technologies & Services',
   subtitle: 'Pays de la Loire · mardi, 14 h 03',
+  keyModel: 'envelope',
   keyLabel: 'Enveloppe',
   rooms: ['Accueil T&S', 'Salle serveurs', 'Passerelle', 'Supervision', 'Bureau de Julien'],
   map: [
