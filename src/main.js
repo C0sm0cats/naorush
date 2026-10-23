@@ -65,7 +65,23 @@ const lightingFor = (l) => {
 };
 let lighting = lightingFor(level);
 /** Totals over the whole run, for the credits. */
-const run = { tickets: 0, time: 0, deaths: 0, secrets: 0 };
+/** Best result of each story stage in this run (a replay overwrites it), for the credits. */
+const runStages =
+  /** @type {Record<number, {tickets: number, time: number, deaths: number, secrets: number}>} */ ({});
+const run = {
+  get tickets() {
+    return Object.values(runStages).reduce((n, s) => n + s.tickets, 0);
+  },
+  get time() {
+    return Object.values(runStages).reduce((n, s) => n + s.time, 0);
+  },
+  get deaths() {
+    return Object.values(runStages).reduce((n, s) => n + s.deaths, 0);
+  },
+  get secrets() {
+    return Object.values(runStages).reduce((n, s) => n + s.secrets, 0);
+  },
+};
 
 /** @type {Screen} */
 let screen = 'loading';
@@ -88,7 +104,9 @@ function show(next) {
   for (const id of OVERLAYS) $(id).hidden = (id === 'reader' ? 'reading' : id) !== next;
   input.clear();
   if (next === 'title') $('play').focus();
-  if (next === 'won') $(stage < CAMPAIGN - 1 ? 'next' : 'menu').focus();
+  if (next === 'won') $($('next').hidden ? 'menu' : 'next').focus();
+  // Nothing keeps focus during play, so Space never presses a button by accident.
+  if (next === 'play') /** @type {HTMLElement | null} */ (document.activeElement)?.blur();
   if (next === 'gameover') $('goResume').focus();
   if (next === 'pause') $('resume').focus();
 }
@@ -114,6 +132,9 @@ async function loadStage(i) {
   view.doorT = 0;
   camera.snap(sim.hero.x, sim.hero.y + 3);
   hud.lastHearts = -1;
+  pending = null;
+  hitstop = 0;
+  wonTimer = 0;
   hud.clearToast();
   bubbles.clear();
   gameOverTimer = 0;
@@ -211,7 +232,7 @@ $('dailyBtn').onclick = () => {
 const startFrom = (i) => {
   challenge = null;
   audio.sfx('confirm');
-  if (i === 0) Object.assign(run, { tickets: 0, time: 0, deaths: 0, secrets: 0 });
+  if (i === 0) for (const k of Object.keys(runStages)) delete runStages[Number(k)];
   beginStage(i, i === 0 && screen === 'title' ? PROLOGUE : []);
 };
 const toMenu = () => {
@@ -228,7 +249,11 @@ const toMenu = () => {
 $('play').onclick = () => startFrom(0);
 $('continue').onclick = () => startFrom(saved());
 $('next').onclick = () => startFrom(stage + 1);
-$('again').onclick = $('restart').onclick = $('goRestart').onclick = () => startFrom(stage);
+// Replaying keeps the daily challenge going.
+$('again').onclick =
+  $('restart').onclick =
+  $('goRestart').onclick =
+    () => (challenge ? beginStage(stage) : startFrom(stage));
 $('resume').onclick = () => {
   audio.sfx('resume');
   show('play');
@@ -260,7 +285,7 @@ muteBtn.onclick = () => {
   syncMute();
 };
 syncMute();
-const refreshOptions = setupOptions(audio, input, () => (sim.assist = prefs.assist));
+const refreshOptions = setupOptions(audio, input, () => (sim.assist = prefs.assist && !challenge));
 function openOptions() {
   optionsFrom = screen;
   refreshOptions();
@@ -285,7 +310,11 @@ $('trophiesBtn').onclick = () => {
 };
 $('trophiesClose').onclick = () => show('title');
 $('bonusBtn').onclick = () => startFrom(CAMPAIGN);
-$('optionsClose').onclick = () => show(optionsFrom === 'pause' ? 'pause' : 'title');
+function closeOptions() {
+  input.capture = null;
+  show(optionsFrom === 'pause' ? 'pause' : 'title');
+}
+$('optionsClose').onclick = closeOptions;
 // Switching tabs or apps pauses the game and the sound.
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
@@ -332,10 +361,13 @@ const STAGE_END = [
 const clock = (s) => `${Math.floor(s / 60)} min ${String(Math.floor(s % 60)).padStart(2, '0')} s`;
 
 function stageWon() {
-  run.tickets += sim.tickets;
-  run.time += sim.time;
-  run.deaths += sim.deaths;
-  run.secrets += sim.secrets;
+  if (!challenge && stage < CAMPAIGN)
+    runStages[stage] = {
+      tickets: sim.tickets,
+      time: sim.time,
+      deaths: sim.deaths,
+      secrets: sim.secrets,
+    };
   const last = stage === CAMPAIGN - 1 && !challenge;
   const bonus = stage >= CAMPAIGN || Boolean(challenge);
   if (!bonus) store(SAVE_KEY, last ? 0 : stage + 1);
@@ -624,6 +656,37 @@ function adaptResolution(dt) {
   }
 }
 
+/**
+ * Menus with keyboard and gamepad: up/down move between buttons, confirm presses the
+ * focused one, Escape (or Start) backs out. Returns true when it handled the input.
+ */
+function menuInput() {
+  const overlay = screen === 'title' ? $('title') : screen === 'reading' ? $('reader') : $(screen);
+  if (!overlay) return false;
+  if (input.pressed('pause')) {
+    if (screen === 'options') closeOptions();
+    else if (screen === 'trophies') show('title');
+    else if (screen === 'credits') toMenu();
+    else return false;
+    return true;
+  }
+  const buttons = /** @type {HTMLElement[]} */ ([
+    ...overlay.querySelectorAll('button, input, select'),
+  ]).filter((b) => b.offsetParent !== null);
+  const at = buttons.indexOf(/** @type {HTMLElement} */ (document.activeElement));
+  const step = input.pressed('down') ? 1 : input.pressed('up') ? -1 : 0;
+  if (step && buttons.length) {
+    buttons[(at + step + buttons.length) % buttons.length].focus();
+    audio.sfx('menuMove');
+    return true;
+  }
+  if (input.pressed('confirm') && at >= 0) {
+    buttons[at].click();
+    return true;
+  }
+  return false;
+}
+
 /** @param {number} now */
 function frame(now) {
   // rAF timestamps can precede `last` on the first frame: never step backwards.
@@ -674,7 +737,9 @@ function frame(now) {
   } else {
     acc = 0;
     if ((screen === 'pause' || screen === 'reading') && input.pressed('pause')) show('play');
-    else if (screen === 'title' && input.pressed('confirm')) startFrom(0);
+    else if (screen !== 'talk' && menuInput()) {
+      /* handled */
+    } else if (screen === 'title' && input.pressed('confirm')) startFrom(0);
     else if (screen === 'talk') {
       dialogue.update(dt);
       if (input.pressed('confirm') || input.pressed('jump') || input.pressed('fire'))

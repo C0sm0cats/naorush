@@ -31,7 +31,15 @@ export class Trophies {
     this.onUnlock = onUnlock;
     /** @type {{got: Record<string, boolean>, counts: Record<string, number>, secrets: string[]}} */
     this.data = { got: {}, counts: {}, secrets: [] };
-    Object.assign(this.data, load(KEY, {}));
+    const saved = /** @type {{got?: unknown, counts?: unknown, secrets?: unknown}} */ (
+      load(KEY, {})
+    );
+    // Keep only well-formed parts of an older or damaged save.
+    if (saved.got && typeof saved.got === 'object')
+      this.data.got = /** @type {Record<string, boolean>} */ (saved.got);
+    if (saved.counts && typeof saved.counts === 'object')
+      this.data.counts = /** @type {Record<string, number>} */ (saved.counts);
+    if (Array.isArray(saved.secrets)) this.data.secrets = saved.secrets;
     /** Hits taken during the current boss fight. */
     this.bossHits = 0;
   }

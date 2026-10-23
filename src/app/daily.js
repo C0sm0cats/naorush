@@ -41,6 +41,6 @@ export function dailyChallenge(stages, date = new Date()) {
  * @param {import('../game/sim.js').Sim} sim @param {Challenge} c
  */
 export function applyTwist(sim, c) {
-  if (c.twist.id === 'oneHeart') sim.hero.hearts = 1;
+  if (c.twist.id === 'oneHeart') sim.hero.hearts = sim.maxHearts = 1;
   if (c.twist.id === 'noAmmo') sim.ammo = 0;
 }

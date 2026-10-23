@@ -193,6 +193,8 @@ export function createSim(def, heroId) {
     gameOver: false,
     /** Relaxed mode: obstacles knock you back but cost no heart. */
     assist: false,
+    /** Heart capacity (the daily challenge can lower it). */
+    maxHearts: stats.hearts,
     jumpHeld: false,
     /** @type {SimEvent[]} */
     events: [],
@@ -211,7 +213,7 @@ function respawn(s) {
     vy: 0,
     state: 'ground',
     stateTime: 0,
-    hearts: s.gameOver ? s.stats.hearts : hero.hearts,
+    hearts: s.gameOver ? s.maxHearts : hero.hearts,
     invuln: 1.5,
     fallFrom: s.checkpoint.y,
   });
@@ -542,7 +544,7 @@ function stepThings(s) {
         if (t.state === 'gone') {
           if (t.t > 5) t.state = 'idle';
         } else if (alive && touches(hero, t, 0.4, 0.5)) {
-          if (t.kind === 'cup' && hero.hearts >= s.stats.hearts) break;
+          if (t.kind === 'cup' && hero.hearts >= s.maxHearts) break;
           const arena = s.boss && t.x > s.boss.arena[0];
           if (arena) Object.assign(t, { state: 'gone', t: 0 });
           else t.alive = false;

@@ -90,7 +90,7 @@ export function setupOptions(audio, input, changed) {
         row.onclick = () => {
           key.textContent = '…';
           input.capture = (code) => {
-            input.bind(action, code);
+            if (code) input.bind(action, code);
             audio.sfx('select');
             renderKeys();
           };
@@ -106,6 +106,7 @@ export function setupOptions(audio, input, changed) {
 
   /** Fills the form with the current settings before showing it. */
   return function refresh() {
+    input.capture = null;
     field('volMusic').value = String(audio.getVolume('music'));
     field('volSfx').value = String(audio.getVolume('sfx'));
     for (const [id, k] of SWITCHES) field(id).checked = prefs[k];

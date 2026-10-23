@@ -13,7 +13,9 @@ export function load(key, fallback) {
     const raw = localStorage.getItem(key);
     if (raw === null) return fallback;
     const value = JSON.parse(raw);
-    return value && typeof value === typeof fallback ? value : fallback;
+    const same =
+      typeof value === typeof fallback && Array.isArray(value) === Array.isArray(fallback);
+    return value !== null && same ? value : fallback;
   } catch {
     return fallback;
   }

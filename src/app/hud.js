@@ -95,7 +95,7 @@ export class Hud {
    * @param {{poster?: string, board?: boolean, tip?: string}} near
    */
   update(dt, sim, level, near) {
-    const max = sim.stats.hearts;
+    const max = sim.maxHearts;
     if (sim.hero.hearts !== this.lastHearts) {
       this.lastHearts = sim.hero.hearts;
       this.hearts.classList.toggle('low', sim.hero.hearts === 1 && max > 1);

@@ -63,17 +63,26 @@ export class Input {
     this.capture = null;
     /** Gamepad buttons held last frame. @type {Set<string>} */
     this.padHeld = new Set();
+    /** Gamepad buttons to ignore until released. @type {Set<string>} */
+    this.padBlocked = new Set();
 
     addEventListener('keydown', (/** @type {KeyboardEvent} */ e) => {
       if (this.capture) {
         e.preventDefault();
         const done = this.capture;
         this.capture = null;
-        done(e.code);
+        // Escape cancels the rebinding instead of taking Escape's place.
+        done(e.code === 'Escape' ? '' : e.code);
         return;
       }
       const k = this.actionFor(e.code);
       if (!k) return;
+      // On a focused menu button, Enter and Space press the button as usual.
+      const target = /** @type {HTMLElement | null} */ (e.target);
+      if ((k === 'confirm' || k === 'jump') && target?.closest?.('button, input, select, summary'))
+        return;
+      // Sliders and lists keep their own arrow keys.
+      if ((k === 'left' || k === 'right') && target?.closest?.('input, select')) return;
       e.preventDefault();
       if (!e.repeat) this.taps.add(k);
       this.held.add(k);
@@ -179,6 +188,9 @@ export class Input {
     if (b(2) || b(1)) now.add('fire');
     if (b(9)) now.add('pause');
     if (b(0)) now.add('confirm');
+    // Buttons still held across a screen change are ignored until released.
+    for (const k of this.padBlocked) if (!now.has(k)) this.padBlocked.delete(k);
+    for (const k of this.padBlocked) now.delete(k);
     for (const k of now) if (!this.padHeld.has(k)) this.taps.add(k);
     for (const k of this.padHeld) if (!now.has(k)) this.held.delete(k);
     for (const k of now) this.held.add(k);
@@ -211,5 +223,6 @@ export class Input {
   clear() {
     this.held.clear();
     this.taps.clear();
+    this.padBlocked = new Set(this.padHeld);
   }
 }

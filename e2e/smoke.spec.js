@@ -40,3 +40,15 @@ test('the title offers the daily challenge and the trophies', async ({ page }) =
   await page.locator('#trophiesClose').click();
   await expect(page.locator('body')).toHaveAttribute('data-screen', 'title');
 });
+
+test('menus work with the keyboard alone', async ({ page }) => {
+  await page.goto('./');
+  await expect(page.locator('body')).toHaveAttribute('data-screen', 'title', { timeout: 60000 });
+  // Play → Défi du jour → Options → Trophées.
+  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowDown');
+  await expect(page.locator('#trophiesBtn')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('body')).toHaveAttribute('data-screen', 'trophies');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('body')).toHaveAttribute('data-screen', 'title');
+});
