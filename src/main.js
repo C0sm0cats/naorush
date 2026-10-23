@@ -151,7 +151,7 @@ async function beginStage(i, before = []) {
   void banner.offsetWidth;
   banner.classList.add('show');
   audio.music(level.music);
-  audio.intensity(0.2);
+  setIntensity(0.2);
   // While the intro plays, the camera glides from the exit back to the start.
   flyover = { t: 0, from: Math.max(sim.hero.x, sim.w - 12) };
   camera.snap(flyover.from, 6);
@@ -222,6 +222,7 @@ let challenge = null;
 const today = () => dailyChallenge(CAMPAIGN);
 $('dailyBtn').onclick = () => {
   challenge = today();
+  updateContinue();
   heroId = challenge.hero;
   for (const c of document.querySelectorAll('.hero-card'))
     c.setAttribute('aria-checked', String(/** @type {HTMLElement} */ (c).dataset.hero === heroId));
@@ -240,7 +241,7 @@ const toMenu = () => {
   challenge = null;
   updateContinue();
   audio.music('title');
-  audio.intensity(0);
+  setIntensity(0);
   loadStage(stage).then(() => {
     showcase();
     show('title');
@@ -410,6 +411,7 @@ function stageWon() {
     }),
   );
   $('share').textContent = 'Partager mon score';
+  setIntensity(0.2);
   audio.music('win');
   audio.sfx('win');
   show('won');
@@ -444,6 +446,7 @@ function credits() {
       return el;
     }),
   );
+  setIntensity(0.2);
   audio.music('credits');
   audio.sfx('sign');
   view.party = (level.boss?.arena[0] ?? 80) + 8;
@@ -573,11 +576,11 @@ function onEvent(e) {
       break;
     case 'bossStart':
       audio.music(boss === 'regionalDirector' ? 'bossRodolphe' : 'bossJulien');
-      audio.intensity(0.5);
+      setIntensity(0.5);
       pending = { lines: level.bossIntro ?? [], then: () => show('play') };
       break;
     case 'bossPhase':
-      audio.intensity(1);
+      setIntensity(1);
       shake(0.8);
       bubbles.line(boss, level.phaseLine ?? '');
       break;
@@ -586,7 +589,7 @@ function onEvent(e) {
       break;
     case 'bossDone':
       audio.music(level.music);
-      audio.intensity(0.3);
+      setIntensity(0.3);
       pending = { lines: level.outro, then: () => show('play') };
       break;
     case 'sign':
@@ -618,8 +621,13 @@ const SHOWCASE_LIGHT = {
 /** Puts the hero in the title-screen spot (the run restarts from S anyway). */
 const showcase = () => Object.assign(sim.hero, { x: SHOWCASE.x, y: SHOWCASE.y, facing: -1, vx: 0 });
 
-/** Current music intensity outside boss fights. */
+/** Current music intensity (dynamic layers). */
 let musicLevel = 0.2;
+/** @param {number} v */
+function setIntensity(v) {
+  musicLevel = v;
+  audio.intensity(v);
+}
 /** Stage intro camera glide. @type {{t: number, from: number} | null} */
 let flyover = null;
 
@@ -716,6 +724,7 @@ function frame(now) {
         acc -= DT;
       }
       if (gameOverTimer > 0 && (gameOverTimer -= dt) <= 0) {
+        setIntensity(0.2);
         audio.music('gameover');
         show('gameover');
       } else if (pending) {
@@ -731,7 +740,7 @@ function frame(now) {
       // The music tenses up on the last heart (boss fights set their own level).
       if (!sim.bossActive || sim.bossDone) {
         const want = sim.hero.hearts <= 1 && sim.maxHearts > 1 ? 0.7 : 0.25;
-        if (want !== musicLevel) audio.intensity((musicLevel = want));
+        if (want !== musicLevel) setIntensity(want);
       }
       // The partner waiting at the exit reacts when you arrive.
       const exit = sim.things.find((t) => t.kind === 'exit');

@@ -26,7 +26,9 @@ function hash(text) {
  * @returns {Challenge}
  */
 export function dailyChallenge(stages, date = new Date()) {
-  const key = date.toISOString().slice(0, 10);
+  // Local calendar day: the challenge changes at midnight where the player is.
+  const pad = (/** @type {number} */ n) => String(n).padStart(2, '0');
+  const key = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
   const h = hash(`nao-${key}`);
   return {
     key,

@@ -232,7 +232,7 @@ export function heroPose(sim, t, still) {
   }
   // Waiting around, each in character: Kévin checks his watch (the planning!) and
   // taps his foot; Charline checks her phone (a client!) and stretches.
-  if (still > 4) {
+  if (still > 4 && !(sim.bossActive && !sim.bossDone)) {
     const k = (still - 4) % 7;
     if (sim.heroId === 'kevin') {
       if (k < 2.5) return { ...idlePose(t), armL: 1.6, armSpread: -0.4, head: 0.35, mood: 'focus' };
