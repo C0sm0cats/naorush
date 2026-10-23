@@ -280,7 +280,10 @@ export class Renderer {
     this.sky = program(gl, SKY_VS, SKY_FS);
     this.spriteProg = program(gl, SPRITE_VS, SPRITE_FS);
     this.skyVao = gl.createVertexArray();
-    this.shadowSize = 2048;
+    /** Render scale (dynamic resolution), 0.5–1. */
+    this.scale = 1;
+    // Phones get a lighter shadow map.
+    this.shadowSize = matchMedia('(pointer: coarse)').matches ? 1024 : 2048;
     this.shadowTex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, this.shadowTex);
     gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, this.shadowSize, this.shadowSize);
@@ -299,7 +302,7 @@ export class Renderer {
   }
 
   resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2) * this.scale;
     const w = Math.max(1, Math.round(this.canvas.clientWidth * dpr));
     const h = Math.max(1, Math.round(this.canvas.clientHeight * dpr));
     if (w !== this.canvas.width || h !== this.canvas.height) {

@@ -675,12 +675,31 @@ function fightFocus() {
   return { x: (hx * 2 + b.x) / 3, y: sim.hero.y - touchLift, facing: Math.sign(b.x - hx) * 0.4 };
 }
 
+/** Dynamic resolution: drop the render scale when frames run long, raise it back when there is headroom. */
+const perf = { avg: 1 / 60, slow: 0, fast: 0 };
+/** @param {number} dt */
+function adaptResolution(dt) {
+  // Automated captures run on a software renderer: keep full resolution there.
+  if (navigator.webdriver || dt <= 0 || dt >= 0.1) return;
+  perf.avg += (dt - perf.avg) * 0.05;
+  perf.slow = perf.avg > 1 / 50 ? perf.slow + dt : 0;
+  perf.fast = perf.avg < 1 / 58 ? perf.fast + dt : 0;
+  if (perf.slow > 2 && renderer.scale > 0.55) {
+    renderer.scale = Math.max(0.55, renderer.scale * 0.85);
+    perf.slow = 0;
+  } else if (perf.fast > 6 && renderer.scale < 1) {
+    renderer.scale = Math.min(1, renderer.scale * 1.08);
+    perf.fast = 0;
+  }
+}
+
 /** @param {number} now */
 function frame(now) {
   // rAF timestamps can precede `last` on the first frame: never step backwards.
   const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
   last = now;
   const t = now / 1000;
+  adaptResolution(dt);
   input.pollGamepad();
 
   if (screen === 'play') {
