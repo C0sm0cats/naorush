@@ -85,7 +85,7 @@ export class Hud {
     document.body.classList.toggle('boss', fight);
     if (fight && sim.boss) {
       const boss = sim.things.find((t) => t.kind === 'boss');
-      this.bossName.textContent = CAST[sim.boss.id].name;
+      this.bossName.textContent = `${CAST[sim.boss.id].name} · ${CAST[sim.boss.id].title}`;
       this.bossHp.style.width = `${(100 * (boss?.hp ?? 0)) / sim.boss.hp}%`;
     }
     if (this.toastTime > 0 && (this.toastTime -= dt) <= 0) this.toastEl.classList.remove('show');

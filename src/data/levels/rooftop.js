@@ -65,7 +65,7 @@ export const ROOFTOP = {
     },
   },
   intro: [
-    { who: 'hero', text: 'Le Power UP Tour sur le rooftop… tout le Grand Ouest est là !' },
+    { who: 'hero', text: 'Le Power UP Tour sur le rooftop… toute la Région Ouest est là !' },
     {
       who: 'partner',
       text: 'Attention aux trous dans la toiture. La nacelle du laveur de vitres monte à la terrasse haute.',
@@ -73,7 +73,7 @@ export const ROOFTOP = {
     { who: 'hero', text: 'Dernière signature, et les NAO peuvent commencer.' },
   ],
   bossIntro: [
-    { who: 'boss', text: 'Ma signature ? Avec plaisir… si vous suivez le rythme du Grand Ouest !' },
+    { who: 'boss', text: 'Ma signature ? Avec plaisir… si vous suivez le rythme de la région !' },
     { who: 'hint', text: 'Saute par-dessus les ondes de choc, et vise pendant qu’il consulte.' },
   ],
   outro: [

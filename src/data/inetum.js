@@ -19,20 +19,19 @@ export const POSTER_HINTS = {
   'success-factors': 'Objectif du jour : arriver au rooftop.',
   gcomp: 'La rémunération se négocie… avec des arguments.',
   'power-up': 'Les ascenseurs montent et descendent : saute au bon moment.',
-  'power-up-tour': 'Le séminaire du Grand Ouest, sur le toit. Tout le monde y est.',
+  'power-up-tour': 'Le séminaire de la Région Ouest, sur le toit. Tout le monde y est.',
   'lets-connect': 'Les collègues en call sont partout. Garde des CR.',
   'gen-ai': 'Astuce IA : un CR lancé détruit les slides KPI en vol.',
   'charity-day': 'Des petits gestes, de grands impacts.',
   'summer-party': 'Le buffet attendra la fin des négociations.',
   cooptation: 'Ton binôme t’attend au bout de chaque étage.',
-  'espace-vip': 'Le Directeur Région Grand Ouest négocie ici. Vise pendant qu’il consulte.',
+  'espace-vip': 'Rodolphe, le Directeur Région Ouest, négocie ici. Vise pendant qu’il consulte.',
 };
 
+/** Whiteboard artwork for the two heroes; the bosses' boards are drawn in code. */
 export const WHITEBOARDS = {
   projectDirector: 'signage/Whiteboard02.webp',
   businessManager: 'signage/Whiteboard01.webp',
-  techServicesDirector: 'signage/Whiteboard03.webp',
-  regionalDirector: 'signage/Whiteboard04.webp',
 };
 
 /** Desk artwork with the crop of the visible drawing. */
@@ -44,16 +43,17 @@ export const DESKS = {
     crop: [0, 0, 2093, 705],
   },
   regionalDirector: {
-    file: 'signage/bureau-directeur-region-pays-loire.webp',
+    file: 'signage/bureau-directeur-region-ouest.webp',
     crop: [203, 4, 1766, 704],
   },
 };
 
+/** Door plaques: image files for the heroes, text drawn in code for the bosses. */
 export const PLAQUES = {
   projectDirector: 'plaques/projectDirector.png',
   businessManager: 'plaques/businessManager.png',
-  techServicesDirector: 'plaques/techServicesDirector.png',
-  regionalDirector: 'plaques/regionalDirector.png',
+  techServicesDirector: ['DIRECTEUR TECHNOLOGIES SERVICES', 'PAYS DE LA LOIRE'],
+  regionalDirector: ['DIRECTEUR', 'RÉGION OUEST'],
 };
 
 /** Poster display height in tiles; width follows the artwork shape. */

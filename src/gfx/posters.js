@@ -1618,7 +1618,7 @@ const SPECS = {
   'power-up-tour': {
     title: 'Power UP Tour',
     shape: 'banner',
-    kicker: 'Séminaire · Région Grand Ouest',
+    kicker: 'Séminaire · Région Ouest',
     lines: ['POWER UP TOUR'],
     colors: [C.lime],
     shadow: C.blue,
@@ -1710,7 +1710,7 @@ const SPECS = {
   'espace-vip': {
     title: 'Espace VIP',
     shape: 'banner',
-    kicker: 'Direction Région Grand Ouest',
+    kicker: 'Direction Région Ouest',
     lines: ['ESPACE VIP'],
     colors: [C.sun],
     shadow: mix(C.pink, C.navy, 0.4),

@@ -10,12 +10,12 @@ Les NAO commencent jeudi et l’enveloppe des augmentations a disparu. Avec Kév
 
 ## Les trois étapes
 
-|                                     |                                                                                                                                                                                                 |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ![Open space LCP7](docs/stage1.jpg) | **1. Open space LCP7.** Dalles qui s’effondrent, câbles à nu, bonbonne d’eau en roue libre et un collègue en call qui bloque le couloir. Trouve le bon de commande signé.                       |
-| ![Salle serveurs](docs/stage2.jpg)  | **2. Technologies & Services.** Nacelles au-dessus d’une fosse à câbles, baies serveurs à escalader, passerelle fragile. Au bout : le Directeur Technologies & Services Pays de la Loire.       |
-| ![Duel](docs/boss.jpg)              | **Les boss.** Ils lancent des slides KPI. Quand ils consultent PRIMO, leur garde tombe : c’est le moment de leur envoyer un compte rendu.                                                       |
-| ![Rooftop](docs/stage3.jpg)         | **3. Power UP Tour.** Le toit au coucher du soleil, des trous dans la toiture et la nacelle du laveur de vitres. Le Directeur Région Grand Ouest attend à l’Espace VIP… avec des ondes de choc. |
+|                                     |                                                                                                                                                                                                   |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ![Open space LCP7](docs/stage1.jpg) | **1. Open space LCP7.** Dalles qui s’effondrent, câbles à nu, bonbonne d’eau en roue libre et un collègue en call qui bloque le couloir. Trouve le bon de commande signé.                         |
+| ![Salle serveurs](docs/stage2.jpg)  | **2. Technologies & Services.** Nacelles au-dessus d’une fosse à câbles, baies serveurs à escalader, passerelle fragile. Au bout : Julien, Directeur Technologies & Services Pays de la Loire.    |
+| ![Duel](docs/boss.jpg)              | **Les boss.** Ils lancent des slides KPI. Quand ils consultent PRIMO, leur garde tombe : c’est le moment de leur envoyer un compte rendu.                                                         |
+| ![Rooftop](docs/stage3.jpg)         | **3. Power UP Tour.** Le toit au coucher du soleil, des trous dans la toiture et la nacelle du laveur de vitres. Rodolphe, Directeur Région Ouest, attend à l’Espace VIP… avec des ondes de choc. |
 
 ![Dialogue](docs/dialogue.jpg)
 

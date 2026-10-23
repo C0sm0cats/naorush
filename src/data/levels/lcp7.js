@@ -77,7 +77,7 @@ export const LCP7 = {
   outro: [
     {
       who: 'partner',
-      text: 'Le bon de commande ! Par contre l’enveloppe est partie chez la direction Technologies & Services.',
+      text: 'Le bon de commande ! Par contre l’enveloppe est partie chez Julien, à Technologies & Services.',
     },
     { who: 'hero', text: 'Alors on descend en salle serveurs. Prends une polaire.' },
   ],

@@ -51,6 +51,17 @@ const EFFECTS = {
   key: { n: 24, colors: [GOLD, WHITE], speed: 4, up: 3, life: 0.9 },
   door: { n: 16, colors: [LIME], speed: 3, up: 2, life: 0.7 },
   meeting: { n: 18, colors: [WHITE, BLUE], speed: 3, up: 2, life: 0.7 },
+  dust: {
+    n: 2,
+    colors: [[0.85, 0.85, 0.9]],
+    speed: 0.8,
+    up: 0.4,
+    life: 0.35,
+    gravity: 1,
+    size: 0.07,
+  },
+  trail: { n: 1, colors: [WHITE], speed: 0.3, up: 0, life: 0.22, gravity: 0, size: 0.05 },
+  step: { n: 4, colors: [WHITE], speed: 1.2, up: 0.3, life: 0.3, gravity: 2 },
   poof: { n: 6, colors: [WHITE], speed: 1.5, up: 0.5, life: 0.3, gravity: 2 },
   win: { n: 90, colors: [PINK, LIME, BLUE, GOLD], speed: 7, up: 5, life: 1.6 },
 };

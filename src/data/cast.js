@@ -45,8 +45,8 @@ export const CAST = {
     prop: 'phone',
   },
   techServicesDirector: {
-    name: 'Directeur Technologies & Services',
-    title: 'Pays de la Loire',
+    name: 'Julien',
+    title: 'Directeur Technologies & Services Pays de la Loire',
     scale: 1.06,
     skin: '#e9bc98',
     hair: '#4a4f5a',
@@ -60,8 +60,8 @@ export const CAST = {
     prop: 'tablet',
   },
   regionalDirector: {
-    name: 'Directeur Région Grand Ouest',
-    title: 'Grand Ouest',
+    name: 'Rodolphe',
+    title: 'Directeur Région Ouest',
     scale: 1.1,
     skin: '#f3c9a6',
     hair: '#c4622d',

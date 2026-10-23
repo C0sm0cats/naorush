@@ -373,7 +373,12 @@ export class Renderer {
     gl.uniform1f(m.u.uFogFar, lit.fogRange[1]);
     gl.uniform3fv(m.u.uEye, camera.eye);
     gl.uniform1f(m.u.uFlash, fx.flash ?? 0);
-    const lights = lit.lights.slice(0, 8);
+    // The shader takes 8 point lights: keep the ones nearest to what the camera looks at.
+    const near = (/** @type {{pos: number[]}} */ l) => Math.hypot(l.pos[0] - fx0, l.pos[1] - fy0);
+    const lights =
+      lit.lights.length > 8
+        ? [...lit.lights].sort((a, b) => near(a) - near(b)).slice(0, 8)
+        : lit.lights;
     gl.uniform1i(m.u.uLights, lights.length);
     if (lights.length) {
       gl.uniform4fv(

@@ -1,12 +1,10 @@
-import { assetUrl } from './app/assets.js';
 import { Audio } from './app/audio.js';
 import { Camera } from './app/camera.js';
 import { Particles } from './app/fx.js';
 import { Hud } from './app/hud.js';
 import { Input } from './app/input.js';
-import { LevelView } from './app/scene.js';
+import { LevelView, boardUrl } from './app/scene.js';
 import { CAST } from './data/cast.js';
-import { WHITEBOARDS } from './data/inetum.js';
 import { LEVELS, ROOM_W } from './data/levels/index.js';
 import { Renderer } from './gfx/renderer.js';
 import { DT, HERO, createSim, step } from './game/sim.js';
@@ -204,9 +202,7 @@ for (const type of ['pointerdown', 'keydown'])
 function openBoard() {
   const board = view.boardAt(sim);
   if (!board?.id) return false;
-  /** @type {HTMLImageElement} */ ($('readerImg')).src = assetUrl(
-    WHITEBOARDS[/** @type {keyof typeof WHITEBOARDS} */ (board.id)],
-  );
+  /** @type {HTMLImageElement} */ ($('readerImg')).src = boardUrl(board.id);
   show('reading');
   return true;
 }
@@ -271,17 +267,38 @@ let last = performance.now();
 let acc = 0;
 let flash = 0;
 let wonTimer = 0;
+/** Freeze time per event, in seconds. @type {Record<string, number>} */
+const HITSTOP = {
+  hurt: 0.12,
+  zap: 0.15,
+  hardland: 0.08,
+  bossHit: 0.14,
+  bossDone: 0.25,
+  meeting: 0.05,
+  parry: 0.05,
+};
+let hitstop = 0;
+let dustTimer = 0;
+
 /** Lines to say once the current frame's events are handled. @type {{lines: Line[], then: () => void} | null} */
 let pending = null;
 
 /** @param {import('./game/sim.js').SimEvent} e */
 function onEvent(e) {
   hud.event(e);
+  view.event(e, sim.time);
   particles.emit(e.type, e.x, e.y);
   audio.sfx(e.type === 'throw' ? 'fire' : e.type);
+  // A few frames of freeze sell the impact.
+  hitstop = Math.max(hitstop, HITSTOP[e.type] ?? 0);
   if (e.type === 'hurt' || e.type === 'hardland' || e.type === 'zap') {
     flash = 0.35;
     camera.shake = 1;
+    navigator.vibrate?.(e.type === 'zap' ? [40, 30, 60] : 50);
+  }
+  if (e.type === 'bossHit' || e.type === 'bossDone') {
+    camera.shake = Math.max(camera.shake, 0.7);
+    navigator.vibrate?.(30);
   }
   if (e.type === 'collapse' || e.type === 'smash' || e.type === 'slam')
     camera.shake = Math.max(camera.shake, 0.5);
@@ -305,8 +322,11 @@ function frame(now) {
   if (screen === 'play') {
     if (input.pressed('pause')) show('pause');
     else if (!(input.pressed('up') && sim.hero.state === 'ground' && openBoard())) {
-      acc += dt;
-      while (acc >= DT && !pending) {
+      if (hitstop > 0) {
+        hitstop -= dt;
+        acc = 0;
+      } else acc += dt;
+      while (acc >= DT && !pending && hitstop <= 0) {
         step(sim, input.state());
         if (sim.doorOpen) view.doorT += DT;
         for (const e of sim.events) onEvent(e);
@@ -334,8 +354,17 @@ function frame(now) {
   }
 
   flash = Math.max(0, flash - dt * 1.5);
-  particles.update(dt);
   const h = sim.hero;
+  if (screen === 'play' && hitstop <= 0) {
+    // Running dust and paper trails behind thrown CRs.
+    if (h.state === 'ground' && Math.abs(h.vx) > 4 && (dustTimer -= dt) <= 0) {
+      dustTimer = 0.09;
+      particles.emit('dust', h.x + HERO.w / 2 - h.facing * 0.25, h.y + 0.05);
+    }
+    for (const th of sim.things)
+      if (th.kind === 'cr' && th.alive) particles.emit('trail', th.x, th.y);
+  }
+  particles.update(dt);
   // Behind the title screen the camera drifts slowly along the stage.
   const focus = gallery
     ? { x: 3.5, y: 1.6, facing: 0 }

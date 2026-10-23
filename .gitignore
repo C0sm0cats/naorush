@@ -2,6 +2,7 @@ node_modules/
 dist/
 smoke/
 .plan/
+prompt/
 .serena/
 .DS_Store
 *.log

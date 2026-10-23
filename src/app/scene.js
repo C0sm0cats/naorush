@@ -7,6 +7,7 @@ import {
   WHITEBOARD_W,
   posterWidth,
 } from '../data/inetum.js';
+import { renderPlaque, renderWhiteboard } from '../gfx/boards.js';
 import { renderPoster } from '../gfx/posters.js';
 import { buildProps } from '../gfx/props.js';
 import { buildCharacter, poseCharacter } from '../gfx/characters.js';
@@ -16,10 +17,34 @@ import { buildThings } from '../gfx/things.js';
 import { MAT, Volume, meshVolume } from '../gfx/voxels.js';
 import { buildOffice, buildSkyline } from '../gfx/world-builder.js';
 import { HERO, TILE } from '../game/sim.js';
-import { crop, loadImage } from './assets.js';
+import { assetUrl, crop, loadImage } from './assets.js';
 
 const IDENTITY = translation(0, 0, 0);
 const GALLERY = ['kevin', 'charline', 'mathis', 'techServicesDirector', 'regionalDirector'];
+
+/**
+ * Whiteboard artwork: the heroes' boards are images, the bosses' are drawn in code.
+ * @param {string} id
+ * @returns {Promise<HTMLImageElement | HTMLCanvasElement | null>}
+ */
+async function boardArt(id) {
+  if (id in WHITEBOARDS)
+    return loadImage(WHITEBOARDS[/** @type {keyof typeof WHITEBOARDS} */ (id)]);
+  return /** @type {HTMLCanvasElement} */ (
+    renderWhiteboard(/** @type {'techServicesDirector'|'regionalDirector'} */ (id))
+  );
+}
+
+/** URL of a whiteboard for the full-screen reader. @param {string} id */
+export function boardUrl(id) {
+  if (id in WHITEBOARDS) return assetUrl(WHITEBOARDS[/** @type {keyof typeof WHITEBOARDS} */ (id)]);
+  BOARD_URLS[id] ??= /** @type {HTMLCanvasElement} */ (
+    renderWhiteboard(/** @type {'techServicesDirector'|'regionalDirector'} */ (id))
+  ).toDataURL('image/webp', 0.92);
+  return BOARD_URLS[id];
+}
+/** @type {Record<string, string>} */
+const BOARD_URLS = {};
 
 /** Meshes shared by every level, built once per GL context. */
 const SHARED = new WeakMap();
@@ -88,6 +113,8 @@ export class LevelView {
     this.ready = this.loadArtwork();
     this.doorT = 0;
     this.gallery = false;
+    this.landAt = -1;
+    this.jumpAt = -1;
   }
 
   /**
@@ -97,6 +124,15 @@ export class LevelView {
    */
   prop(id, x, y, z) {
     return { mesh: this.props[id], model: translation(x, y, z) };
+  }
+
+  /**
+   * Remembers landings and take-offs for squash and stretch.
+   * @param {import('../game/sim.js').SimEvent} e @param {number} time Simulation time.
+   */
+  event(e, time) {
+    if (e.type === 'land' || e.type === 'step' || e.type === 'hardland') this.landAt = time;
+    if (e.type === 'jump' || e.type === 'airjump') this.jumpAt = time;
   }
 
   /** Frees the level's own GPU resources (shared meshes stay). */
@@ -115,7 +151,7 @@ export class LevelView {
         const z = d.front ? 1.43 : -2.6;
         this.sprites.push(new Sprite(gl, art, [d.x, d.y + 0.9, z, posterWidth(d.id), POSTER_H]));
       } else if (d.type === 'whiteboard' && d.id) {
-        const img = await loadImage(WHITEBOARDS[/** @type {keyof typeof WHITEBOARDS} */ (d.id)]);
+        const img = await boardArt(d.id);
         if (img)
           this.sprites.push(
             new Sprite(gl, img, [d.x, d.y + 0.75, -2.6, WHITEBOARD_W, WHITEBOARD_W * 0.75]),
@@ -130,7 +166,11 @@ export class LevelView {
             new Sprite(gl, art, [d.x, d.y, -1.75, w, (w * art.height) / art.width]),
           );
         }
-        const plaque = await loadImage(PLAQUES[id]);
+        const src = PLAQUES[id];
+        const plaque =
+          typeof src === 'string'
+            ? await loadImage(src)
+            : /** @type {HTMLCanvasElement} */ (renderPlaque(src));
         if (plaque)
           this.sprites.push(
             new Sprite(gl, plaque, [
@@ -432,6 +472,20 @@ export class LevelView {
     );
   }
 
+  /**
+   * Squash on landing, stretch on take-off.
+   * @param {Pose} pose @param {number} time
+   * @returns {Pose}
+   */
+  squashed(pose, time) {
+    const land = time - this.landAt,
+      jump = time - this.jumpAt;
+    let k = pose.squash ?? 0;
+    if (land >= 0 && land < 0.14) k += 0.16 * (1 - land / 0.14);
+    if (jump >= 0 && jump < 0.12) k -= 0.1 * (1 - jump / 0.12);
+    return { ...pose, squash: k };
+  }
+
   /** @param {DrawItem[]} items @param {Sim} sim @param {number} t */
   drawHero(items, sim, t) {
     const h = sim.hero;
@@ -445,11 +499,19 @@ export class LevelView {
     }
     if (h.invuln > 0 && h.state !== 'dead' && Math.floor(t * 14) % 2 === 0) return;
     items.push(
-      ...poseCharacter(this.cast[sim.heroId], hx, hy, 0, h.facing, heroPose(sim, t), {
-        scale: CAST[sim.heroId].scale,
-        turn: h.state === 'hang' || h.state === 'climb' ? 1.45 : 1.0,
-        rim: 0.55,
-      }),
+      ...poseCharacter(
+        this.cast[sim.heroId],
+        hx,
+        hy,
+        0,
+        h.facing,
+        this.squashed(heroPose(sim, t), sim.time),
+        {
+          scale: CAST[sim.heroId].scale,
+          turn: h.state === 'hang' || h.state === 'climb' ? 1.45 : 1.0,
+          rim: 0.55,
+        },
+      ),
     );
   }
 }

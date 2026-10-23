@@ -13,8 +13,6 @@ export const TILE = Object.freeze({ EMPTY: 0, SOLID: 1, LOOSE: 2, HAZARD: 3, DOO
 export const HERO = Object.freeze({
   w: 0.62,
   h: 1.62,
-  /** How far above the feet the hands reach when grabbing. */
-  reach: 2.15,
 });
 
 /** @typedef {'kevin'|'charline'} HeroId */
@@ -26,6 +24,8 @@ export const HERO_STATS = {
     accel: 42,
     jump: 11.6,
     airJumps: 0,
+    /** How far above the feet the hands reach when grabbing. */
+    reach: 2.4,
     climb: 0.42,
     hearts: 4,
     ammo: 6,
@@ -36,6 +36,7 @@ export const HERO_STATS = {
     accel: 52,
     jump: 11.0,
     airJumps: 1,
+    reach: 2.1,
     climb: 0.36,
     hearts: 3,
     ammo: 5,
@@ -304,16 +305,17 @@ function respawn(s) {
  * @param {Sim} s @param {Hero} hero
  */
 function findLedge(s, hero) {
-  const hand = hero.y + HERO.reach;
-  const col = hero.facing > 0 ? Math.floor(hero.x + HERO.w + 0.12) : Math.floor(hero.x - 0.12);
+  const reach = s.stats.reach;
+  const hand = hero.y + reach;
+  const col = hero.facing > 0 ? Math.floor(hero.x + HERO.w + 0.2) : Math.floor(hero.x - 0.2);
   const gap = hero.facing > 0 ? col - (hero.x + HERO.w) : hero.x - (col + 1);
-  if (gap > 0.25) return null;
+  if (gap > 0.35) return null;
   for (let r = Math.floor(hand) - 1; r <= Math.floor(hand) + 1; r++) {
     const top = r + 1;
-    if (Math.abs(hand - top) > 0.45) continue;
+    if (Math.abs(hand - top) > 0.55) continue;
     if (!solid(s, col, r) || solid(s, col, r + 1) || solid(s, col, r + 2)) continue;
     // Room to hang: the hero's own column must be clear at hang height.
-    const hangY = top - HERO.reach;
+    const hangY = top - reach;
     if (blocked(s, hero.x, hangY, HERO.w, HERO.h)) continue;
     return { x: hero.facing > 0 ? col : col + 1, y: top };
   }
@@ -482,9 +484,18 @@ export function step(s, input) {
     hero.vy = 0;
     if (/** @type {string} */ (hero.state) !== 'dead') hero.state = 'ground';
   } else {
-    hero.y = Math.ceil(ny + HERO.h) - HERO.h - 1e-4;
-    hero.vy = 0;
-    emit(s, 'bonk', hero.x + HERO.w / 2, hero.y + HERO.h);
+    // Corner correction: clipping a ceiling edge by a little slides you past it.
+    const nudge = [0.1, -0.1, 0.2, -0.2, 0.3, -0.3].find(
+      (dx) => !blocked(s, hero.x + dx, ny, HERO.w, HERO.h),
+    );
+    if (nudge !== undefined) {
+      hero.x += nudge;
+      hero.y = ny;
+    } else {
+      hero.y = Math.ceil(ny + HERO.h) - HERO.h - 1e-4;
+      hero.vy = 0;
+      emit(s, 'bonk', hero.x + HERO.w / 2, hero.y + HERO.h);
+    }
   }
   if (hero.state === 'air') hero.fallFrom = Math.max(hero.fallFrom, hero.y);
 
@@ -495,7 +506,7 @@ export function step(s, input) {
       hero.state = 'hang';
       hero.stateTime = 0;
       hero.ledge = ledge;
-      hero.y = ledge.y - HERO.reach;
+      hero.y = ledge.y - s.stats.reach;
       hero.x = hero.facing > 0 ? ledge.x - HERO.w - 0.02 : ledge.x + 0.02;
       hero.vx = hero.vy = 0;
       hero.airJumps = st.airJumps;

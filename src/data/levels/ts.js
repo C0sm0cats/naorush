@@ -1,5 +1,5 @@
 /**
- * Stage 2: the Technologies & Services Pays de la Loire floor — server room,
+ * Stage 2: the Technologies & Services floor — server room,
  * window-cleaning lifts over a cable pit, and the director's office.
  * 'V' are server racks (solid).
  * @type {import('./index.js').Level}
@@ -10,7 +10,7 @@ export const TS = {
   music: 'datacenter',
   name: 'Technologies & Services',
   subtitle: 'Pays de la Loire · mardi, 14 h 03',
-  rooms: ['Accueil T&S', 'Salle serveurs', 'Passerelle', 'Bureau du Directeur T&S'],
+  rooms: ['Accueil T&S', 'Salle serveurs', 'Passerelle', 'Bureau de Julien'],
   map: [
     '################################################################################',
     '#                                         MMMMMM        F     G                #',
@@ -68,7 +68,7 @@ export const TS = {
       who: 'partner',
       text: 'Salle serveurs : 19 °C et des kilomètres de câbles. Garde des CR sous la main.',
     },
-    { who: 'hero', text: 'Le Directeur Technologies & Services a l’enveloppe ?' },
+    { who: 'hero', text: 'Julien, le Directeur Technologies & Services, a l’enveloppe ?' },
     { who: 'partner', text: 'Oui. Il la validera… si on lui apporte des arguments. Avec des KPI.' },
   ],
   bossIntro: [
@@ -78,7 +78,7 @@ export const TS = {
   outro: [
     {
       who: 'boss',
-      text: 'Ces comptes rendus sont impeccables. Je valide ! Pour la signature finale, voyez le Directeur Région Grand Ouest.',
+      text: 'Ces comptes rendus sont impeccables. Je valide ! Pour la signature finale, voyez Rodolphe, le Directeur Région Ouest.',
     },
     {
       who: 'boss',
