@@ -842,10 +842,6 @@ body.boss .toast {
     transform: translateY(40px);
   }
 }
-#creditsClose {
-  width: auto;
-  padding: 12px 30px;
-}
 
 /* Accessibility: high contrast */
 body.contrast .card,
@@ -986,4 +982,18 @@ body[data-pad='l'] .touch .big {
     font-size: 12px;
     gap: 6px;
   }
+}
+
+.credits-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.credits-actions button {
+  width: auto;
+  padding: 12px 24px;
+}
+#credits .ghost {
+  color: #fff;
+  background: #ffffff1f;
 }

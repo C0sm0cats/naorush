@@ -325,6 +325,7 @@ function stageWon() {
       return [dt, dd];
     }),
   );
+  $('share').textContent = 'Partager mon score';
   audio.music('win');
   audio.sfx('win');
   show('won');
@@ -364,6 +365,37 @@ function credits() {
   view.party = (level.boss?.arena[0] ?? 80) + 8;
   show('credits');
 }
+
+// ---- Sharing ------------------------------------------------------------------------
+const GAME_URL = 'https://c0sm0cats.github.io/naorush/';
+
+/** Shares a score with the system share sheet, or copies it. @param {string} text @param {HTMLElement} button */
+async function share(text, button) {
+  const message = `${text}\nÀ toi de jouer : ${GAME_URL}`;
+  try {
+    if (navigator.share) await navigator.share({ title: 'NAO Rush', text: message });
+    else {
+      await navigator.clipboard.writeText(message);
+      button.textContent = 'Copié ! Colle-le dans Teams';
+    }
+  } catch {
+    /* Sharing cancelled. */
+  }
+}
+$('share').onclick = () => {
+  const hero = CAST[heroId].name;
+  share(
+    `J’ai fini « ${level.name} » dans NAO Rush avec ${hero} en ${clock(sim.time)}, ` +
+      `${sim.tickets} tickets Swile et ${sim.secrets}/${sim.secretTotal} secrets !`,
+    $('share'),
+  );
+};
+$('creditsShare').onclick = () =>
+  share(
+    `J’ai sauvé les NAO dans NAO Rush avec ${CAST[heroId].name} : ${run.tickets} tickets Swile, ` +
+      `${run.secrets} secrets, ${clock(run.time)}. Julien et Rodolphe ont signé !`,
+    $('creditsShare'),
+  );
 
 // ---- Loop -------------------------------------------------------------------------
 let last = performance.now();
