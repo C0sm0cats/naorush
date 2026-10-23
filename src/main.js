@@ -534,6 +534,8 @@ let flash = 0;
 let wonTimer = 0;
 let idleTime = 0;
 let gameOverTimer = 0;
+/** Events from traps that run on their own, wherever the hero is. */
+const AMBIENT = new Set(['telegraph', 'drawerOut', 'sprayOn', 'paperShot', 'poof', 'invite']);
 /** Events that reuse another event's sound. @type {Record<string, string>} */
 const SFX_ALIAS = { throw: 'fire', archive: 'crack' };
 /** Freeze time per event, in seconds. @type {Record<string, number>} */
@@ -576,6 +578,8 @@ const vibrate = (pattern) => {
 
 /** @param {import('./game/sim.js').SimEvent} e */
 function onEvent(e) {
+  // Clockwork traps tick all over the stage: only the ones in view make noise.
+  if (AMBIENT.has(e.type) && Math.abs(e.x - sim.hero.x) > 12) return;
   hud.event(e);
   trophies.event(e, sim, level.id);
   view.event(e, sim.time);
