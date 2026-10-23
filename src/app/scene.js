@@ -453,6 +453,8 @@ export class LevelView {
                 armR: 1.2 - Math.sin(t * 14) * 0.08,
                 bob: -5,
                 head: 0.25,
+                mood: 'focus',
+                blink: blinkAt(t + th.x),
               }
             : {
                 legL: Math.sin(ph) * 0.6,
@@ -576,7 +578,7 @@ export class LevelView {
               -0.1,
               stunned ? 1 : Math.sign(th.vx) || 1,
               stunned
-                ? { legL: 1.5, legR: 1.5, armL: 0.9, armR: 1.4, bob: -6, head: 0.2 }
+                ? { legL: 1.5, legR: 1.5, armL: 0.9, armR: 1.4, bob: -6, head: 0.2, mood: 'happy' }
                 : {
                     legL: Math.sin(ph) * 0.9,
                     legR: -Math.sin(ph) * 0.9,
@@ -613,7 +615,7 @@ export class LevelView {
               -0.5,
               dir,
               muted
-                ? { legL: 0, legR: 0, armL: 0.1, armR: 0.1, head: 0.35 }
+                ? { legL: 0, legR: 0, armL: 0.1, armR: 0.1, head: 0.35, mood: 'ouch' }
                 : th.state === 'ring'
                   ? { legL: 0, legR: 0, armL: 0.4, armR: 2.6, head: -0.2 }
                   : { ...idlePose(t), armR: 1.2 + Math.sin(t * 5) * 0.4 },
