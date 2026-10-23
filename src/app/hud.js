@@ -85,7 +85,7 @@ export class Hud {
    * @param {number} dt
    * @param {import('../game/sim.js').Sim} sim
    * @param {{rooms: string[], roomW: number, keyLabel: string}} level
-   * @param {{poster?: string, board?: boolean}} near
+   * @param {{poster?: string, board?: boolean, tip?: string}} near
    */
   update(dt, sim, level, near) {
     const max = sim.stats.hearts;
@@ -119,12 +119,14 @@ export class Hud {
     }
     if (this.toastTime > 0 && (this.toastTime -= dt) <= 0) this.toastEl.classList.remove('show');
     // Contextual hint: read a whiteboard, or what a poster means in play.
-    const hint = near.board
-      ? '↑ Lire le tableau'
-      : near.poster
-        ? (POSTER_HINTS[/** @type {keyof typeof POSTER_HINTS} */ (near.poster)] ?? '')
-        : '';
-    const title = near.poster && !near.board ? posterTitle(near.poster) : '';
+    const hint = near.tip
+      ? near.tip
+      : near.board
+        ? '↑ Lire le tableau'
+        : near.poster
+          ? (POSTER_HINTS[/** @type {keyof typeof POSTER_HINTS} */ (near.poster)] ?? '')
+          : '';
+    const title = near.tip ? 'Astuce' : near.poster && !near.board ? posterTitle(near.poster) : '';
     if (hint + title !== this.lastPoster) {
       this.lastPoster = hint + title;
       this.hintEl.innerHTML = '';

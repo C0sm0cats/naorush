@@ -44,6 +44,7 @@ import { TS } from './ts.js';
  *   music: 'office'|'datacenter'|'rooftop'|'parking'|'copil',
  *   keyLabel: string,
  *   phaseLine?: string,
+ *   tips?: Array<{x0: number, x1: number, keys: string, touch: string}>,
  *   name: string,
  *   subtitle: string,
  *   rooms: string[],

@@ -613,6 +613,14 @@ function onEvent(e) {
   }
 }
 
+const touch = matchMedia('(pointer: coarse)').matches;
+/** Tutorial tip for where the hero stands, worded for keyboard or touch. */
+function tipAt() {
+  const x = sim.hero.x;
+  const tip = level.tips?.find((t) => x >= t.x0 && x <= t.x1);
+  return tip ? (touch ? tip.touch : tip.keys) : undefined;
+}
+
 /** Where the hero poses behind the title card. */
 const SHOWCASE = { x: 6.6, y: 3 };
 const SHOWCASE_LIGHT = {
@@ -721,7 +729,11 @@ function frame(now) {
       dt,
       sim,
       { rooms: level.rooms, roomW: ROOM_W, keyLabel: level.keyLabel },
-      { poster: screen === 'play' ? poster?.id : undefined, board: Boolean(view.boardAt(sim)) },
+      {
+        poster: screen === 'play' ? poster?.id : undefined,
+        board: Boolean(view.boardAt(sim)),
+        tip: screen === 'play' ? tipAt() : undefined,
+      },
     );
   }
   updateBark(dt, cam.viewProj);

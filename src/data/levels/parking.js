@@ -25,6 +25,38 @@ export const PARKING = {
     '#####################################^^#######^^^###############################',
     '################################################################################',
   ],
+  tips: [
+    {
+      x0: 5.5,
+      x1: 7.5,
+      keys: 'Espace pour sauter sur le toit de la voiture.',
+      touch: 'SAUT pour monter sur le toit de la voiture.',
+    },
+    {
+      x0: 12,
+      x1: 14.5,
+      keys: 'Saute contre le mur : tu t’accroches au rebord. ↑ pour grimper, ↓ pour lâcher.',
+      touch: 'Saute contre le mur : tu t’accroches au rebord. ▲ pour grimper, ▼ pour lâcher.',
+    },
+    {
+      x0: 28.5,
+      x1: 31.5,
+      keys: 'X lance un compte rendu : le collègue en call partira en réunion.',
+      touch: 'CR lance un compte rendu : le collègue en call partira en réunion.',
+    },
+    {
+      x0: 34.5,
+      x1: 36.5,
+      keys: 'Câbles à nu : saute par-dessus la fosse.',
+      touch: 'Câbles à nu : saute par-dessus la fosse.',
+    },
+    {
+      x0: 54,
+      x1: 57,
+      keys: 'Le robot aspirateur fait tremplin : saute dessus !',
+      touch: 'Le robot aspirateur fait tremplin : saute dessus !',
+    },
+  ],
   decor: [
     { type: 'poster', id: 'covoiturage', x: 3.2, y: 4 },
     { type: 'pillarSign', x: 13, y: 3 },
