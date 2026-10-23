@@ -1,5 +1,5 @@
 import { TILE } from '../game/sim.js';
-import { POSTERS, POSTER_H, WHITEBOARD_W } from '../data/inetum.js';
+import { POSTER_H, WHITEBOARD_W, posterWidth } from '../data/inetum.js';
 import { MAT, Volume, meshVolume, rgb } from './voxels.js';
 
 /**
@@ -91,7 +91,7 @@ export function buildOffice(sim, decor, map = []) {
           ? WHITEBOARD_W
           : d.type === 'desk'
             ? 4.2
-            : POSTER_H * POSTERS[/** @type {string} */ (d.id)].aspect;
+            : posterWidth(/** @type {string} */ (d.id));
       return [Math.floor((d.x - 0.35) * V), Math.ceil((d.x + w + 0.35) * V)];
     });
   /** @param {number} x */
@@ -259,10 +259,7 @@ function placeDecor(vol, d, zv, P, sz) {
     case 'poster':
     case 'whiteboard': {
       // Frame and a small spotlight above the artwork (the image itself is a sprite).
-      const w =
-        d.type === 'whiteboard'
-          ? WHITEBOARD_W
-          : POSTER_H * POSTERS[/** @type {string} */ (d.id)].aspect;
+      const w = d.type === 'whiteboard' ? WHITEBOARD_W : posterWidth(/** @type {string} */ (d.id));
       const h = d.type === 'whiteboard' ? WHITEBOARD_W * 0.75 : POSTER_H;
       const y0 = Math.round((d.y + (d.type === 'whiteboard' ? 0.75 : 0.9)) * V);
       const x1 = Math.round((d.x + w) * V);

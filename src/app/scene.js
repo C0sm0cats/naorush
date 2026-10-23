@@ -1,5 +1,13 @@
 import { CAST } from '../data/cast.js';
-import { DESKS, PLAQUES, POSTERS, POSTER_H, WHITEBOARDS, WHITEBOARD_W } from '../data/inetum.js';
+import {
+  DESKS,
+  PLAQUES,
+  POSTER_H,
+  WHITEBOARDS,
+  WHITEBOARD_W,
+  posterWidth,
+} from '../data/inetum.js';
+import { renderPoster } from '../gfx/posters.js';
 import { buildCharacter, poseCharacter } from '../gfx/characters.js';
 import { chain, rotationY, rotationZ, scaling, translation } from '../gfx/mat4.js';
 import { Mesh, Sprite } from '../gfx/renderer.js';
@@ -52,18 +60,9 @@ export class LevelView {
     const gl = this.gl;
     const jobs = this.decor.map(async (d) => {
       if (d.type === 'poster' && d.id) {
-        const p = POSTERS[d.id];
-        const img = await loadImage(p.file);
-        if (img)
-          this.sprites.push(
-            new Sprite(gl, img, [
-              d.x,
-              d.y + 0.9,
-              d.front ? 1.43 : -2.6,
-              POSTER_H * p.aspect,
-              POSTER_H,
-            ]),
-          );
+        const art = /** @type {HTMLCanvasElement} */ (renderPoster(d.id));
+        const z = d.front ? 1.43 : -2.6;
+        this.sprites.push(new Sprite(gl, art, [d.x, d.y + 0.9, z, posterWidth(d.id), POSTER_H]));
       } else if (d.type === 'whiteboard' && d.id) {
         const img = await loadImage(WHITEBOARDS[/** @type {keyof typeof WHITEBOARDS} */ (d.id)]);
         if (img)
@@ -113,7 +112,7 @@ export class LevelView {
     const hx = sim.hero.x + HERO.w / 2;
     return this.decor.find((d) => {
       if (d.type !== 'poster' || !d.id) return false;
-      const w = POSTER_H * POSTERS[d.id].aspect;
+      const w = posterWidth(d.id);
       return hx > d.x && hx < d.x + w && sim.hero.y < d.y + 3 && sim.hero.y > d.y - 2.5;
     });
   }

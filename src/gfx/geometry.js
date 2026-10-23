@@ -36,6 +36,7 @@ export class MeshBuilder {
     /** @type {Array<{p: number[], n: number[], ao?: number}>} */
     const pts = [];
     for (let j = 0; j <= nv; j++) for (let i = 0; i <= nu; i++) pts.push(point(i / nu, j / nv));
+    /** @param {number} i @param {number} j */
     const at = (i, j) => pts[i + j * (nu + 1)];
     for (let j = 0; j < nv; j++)
       for (let i = 0; i < nu; i++) {

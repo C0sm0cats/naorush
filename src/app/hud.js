@@ -1,4 +1,4 @@
-import { POSTERS } from '../data/inetum.js';
+import { POSTER_HINTS, posterTitle } from '../data/inetum.js';
 import { HERO } from '../game/sim.js';
 
 /** @param {string} id */
@@ -73,8 +73,12 @@ export class Hud {
     this.room.textContent = level.rooms[room];
     if (this.toastTime > 0 && (this.toastTime -= dt) <= 0) this.toastEl.classList.remove('show');
     // Contextual hint: read a whiteboard, or what a poster means in play.
-    const hint = near.board ? '↑ Lire le tableau' : near.poster ? POSTERS[near.poster].hint : '';
-    const title = near.poster && !near.board ? POSTERS[near.poster].title : '';
+    const hint = near.board
+      ? '↑ Lire le tableau'
+      : near.poster
+        ? (POSTER_HINTS[/** @type {keyof typeof POSTER_HINTS} */ (near.poster)] ?? '')
+        : '';
+    const title = near.poster && !near.board ? posterTitle(near.poster) : '';
     if (hint + title !== this.lastPoster) {
       this.lastPoster = hint + title;
       this.hintEl.innerHTML = '';

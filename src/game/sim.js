@@ -8,7 +8,7 @@
 
 export const DT = 1 / 60;
 
-export const TILE = Object.freeze({ EMPTY: 0, SOLID: 1, LOOSE: 2, HAZARD: 3, DOOR: 4 });
+export const TILE = Object.freeze({ EMPTY: 0, SOLID: 1, LOOSE: 2, HAZARD: 3, DOOR: 4, GATE: 5 });
 
 export const HERO = Object.freeze({
   w: 0.62,
@@ -69,7 +69,7 @@ const LOOSE_DELAY = 0.45;
  * @property {number} run Distance run (for the walk cycle).
  *
  * @typedef {Object} Thing
- * @property {'ticket'|'checkpoint'|'reader'|'key'|'exit'|'panel'|'bottle'|'colleague'|'loose'|'ammo'|'cr'} kind
+ * @property {'ticket'|'checkpoint'|'reader'|'key'|'exit'|'panel'|'bottle'|'colleague'|'loose'|'ammo'|'cr'|'lift'|'boss'|'kpi'|'wave'} kind
  * @property {number} x
  * @property {number} y
  * @property {number} vx
@@ -78,6 +78,11 @@ const LOOSE_DELAY = 0.45;
  * @property {number} t
  * @property {boolean} alive
  * @property {number} [home] Patrol centre (colleagues).
+ * @property {number} [y0] Lift bottom.
+ * @property {number} [y1] Lift top.
+ * @property {number} [w] Lift width in tiles.
+ * @property {number} [hp] Boss arguments left.
+ * @property {number} [dy] Lift motion this step.
  *
  * @typedef {Object} Input
  * @property {boolean} left
@@ -91,7 +96,15 @@ const LOOSE_DELAY = 0.45;
  */
 
 /**
- * @param {{map: string[]}} def
+ * @typedef {Object} LevelDef
+ * @property {string[]} map
+ * @property {boolean} [open] No ceiling: the level is open to the sky (rooftops).
+ * @property {Array<{x: number, y: number, top: number, w?: number, period?: number}>} [lifts]
+ * @property {{id: 'techServicesDirector'|'regionalDirector', hp: number, arena: [number, number]}} [boss]
+ */
+
+/**
+ * @param {LevelDef} def
  * @param {HeroId} heroId
  */
 export function createSim(def, heroId) {
@@ -115,6 +128,9 @@ export function createSim(def, heroId) {
         thing('loose', col, y);
       } else if (c === '^') tiles[i] = TILE.HAZARD;
       else if (c === 'D') tiles[i] = TILE.DOOR;
+      else if (c === 'G') tiles[i] = TILE.GATE;
+      else if (c === 'X' && def.boss)
+        thing('boss', col + 0.5, y, { state: 'idle', hp: def.boss.hp, vx: 0, home: col + 0.5 });
       else if (c === 'S') start = { x: col + 0.2, y };
       else if (c === '$') thing('ticket', col + 0.5, y + 0.5);
       else if (c === 'C') thing('checkpoint', col + 0.5, y);
@@ -127,6 +143,8 @@ export function createSim(def, heroId) {
       else if (c === 'n')
         thing('colleague', col + 0.5, y, { vx: 1.4, state: 'walk', home: col + 0.5 });
     }
+  for (const l of def.lifts ?? [])
+    thing('lift', l.x, l.y, { y0: l.y, y1: l.top, w: l.w ?? 2, home: l.period ?? 5, dy: 0 });
   const stats = HERO_STATS[heroId];
   /** @type {Hero} */
   const hero = {
@@ -150,6 +168,12 @@ export function createSim(def, heroId) {
     heroId,
     w,
     h,
+    open: Boolean(def.open),
+    boss: def.boss ?? null,
+    bossActive: false,
+    bossDone: false,
+    /** Lift the hero stands on, if any. */
+    onLift: /** @type {Thing | null} */ (null),
     tiles,
     things,
     hero,
@@ -175,14 +199,19 @@ export function createSim(def, heroId) {
 /** @param {Sim} s @param {number} c @param {number} r */
 export function tileAt(s, c, r) {
   if (c < 0 || c >= s.w || r < 0) return TILE.SOLID;
-  if (r >= s.h) return TILE.SOLID;
+  if (r >= s.h) return s.open ? TILE.EMPTY : TILE.SOLID;
   return s.tiles[c + r * s.w];
 }
 
 /** @param {Sim} s @param {number} c @param {number} r */
 const solid = (s, c, r) => {
   const t = tileAt(s, c, r);
-  return t === TILE.SOLID || t === TILE.LOOSE || (t === TILE.DOOR && !s.doorOpen);
+  return (
+    t === TILE.SOLID ||
+    t === TILE.LOOSE ||
+    (t === TILE.DOOR && !s.doorOpen) ||
+    (t === TILE.GATE && s.bossActive && !s.bossDone)
+  );
 };
 
 /**
@@ -257,6 +286,15 @@ function respawn(s) {
       Object.assign(t, { state: 'waiting', vx: 0 });
   }
   s.gameOver = false;
+  s.onLift = null;
+  // A lost boss fight starts over from the top.
+  if (s.bossActive && !s.bossDone) {
+    s.bossActive = false;
+    for (const b of s.things)
+      if (b.kind === 'boss')
+        Object.assign(b, { state: 'idle', t: 0, hp: s.boss?.hp ?? 3, x: b.home ?? b.x, vx: 0 });
+  }
+  s.things = s.things.filter((t) => t.kind !== 'kpi' && t.kind !== 'wave');
   emit(s, 'respawn', hero.x, hero.y);
 }
 
@@ -389,9 +427,45 @@ export function step(s, input) {
     if (hero.state === 'ground') hero.run += Math.abs(hero.vx) * DT;
   } else hero.vx = 0;
 
-  // Move Y.
-  const ny = hero.y + hero.vy * DT;
-  if (!blocked(s, hero.x, ny, HERO.w, HERO.h)) {
+  // Move Y. Lifts are one-way platforms: you land on their top and ride them.
+  let ny = hero.y + hero.vy * DT;
+  if (s.onLift) {
+    const l = s.onLift;
+    if (hero.x + HERO.w < l.x || hero.x > l.x + (l.w ?? 2) || hero.vy > 0) {
+      s.onLift = null;
+      if (hero.vy <= 0) {
+        hero.state = 'air';
+        hero.fallFrom = hero.y;
+      }
+    } else {
+      hero.y = l.y;
+      hero.vy = 0;
+      ny = hero.y;
+      hero.state = 'ground';
+    }
+  } else if (hero.vy <= 0) {
+    for (const l of s.things) {
+      if (l.kind !== 'lift') continue;
+      if (
+        hero.x + HERO.w > l.x + 0.05 &&
+        hero.x < l.x + (l.w ?? 2) - 0.05 &&
+        hero.y >= l.y - 0.02 &&
+        ny <= l.y
+      ) {
+        if (hero.state !== 'ground')
+          emit(s, hero.fallFrom - l.y > 2 ? 'land' : 'step', hero.x + HERO.w / 2, l.y);
+        s.onLift = l;
+        hero.y = ny = l.y;
+        hero.vy = 0;
+        hero.state = 'ground';
+        hero.fallFrom = l.y;
+        break;
+      }
+    }
+  }
+  if (s.onLift) {
+    /* riding: vertical position handled by the lift */
+  } else if (!blocked(s, hero.x, ny, HERO.w, HERO.h)) {
     hero.y = ny;
     if (hero.state === 'ground' && hero.vy < 0) {
       hero.state = 'air';
@@ -450,6 +524,17 @@ export function step(s, input) {
     )
       hurt(s, hero, 'cables');
   if (hero.y < -2) hurt(s, hero, 'void');
+  // Entering a boss arena closes the gate behind you.
+  if (
+    s.boss &&
+    !s.bossActive &&
+    !s.bossDone &&
+    hero.x > s.boss.arena[0] &&
+    hero.state === 'ground'
+  ) {
+    s.bossActive = true;
+    emit(s, 'bossStart', hero.x, hero.y);
+  }
 
   stepThings(s);
 }
@@ -584,6 +669,41 @@ function stepThings(s) {
         }
         break;
       }
+      case 'lift': {
+        // Ping-pong between y0 and y1, easing at both ends.
+        const k = 0.5 - 0.5 * Math.cos((s.time * 2 * Math.PI) / (t.home ?? 5));
+        const ny = (t.y0 ?? t.y) + ((t.y1 ?? t.y) - (t.y0 ?? t.y)) * k;
+        t.dy = ny - t.y;
+        t.y = ny;
+        if (s.onLift === t) hero.y = t.y;
+        break;
+      }
+      case 'boss':
+        stepBoss(s, t, hx);
+        break;
+      case 'kpi': {
+        // A KPI slide thrown in an arc: hurts on contact, a CR knocks it out of the air.
+        t.vy -= GRAVITY * 0.55 * DT;
+        t.x += t.vx * DT;
+        t.y += t.vy * DT;
+        if (solid(s, Math.floor(t.x), Math.floor(t.y)) || t.y < -2) {
+          t.alive = false;
+          emit(s, 'poof', t.x, t.y);
+        } else if (hero.state !== 'dead' && touches(t, 0.35, 0.35)) {
+          t.alive = false;
+          hurt(s, hero, 'kpi');
+        }
+        break;
+      }
+      case 'wave': {
+        // Shockwave running along the floor: jump over it.
+        t.x += t.vx * DT;
+        if (t.t > 2.2 || solid(s, Math.floor(t.x + Math.sign(t.vx) * 0.3), Math.floor(t.y + 0.3)))
+          t.alive = false;
+        else if (hero.state !== 'dead' && Math.abs(t.x - hx) < 0.45 && hero.y < t.y + 0.5)
+          hurt(s, hero, 'wave');
+        break;
+      }
       case 'ammo':
         if (hero.state !== 'dead' && touches(t, 0.4, 0.5)) {
           t.alive = false;
@@ -596,6 +716,49 @@ function stepThings(s) {
         if (t.t > 1.2 || solid(s, Math.floor(t.x), Math.floor(t.y))) {
           t.alive = false;
           emit(s, 'poof', t.x, t.y);
+          break;
+        }
+        const parried = s.things.find(
+          (k) =>
+            k.kind === 'kpi' && k.alive && Math.abs(k.x - t.x) < 0.5 && Math.abs(k.y - t.y) < 0.5,
+        );
+        if (parried) {
+          t.alive = parried.alive = false;
+          emit(s, 'parry', t.x, t.y);
+          break;
+        }
+        const boss = s.things.find(
+          (b) =>
+            b.kind === 'boss' &&
+            b.alive &&
+            b.state !== 'idle' &&
+            b.state !== 'convinced' &&
+            Math.abs(b.x - t.x) < 0.6 &&
+            t.y > b.y &&
+            t.y < b.y + 2.2,
+        );
+        if (boss) {
+          t.alive = false;
+          if (boss.state === 'consult') {
+            boss.hp = (boss.hp ?? 1) - 1;
+            boss.state = boss.hp > 0 ? 'hit' : 'convinced';
+            boss.t = 0;
+            emit(s, boss.hp > 0 ? 'bossHit' : 'bossDone', boss.x, boss.y + 2);
+            if (boss.hp <= 0) {
+              s.bossDone = true;
+              s.things = s.things.filter((k) => k.kind !== 'kpi' && k.kind !== 'wave');
+              s.things.push({
+                kind: 'key',
+                x: boss.x - 1.2,
+                y: boss.y + 0.6,
+                vx: 0,
+                vy: 0,
+                state: 'idle',
+                t: 0,
+                alive: true,
+              });
+            }
+          } else emit(s, 'block', boss.x, boss.y + 1.6);
           break;
         }
         const target = s.things.find(
@@ -620,4 +783,106 @@ function stepThings(s) {
   }
   if (s.things.some((t) => t.kind === 'cr' && !t.alive))
     s.things = s.things.filter((t) => t.kind !== 'cr' || t.alive);
+}
+
+/**
+ * Boss duel, Prince-of-Persia style: the director throws KPI slides, then stops
+ * to "consult PRIMO" — the only moment a CR gets through. The regional director
+ * also leaps and sends shockwaves along the floor.
+ * @param {Sim} s @param {Thing} b @param {number} hx Hero centre x.
+ */
+function stepBoss(s, b, hx) {
+  const regional = s.boss?.id === 'regionalDirector';
+  const face = Math.sign(hx - b.x) || -1;
+  switch (b.state) {
+    case 'idle':
+      if (s.bossActive) {
+        b.state = 'intro';
+        b.t = 0;
+      }
+      break;
+    case 'intro':
+      if (b.t > 1.6) {
+        b.state = 'throw';
+        b.t = 0;
+        b.vx = 0;
+      }
+      break;
+    case 'throw': {
+      // Three throws, timed so you can read each one coming.
+      const n = regional ? 3 : 3;
+      const k = Math.floor(b.t / 0.95);
+      if (b.t >= 0.95 * (k + 1) - 0.017 && b.t < 0.95 * (k + 1) && k < n) {
+        const dx = hx - b.x;
+        const flight = 1.0;
+        s.things.push({
+          kind: 'kpi',
+          x: b.x + face * 0.5,
+          y: b.y + 1.7,
+          vx: dx / flight,
+          vy: 5.5 + Math.random() * 0,
+          state: 'fly',
+          t: 0,
+          alive: true,
+        });
+        emit(s, 'bossThrow', b.x, b.y + 1.8);
+      }
+      if (b.t > 0.95 * n + 0.4) {
+        b.state = regional && (b.hp ?? 0) <= 2 ? 'leap' : 'consult';
+        b.t = 0;
+        if (b.state === 'consult') emit(s, 'consult', b.x, b.y + 2.2);
+      }
+      break;
+    }
+    case 'leap':
+      // Jumps in place and slams: two shockwaves run outwards.
+      if (b.t > 0.7 && b.t - DT <= 0.7) {
+        for (const dir of [-1, 1])
+          s.things.push({
+            kind: 'wave',
+            x: b.x + dir * 0.6,
+            y: b.y,
+            vx: dir * 6,
+            vy: 0,
+            state: 'run',
+            t: 0,
+            alive: true,
+          });
+        emit(s, 'slam', b.x, b.y);
+      }
+      if (b.t > 1.3) {
+        b.state = 'consult';
+        b.t = 0;
+        emit(s, 'consult', b.x, b.y + 2.2);
+      }
+      break;
+    case 'consult':
+      if (b.t > (regional ? 2.2 : 2.6)) {
+        b.state = 'throw';
+        b.t = 0;
+      }
+      break;
+    case 'hit':
+      if (b.t > 0.7) {
+        b.state = 'throw';
+        b.t = 0;
+      }
+      break;
+    default:
+      break;
+  }
+  // Walking into the director pushes you back.
+  const hero = s.hero;
+  if (
+    b.state !== 'convinced' &&
+    hero.state !== 'dead' &&
+    Math.abs(hero.x + 0.31 - b.x) < 0.6 &&
+    hero.y < b.y + 2
+  ) {
+    hero.vx = -face * 7;
+    hero.vy = 5;
+    hero.state = 'air';
+    if (s.onLift) s.onLift = null;
+    hurt(s, hero, 'boss');
+  }
 }
