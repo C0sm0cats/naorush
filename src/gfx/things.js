@@ -136,6 +136,30 @@ export function buildThings(gl) {
       },
       0,
     ),
+    // Meeting report (CR) in flight: a sheet with typed lines.
+    cr: model(
+      7,
+      9,
+      1,
+      (v) => {
+        v.box(0, 0, 0, 7, 9, 1, rgb('#ffffff'));
+        for (let y = 2; y < 8; y += 2) v.box(1, y, 0, 6, y + 1, 1, rgb('#5a6b8c'));
+        v.box(1, 7, 0, 4, 8, 1, rgb('#ff4f9a'));
+      },
+      4.5,
+    ),
+    // Ream of paper: refills the CR stock.
+    ammo: model(
+      9,
+      5,
+      6,
+      (v) => {
+        v.box(0, 0, 0, 9, 5, 6, rgb('#fbfbf6'));
+        v.box(0, 1, 0, 9, 4, 6, rgb('#3d8bfd'));
+        v.box(2, 2, 6 - 1, 7, 3, 6, rgb('#ffffff'));
+      },
+      2.5,
+    ),
     exit: model(
       4,
       36,

@@ -1,4 +1,5 @@
 import { TILE } from '../game/sim.js';
+import { POSTERS, POSTER_H, WHITEBOARD_W } from '../data/inetum.js';
 import { MAT, Volume, meshVolume, rgb } from './voxels.js';
 
 /**
@@ -11,7 +12,10 @@ export const V = 8;
 const Z_BACK = -3;
 const Z_FRONT = 1.4;
 
-/** Deterministic hash noise for texture variation. */
+/**
+ * Deterministic hash noise for texture variation.
+ * @param {number} x @param {number} y @param {number} z
+ */
 const noise = (x, y, z) => {
   let h = (x * 374761393 + y * 668265263 + z * 1274126177) | 0;
   h = Math.imul(h ^ (h >>> 13), 1274126177);
@@ -20,7 +24,8 @@ const noise = (x, y, z) => {
 
 /**
  * Varies a colour slightly per voxel so large surfaces never look flat.
- * @param {number} c @param {number} amount
+ * @param {number} c @param {number} amount @param {number} [grain]
+ * @returns {(x: number, y: number, z: number) => number}
  */
 const vary =
   (c, amount, grain = 1) =>
@@ -59,33 +64,55 @@ export const PALETTE = {
 /**
  * @param {import('../game/sim.js').Sim} sim
  * @param {import('../data/slice.js').Decor[]} decor
+ * @param {string[]} [map] Level rows, used for tile styles ('M' meeting room, 'B' paper reams).
  */
-export function buildOffice(sim, decor) {
+export function buildOffice(sim, decor, map = []) {
+  /** Visual style of a solid tile, from the level's ASCII map. */
+  /** @param {number} c @param {number} r */
+  const styleAt = (c, r) => map[sim.h - 1 - r]?.[c] ?? '#';
   const sx = sim.w * V;
   const sy = sim.h * V;
   const sz = Math.round((Z_FRONT - Z_BACK) * V);
   const vol = new Volume(sx, sy, sz, 1 / V, [0, 0, Z_BACK]);
+  /** @param {number} z */
   const zv = (z) => Math.round((z - Z_BACK) * V);
   /** @type {Array<{pos: number[], radius: number, color: number[]}>} */
   const lights = [];
 
-  // Back wall: plaster low wall, then a glass façade (empty voxels) with mullions.
+  // Back wall: plaster below, a glass façade above. Wherever Inetum artwork hangs,
+  // the façade becomes a solid wall panel so nothing floats in front of the windows.
+  const panels = decor
+    .filter(
+      (d) => !d.front && (d.type === 'poster' || d.type === 'whiteboard' || d.type === 'desk'),
+    )
+    .map((d) => {
+      const w =
+        d.type === 'whiteboard'
+          ? WHITEBOARD_W
+          : d.type === 'desk'
+            ? 4.2
+            : POSTER_H * POSTERS[/** @type {string} */ (d.id)].aspect;
+      return [Math.floor((d.x - 0.35) * V), Math.ceil((d.x + w + 0.35) * V)];
+    });
+  /** @param {number} x */
+  const onPanel = (x) => panels.some(([a, b]) => x >= a && x < b);
   for (let x = 0; x < sx; x++) {
+    const panel = onPanel(x);
     for (let y = 0; y < sy; y++) {
       const ty = y / V;
       const inWindowBand = ty > 4.2 && ty < 9.6;
-      const mullion = x % (V * 4) < 2 || Math.abs(ty - 6.9) < 0.12;
-      if (inWindowBand && !mullion) continue;
-      const c = inWindowBand
-        ? PALETTE.mullion
-        : ty < 4.2
-          ? ty < 1
-            ? PALETTE.wallLow
-            : PALETTE.wall
-          : PALETTE.wall;
-      vol.box(x, y, 0, x + 1, y + 1, 3, inWindowBand ? c : vary(c, 0.05, 4)(x, y, 0));
+      if (inWindowBand && !panel) {
+        const mullion = x % (V * 4) < 2 || Math.abs(ty - 6.9) < 0.12;
+        if (mullion) vol.box(x, y, 0, x + 1, y + 1, 3, PALETTE.mullion);
+        continue;
+      }
+      const c = ty < 1 ? PALETTE.wallLow : panel && inWindowBand ? rgb('#d9d1c3') : PALETTE.wall;
+      vol.box(x, y, 0, x + 1, y + 1, 3, vary(c, 0.05, 4)(x, y, 0));
     }
   }
+  // Panel edges: thin dark reveals so the wall panels read as built.
+  for (const [a, b] of panels)
+    for (const x of [a, b - 1]) vol.box(x, 4.2 * V, 3, x + 1, 9.6 * V, 4, PALETTE.mullion);
   // Window sills.
   vol.box(0, 4.2 * V - 1, 3, sx, 4.2 * V, 6, PALETTE.wallLow);
 
@@ -95,7 +122,40 @@ export function buildOffice(sim, decor) {
       const t = sim.tiles[c + r * sim.w];
       const x0 = c * V,
         y0 = r * V;
+      const style = t === TILE.SOLID ? styleAt(c, r) : '';
+      if (style === 'M') {
+        // Glass meeting room: frosted band, aluminium frame, a sign on top row.
+        const top = styleAt(c, r + 1) !== 'M',
+          bottom = styleAt(c, r - 1) !== 'M';
+        vol.box(x0, y0, zv(-2.4), x0 + V, y0 + V, sz - 1, rgb('#6f8fa8'));
+        vol.box(
+          x0,
+          y0,
+          sz - 1,
+          x0 + V,
+          y0 + V,
+          sz,
+          (x, y) =>
+            x - x0 === 0 || (top && y - y0 === V - 1) || (bottom && y - y0 === 0)
+              ? rgb('#c9d1d9')
+              : y - y0 === 3
+                ? rgb('#e8f1f6')
+                : rgb('#9cc6e0'),
+          MAT.GLOSSY,
+        );
+        if (bottom) vol.box(x0, y0 - 1, zv(-2.4), x0 + V, y0, sz, PALETTE.ceiling);
+        continue;
+      }
+      if (style === 'B') {
+        // Stacked reams of paper: white blocks with blue wrappers.
+        vol.box(x0, y0, zv(-1.8), x0 + V, y0 + V, zv(0.8), (_x, y) =>
+          (y - y0) % 4 < 1 ? rgb('#fbfbf6') : rgb('#3d8bfd'),
+        );
+        vol.box(x0 + 1, y0 + V, zv(-1.6), x0 + V - 1, y0 + V + 0, zv(0.6), rgb('#fbfbf6'));
+        continue;
+      }
       if (t === TILE.SOLID) {
+        /** @param {number} dc @param {number} dr */
         const at = (dc, dr) => {
           const cc = c + dc,
             rr = r + dr;
@@ -181,7 +241,7 @@ export function buildOffice(sim, decor) {
       }
     }
 
-  for (const d of decor) placeDecor(vol, d, zv, PALETTE);
+  for (const d of decor) placeDecor(vol, d, zv, PALETTE, sz);
   return { vol, mesh: meshVolume(vol), lights };
 }
 
@@ -190,15 +250,41 @@ export function buildOffice(sim, decor) {
  * @param {import('../data/slice.js').Decor} d
  * @param {(z: number) => number} zv
  * @param {typeof PALETTE} P
+ * @param {number} sz Volume depth in voxels.
  */
-function placeDecor(vol, d, zv, P) {
+function placeDecor(vol, d, zv, P, sz) {
   const x = Math.round(d.x * V);
   const y = Math.round(d.y * V);
   switch (d.type) {
-    case 'deskSet': {
-      // The supplied desk artwork stands in the scene; add a real chair in front of it.
-      const z1 = zv(-1.9),
-        cx = x + 37;
+    case 'poster':
+    case 'whiteboard': {
+      // Frame and a small spotlight above the artwork (the image itself is a sprite).
+      const w =
+        d.type === 'whiteboard'
+          ? WHITEBOARD_W
+          : POSTER_H * POSTERS[/** @type {string} */ (d.id)].aspect;
+      const h = d.type === 'whiteboard' ? WHITEBOARD_W * 0.75 : POSTER_H;
+      const y0 = Math.round((d.y + (d.type === 'whiteboard' ? 0.75 : 0.9)) * V);
+      const x1 = Math.round((d.x + w) * V);
+      const z = d.front ? sz : 3;
+      const frame = d.type === 'whiteboard' ? rgb('#b8c0c8') : rgb('#1b2233');
+      vol.box(x - 1, y0 - 1, z, x1 + 1, y0, z + 1, frame);
+      vol.box(x - 1, y0 + h * V, z, x1 + 1, y0 + h * V + 1, z + 1, frame);
+      vol.box(x - 1, y0, z, x, y0 + h * V, z + 1, frame);
+      vol.box(x1, y0, z, x1 + 1, y0 + h * V, z + 1, frame);
+      if (d.type === 'whiteboard') vol.box(x, y0 - 2, z, x1, y0 - 1, z + 3, rgb('#9aa3ad'));
+      if (!d.front) {
+        const cx = Math.round((x + x1) / 2);
+        const top = Math.round(y0 + h * V + 2);
+        vol.box(cx - 3, top, z, cx + 3, top + 1, z + 3, rgb('#22262e'));
+        vol.box(cx - 2, top - 1, z + 2, cx + 2, top, z + 4, rgb('#fff1c9'), MAT.EMISSIVE);
+      }
+      break;
+    }
+    case 'desk': {
+      // The supplied desk artwork stands on the floor; an office chair sits beside it.
+      const z1 = zv(-1.6),
+        cx = x + 35;
       vol.box(cx, y + 3, z1 + 1, cx + 5, y + 4, z1 + 5, rgb('#2c3346'));
       vol.box(cx, y + 4, z1, cx + 5, y + 10, z1 + 1, rgb('#2c3346'));
       vol.box(cx + 2, y, z1 + 2, cx + 3, y + 3, z1 + 3, P.metal);
@@ -251,8 +337,11 @@ function placeDecor(vol, d, zv, P) {
 export function buildSkyline(width) {
   const S = 0.5;
   const vol = new Volume(Math.round((width + 80) / S), 130, 110, S, [-40, -20, -70]);
+  /** @param {number} x */
   const X = (x) => Math.round((x + 40) / S);
+  /** @param {number} y */
   const Y = (y) => Math.round((y + 20) / S);
+  /** @param {number} z */
   const Z = (z) => Math.round((z + 70) / S);
   // The Loire.
   vol.box(0, 0, Z(-46), vol.sx, Y(-6), Z(-45), rgb('#3d6f9e'), MAT.GLOSSY);

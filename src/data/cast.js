@@ -42,6 +42,6 @@ export const CAST = {
     legs: '#34445a',
     shoes: '#f1f1f1',
     glasses: true,
-    prop: 'laptop',
+    prop: 'phone',
   },
 };

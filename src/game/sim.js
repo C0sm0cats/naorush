@@ -21,8 +21,26 @@ export const HERO = Object.freeze({
 
 /** Per-hero tuning: Kévin is steady and grabs higher, Charline is faster and can double jump. */
 export const HERO_STATS = {
-  kevin: { run: 6.2, accel: 42, jump: 11.6, airJumps: 0, climb: 0.42, hearts: 4 },
-  charline: { run: 7.0, accel: 52, jump: 11.0, airJumps: 1, climb: 0.36, hearts: 3 },
+  kevin: {
+    run: 6.2,
+    accel: 42,
+    jump: 11.6,
+    airJumps: 0,
+    climb: 0.42,
+    hearts: 4,
+    ammo: 6,
+    shot: 13,
+  },
+  charline: {
+    run: 7.0,
+    accel: 52,
+    jump: 11.0,
+    airJumps: 1,
+    climb: 0.36,
+    hearts: 3,
+    ammo: 5,
+    shot: 15,
+  },
 };
 
 const GRAVITY = 40;
@@ -51,7 +69,7 @@ const LOOSE_DELAY = 0.45;
  * @property {number} run Distance run (for the walk cycle).
  *
  * @typedef {Object} Thing
- * @property {'ticket'|'checkpoint'|'reader'|'key'|'exit'|'panel'|'bottle'|'colleague'|'loose'} kind
+ * @property {'ticket'|'checkpoint'|'reader'|'key'|'exit'|'panel'|'bottle'|'colleague'|'loose'|'ammo'|'cr'} kind
  * @property {number} x
  * @property {number} y
  * @property {number} vx
@@ -59,6 +77,7 @@ const LOOSE_DELAY = 0.45;
  * @property {string} state
  * @property {number} t
  * @property {boolean} alive
+ * @property {number} [home] Patrol centre (colleagues).
  *
  * @typedef {Object} Input
  * @property {boolean} left
@@ -66,6 +85,7 @@ const LOOSE_DELAY = 0.45;
  * @property {boolean} up
  * @property {boolean} down
  * @property {boolean} jump
+ * @property {boolean} [fire] Throw a meeting report (CR) that sends a colleague into a meeting.
  *
  * @typedef {{type: string, x: number, y: number}} SimEvent
  */
@@ -81,6 +101,7 @@ export function createSim(def, heroId) {
   /** @type {Thing[]} */
   const things = [];
   let start = { x: 2, y: 3 };
+  /** @param {Thing['kind']} kind @param {number} x @param {number} y @param {Partial<Thing>} [extra] */
   const thing = (kind, x, y, extra = {}) =>
     things.push({ kind, x, y, vx: 0, vy: 0, state: 'idle', t: 0, alive: true, ...extra });
   for (let row = 0; row < h; row++)
@@ -88,7 +109,7 @@ export function createSim(def, heroId) {
       const c = def.map[row][col];
       const y = h - 1 - row;
       const i = col + y * w;
-      if (c === '#') tiles[i] = TILE.SOLID;
+      if (c === '#' || c === 'M' || c === 'B') tiles[i] = TILE.SOLID;
       else if (c === '-') {
         tiles[i] = TILE.LOOSE;
         thing('loose', col, y);
@@ -102,6 +123,7 @@ export function createSim(def, heroId) {
       else if (c === 'E') thing('exit', col + 0.5, y);
       else if (c === 'F') thing('panel', col, y, { state: 'armed' });
       else if (c === 'R') thing('bottle', col + 0.5, y, { state: 'waiting', vx: 0 });
+      else if (c === 'a') thing('ammo', col + 0.5, y + 0.45);
       else if (c === 'n')
         thing('colleague', col + 0.5, y, { vx: 1.4, state: 'walk', home: col + 0.5 });
     }
@@ -134,6 +156,8 @@ export function createSim(def, heroId) {
     stats,
     checkpoint: { ...start },
     tickets: 0,
+    ammo: stats.ammo,
+    fireHeld: false,
     hasKey: false,
     doorOpen: false,
     won: false,
@@ -151,7 +175,7 @@ export function createSim(def, heroId) {
 /** @param {Sim} s @param {number} c @param {number} r */
 export function tileAt(s, c, r) {
   if (c < 0 || c >= s.w || r < 0) return TILE.SOLID;
-  if (r >= s.h) return TILE.EMPTY;
+  if (r >= s.h) return TILE.SOLID;
   return s.tiles[c + r * s.w];
 }
 
@@ -161,7 +185,10 @@ const solid = (s, c, r) => {
   return t === TILE.SOLID || t === TILE.LOOSE || (t === TILE.DOOR && !s.doorOpen);
 };
 
-/** Does the box overlap a solid tile? */
+/**
+ * Does the box overlap a solid tile?
+ * @param {Sim} s @param {number} x @param {number} y @param {number} w @param {number} h
+ */
 function blocked(s, x, y, w, h) {
   for (let c = Math.floor(x); c <= Math.floor(x + w - 1e-6); c++)
     for (let r = Math.floor(y); r <= Math.floor(y + h - 1e-6); r++) if (solid(s, c, r)) return true;
@@ -304,6 +331,24 @@ export function step(s, input) {
     return;
   }
 
+  // Throw a CR: limited stock, refilled by ramettes of paper.
+  const fire = Boolean(input.fire) && !s.fireHeld;
+  s.fireHeld = Boolean(input.fire);
+  if (fire && s.ammo > 0) {
+    s.ammo--;
+    s.things.push({
+      kind: 'cr',
+      x: hero.x + HERO.w / 2 + hero.facing * 0.4,
+      y: hero.y + 1.05,
+      vx: hero.facing * st.shot,
+      vy: 0,
+      state: 'fly',
+      t: 0,
+      alive: true,
+    });
+    emit(s, 'throw', hero.x + HERO.w / 2, hero.y + 1.05);
+  } else if (fire) emit(s, 'empty', hero.x + HERO.w / 2, hero.y + 1.4);
+
   // Horizontal control with momentum.
   const dir = (input.right ? 1 : 0) - (input.left ? 1 : 0);
   if (dir) hero.facing = dir;
@@ -360,7 +405,7 @@ export function step(s, input) {
       if (fell > HURT_FALL) hurt(s, hero, 'fall');
     }
     hero.vy = 0;
-    if (hero.state !== 'dead') hero.state = 'ground';
+    if (/** @type {string} */ (hero.state) !== 'dead') hero.state = 'ground';
   } else {
     hero.y = Math.ceil(ny + HERO.h) - HERO.h - 1e-4;
     hero.vy = 0;
@@ -413,6 +458,7 @@ export function step(s, input) {
 function stepThings(s) {
   const hero = s.hero;
   const hx = hero.x + HERO.w / 2;
+  /** @param {Thing} t @param {number} rx @param {number} ry */
   const touches = (t, rx, ry) =>
     Math.abs(t.x - hx) < rx + HERO.w / 2 && t.y + ry > hero.y && t.y - ry < hero.y + HERO.h;
   for (const t of s.things) {
@@ -500,8 +546,10 @@ function stepThings(s) {
             t.y += t.vy * DT;
             const g2 = Math.floor(t.y);
             if (solid(s, Math.floor(t.x), g2)) {
+              // A full water bottle does not survive a fall: it bursts on landing.
               t.y = g2 + 1;
-              t.vy = 0;
+              t.state = 'burst';
+              emit(s, 'splash', t.x, t.y + 0.4);
             }
           }
           if (touches(t, 0.45, 0.45) && hero.y < t.y + 0.7) hurt(s, hero, 'bottle');
@@ -509,24 +557,60 @@ function stepThings(s) {
         }
         break;
       case 'colleague': {
-        if (t.state === 'walk') {
-          const nx = t.x + t.vx * DT;
-          const ahead = Math.floor(nx + Math.sign(t.vx) * 0.4);
-          if (
-            solid(s, ahead, Math.floor(t.y + 0.5)) ||
-            !solid(s, ahead, Math.floor(t.y) - 1) ||
-            Math.abs(nx - t.home) > 2.5
-          )
-            t.vx = -t.vx;
-          else t.x = nx;
-          // Bumping into a colleague mid-meeting knocks you back (no damage in the slice).
-          if (touches(t, 0.35, 0.8) && hero.state === 'ground' && hero.invuln <= 0) {
-            hero.vx = Math.sign(hx - t.x || 1) * 7;
-            hero.vy = 6;
-            hero.state = 'air';
-            hero.invuln = 0.4;
-            emit(s, 'bump', t.x, t.y + 1.2);
+        if (t.state === 'meeting') {
+          // Sent into a meeting: sits with a laptop, harmless, for a few seconds.
+          if (t.t > 4.5) {
+            t.state = 'walk';
+            t.t = 0;
+            emit(s, 'wake', t.x, t.y + 1.6);
           }
+          break;
+        }
+        const nx = t.x + t.vx * DT;
+        const ahead = Math.floor(nx + Math.sign(t.vx) * 0.4);
+        if (
+          solid(s, ahead, Math.floor(t.y + 0.5)) ||
+          !solid(s, ahead, Math.floor(t.y) - 1) ||
+          Math.abs(nx - (t.home ?? t.x)) > 2.5
+        )
+          t.vx = -t.vx;
+        else t.x = nx;
+        // A colleague mid-call blocks the way and pushes you back.
+        if (touches(t, 0.35, 0.8) && hero.state !== 'dead' && hero.state !== 'hang') {
+          hero.vx = Math.sign(hx - t.x || 1) * 7;
+          hero.vy = 5;
+          hero.state = 'air';
+          emit(s, 'bump', t.x, t.y + 1.2);
+        }
+        break;
+      }
+      case 'ammo':
+        if (hero.state !== 'dead' && touches(t, 0.4, 0.5)) {
+          t.alive = false;
+          s.ammo = Math.min(9, s.ammo + 3);
+          emit(s, 'ammo', t.x, t.y);
+        }
+        break;
+      case 'cr': {
+        t.x += t.vx * DT;
+        if (t.t > 1.2 || solid(s, Math.floor(t.x), Math.floor(t.y))) {
+          t.alive = false;
+          emit(s, 'poof', t.x, t.y);
+          break;
+        }
+        const target = s.things.find(
+          (c) =>
+            c.kind === 'colleague' &&
+            c.state === 'walk' &&
+            Math.abs(c.x - t.x) < 0.45 &&
+            t.y > c.y &&
+            t.y < c.y + 1.7,
+        );
+        if (target) {
+          t.alive = false;
+          target.state = 'meeting';
+          target.t = 0;
+          emit(s, 'meeting', target.x, target.y + 1.6);
         }
         break;
       }
@@ -534,4 +618,6 @@ function stepThings(s) {
         break;
     }
   }
+  if (s.things.some((t) => t.kind === 'cr' && !t.alive))
+    s.things = s.things.filter((t) => t.kind !== 'cr' || t.alive);
 }

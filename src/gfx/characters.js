@@ -21,7 +21,7 @@ import { chain, rotationX, rotationY, rotationZ, scaling, translation } from './
  * @property {boolean} [beard]
  * @property {boolean} [earrings]
  * @property {string} [lips]
- * @property {string} [prop] Held item: 'tablet' | 'laptop' | 'mug' | 'folder'.
+ * @property {string} [prop] Held item: 'tablet' | 'laptop' | 'phone' | 'mug' | 'folder'.
  */
 
 export const VOXEL = 1 / 16;
@@ -32,7 +32,11 @@ export const VOXEL = 1 / 16;
  * @property {number[]} pivot Joint position in model space (world units).
  */
 
-/** Builds a small volume and returns its mesh, offset so `pivot` is the origin. */
+/**
+ * Builds a small volume and returns its mesh, offset so `pivot` is the origin.
+ * @param {WebGL2RenderingContext} gl @param {number} sx @param {number} sy @param {number} sz
+ * @param {(v: Volume) => void} paint @param {number[]} pivot
+ */
 function part(gl, sx, sy, sz, paint, pivot) {
   const vol = new Volume(sx, sy, sz, VOXEL, [
     -pivot[0] * VOXEL,
@@ -269,6 +273,18 @@ export function buildCharacter(gl, look) {
       },
       [3, 8, 0],
     );
+  else if (look.prop === 'phone')
+    prop = part(
+      gl,
+      2,
+      4,
+      1,
+      (v) => {
+        v.box(0, 0, 0, 2, 4, 1, dark);
+        v.box(0, 1, 0, 2, 3, 1, rgb('#58d5ff'), MAT.EMISSIVE);
+      },
+      [1, 4, 0],
+    );
   else if (look.prop === 'mug')
     prop = part(
       gl,
@@ -304,6 +320,7 @@ export function buildCharacter(gl, look) {
  */
 function shade(hex, amount) {
   const n = parseInt(hex.slice(1), 16);
+  /** @param {number} c */
   const f = (c) =>
     Math.max(0, Math.min(255, Math.round(c + (amount < 0 ? c * amount : (255 - c) * amount))));
   return (
@@ -348,8 +365,10 @@ export function poseCharacter(parts, x, y, z, facing, pose, o = {}) {
     translation(0, (pose.bob ?? 0) * VOXEL, 0),
   );
   const lean = rotationX(pose.lean ?? 0);
+  /** @param {number[]} p */
   const v = (p) => translation(p[0] * VOXEL, p[1] * VOXEL, p[2] * VOXEL);
   const base = { rim: o.rim ?? 0.35, tint: o.tint };
+  /** @param {string} name @param {...Float32Array} ms */
   const at = (name, ...ms) => ({ mesh: parts[name].mesh, model: chain(root, ...ms), ...base });
   const hip = [0, 11, 0];
   const torsoM = [v(hip), lean];

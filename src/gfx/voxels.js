@@ -123,6 +123,7 @@ export function meshVolume(vol) {
   const dims = [vol.sx, vol.sy, vol.sz];
   /** @type {number[]} */
   const out = [];
+  /** @param {number[]} p */
   const get = (p) => vol.get(p[0], p[1], p[2]);
   for (let f = 0; f < 6; f++) {
     const { n } = FACES[f];
@@ -153,6 +154,7 @@ export function meshVolume(vol) {
           if (get(q)) continue;
           // Corner occlusion, sampled in the empty layer in front of the face.
           let ao = 0;
+          /** @param {number} cu @param {number} cv @param {number} shift */
           const corner = (cu, cv, shift) => {
             const a = [...q],
               b = [...q],

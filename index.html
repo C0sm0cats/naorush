@@ -5,56 +5,103 @@
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <meta name="theme-color" content="#0e1424" />
     <title>NAO Rush</title>
+    <link rel="stylesheet" href="./src/style.css" />
   </head>
-  <body>
-    <canvas id="game"></canvas>
+  <body data-screen="loading">
+    <canvas id="game" aria-label="NAO Rush"></canvas>
+
+    <div class="loading" id="loading" aria-live="polite">
+      <div class="loader"><span></span><span></span><span></span></div>
+      <p>Badgeage en cours…</p>
+    </div>
+
     <header class="hud">
       <div class="hud-left">
-        <div class="hearts" id="hearts"></div>
-        <div class="pill"><span class="ticket-icon"></span><b id="tickets">0</b></div>
-        <div class="pill key" id="key" title="Bon de commande">BC</div>
+        <div class="hearts" id="hearts" aria-label="Cœurs"></div>
+        <div class="pill" title="Tickets Swile">
+          <span class="icon ticket"></span><b id="tickets">0</b>
+        </div>
+        <div class="pill" title="Comptes rendus">
+          <span class="icon cr"></span><b id="ammo">0</b>
+        </div>
+        <div class="pill key" id="key" title="Bon de commande signé">BC</div>
       </div>
-      <div class="room" id="room"></div>
+      <div class="hud-right">
+        <div class="room" id="room"></div>
+        <button class="icon-btn" id="pauseBtn" aria-label="Pause">❚❚</button>
+      </div>
     </header>
-    <div class="toast" id="toast"></div>
-    <section class="intro" id="intro">
-      <div class="intro-card">
-        <p class="kicker">Démo · Open space LCP7</p>
+    <div class="hint" id="hint"></div>
+    <div class="toast" id="toast" role="status"></div>
+
+    <section class="screen title" id="title">
+      <div class="card">
+        <p class="kicker">Un jeu de plateforme · Open space LCP7</p>
         <h1>NAO <span>Rush</span></h1>
-        <p>
+        <p class="lead">
           Les NAO commencent jeudi. L’enveloppe des augmentations a disparu.<br />Trouve le bon de
           commande signé et rejoins ton binôme.
         </p>
-        <ul>
-          <li><kbd>←</kbd><kbd>→</kbd> courir</li>
-          <li><kbd>Espace</kbd> sauter · s’accrocher aux rebords</li>
-          <li><kbd>↑</kbd> grimper · lire un tableau</li>
-          <li><kbd>↓</kbd> lâcher le rebord</li>
-        </ul>
-        <div class="heroes">
-          <a class="hero-btn" href="?hero=kevin">Kévin<small>Directeur de Projets</small></a>
-          <a class="hero-btn pink" href="?hero=charline"
-            >Charline<small>Business Manager · double saut</small></a
-          >
+        <div class="heroes" role="radiogroup" aria-label="Choisis ton héros">
+          <button class="hero-card" data-hero="kevin" role="radio" aria-checked="true">
+            <b>Kévin</b><small>Directeur de Projets</small><em>4 cœurs · s’accroche plus haut</em>
+          </button>
+          <button class="hero-card pink" data-hero="charline" role="radio" aria-checked="false">
+            <b>Charline</b><small>Business Manager</small><em>Plus rapide · double saut</em>
+          </button>
         </div>
-        <button class="go" id="go">Jouer</button>
+        <button class="go" id="play">Jouer</button>
+        <details class="controls">
+          <summary>Commandes</summary>
+          <ul>
+            <li><kbd>←</kbd><kbd>→</kbd> courir</li>
+            <li><kbd>Espace</kbd> sauter, s’accrocher aux rebords</li>
+            <li><kbd>↑</kbd> grimper · lire un tableau</li>
+            <li><kbd>↓</kbd> lâcher le rebord</li>
+            <li><kbd>X</kbd> lancer un compte rendu</li>
+            <li><kbd>Échap</kbd> pause</li>
+          </ul>
+        </details>
       </div>
     </section>
-    <section class="reader" id="reader" hidden>
+
+    <section class="screen" id="pause" hidden>
+      <div class="card small">
+        <h2>Pause café</h2>
+        <button class="go" id="resume">Reprendre</button>
+        <button class="ghost" id="restart">Recommencer</button>
+        <button class="ghost" id="quit">Menu principal</button>
+      </div>
+    </section>
+
+    <section class="screen" id="won" hidden>
+      <div class="card">
+        <p class="kicker">Étape terminée</p>
+        <h2>Bon de commande livré !</h2>
+        <p class="lead" id="wonText"></p>
+        <button class="go" id="again">Rejouer</button>
+        <button class="ghost" id="menu">Menu principal</button>
+      </div>
+    </section>
+
+    <section class="screen reader" id="reader" hidden>
       <img id="readerImg" alt="Tableau blanc" />
       <button class="go" id="readerClose">Fermer</button>
     </section>
-    <nav class="touch">
+
+    <nav class="touch" aria-label="Commandes tactiles">
       <div class="pad">
         <button data-key="left" aria-label="Gauche">◀</button>
         <button data-key="down" aria-label="Lâcher">▼</button>
         <button data-key="right" aria-label="Droite">▶</button>
       </div>
       <div class="pad">
-        <button data-key="up" aria-label="Grimper">▲</button>
+        <button data-key="fire" class="cr-btn" aria-label="Lancer un compte rendu">CR</button>
+        <button data-key="up" aria-label="Grimper ou lire">▲</button>
         <button data-key="jump" class="big" aria-label="Sauter">SAUT</button>
       </div>
     </nav>
+
     <script type="module" src="./src/main.js"></script>
   </body>
 </html>
