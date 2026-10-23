@@ -121,6 +121,15 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
           // Bare concrete, a blue level band and hazard stripes along the floor.
           const stripe = ty > 3.05 && ty < 3.45;
           const band = ty > 5.6 && ty < 6.1;
+          // Neon strips under the ceiling: lime and pink, the Inetum colours.
+          if (ty > 8.7 && ty < 8.85) {
+            vol.box(x, y, 0, x + 1, y + 1, 4, rgb('#c6f432'), MAT.EMISSIVE);
+            continue;
+          }
+          if (ty > 8.45 && ty < 8.55 && (x >> 5) % 3 === 0) {
+            vol.box(x, y, 0, x + 1, y + 1, 4, rgb('#ff4f9a'), MAT.EMISSIVE);
+            continue;
+          }
           const c = stripe
             ? (x >> 2) % 2
               ? rgb('#f2c230')

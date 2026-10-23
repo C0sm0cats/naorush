@@ -69,8 +69,8 @@ export const PARKING = {
   ],
   lighting: {
     sunDir: [-0.2, -0.8, 0.55],
-    sunColor: [0.55, 0.62, 0.78],
-    sky: [0.3, 0.36, 0.48],
+    sunColor: [0.7, 0.76, 0.92],
+    sky: [0.38, 0.42, 0.56],
     ground: [0.14, 0.15, 0.2],
     fog: [0.08, 0.1, 0.16],
     fogRange: [30, 90],
