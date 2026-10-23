@@ -1064,3 +1064,22 @@ body[data-pad='l'] .touch .big {
     display: none;
   }
 }
+
+.fade {
+  position: fixed;
+  inset: 0;
+  background: #0e1424;
+  opacity: 0;
+  pointer-events: none;
+}
+.fade.on {
+  animation: fade 0.45s ease-out;
+}
+@keyframes fade {
+  0% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+  }
+}

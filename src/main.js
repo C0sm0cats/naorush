@@ -573,9 +573,15 @@ function onEvent(e) {
     case 'death':
       if (sim.gameOver) gameOverTimer = 1.1;
       break;
-    case 'respawn':
+    case 'respawn': {
+      // A quick dip to black hides the jump back to the badge.
+      const fade = $('fade');
+      fade.classList.remove('on');
+      void fade.offsetWidth;
+      fade.classList.add('on');
       say(heroId, 'respawn');
       break;
+    }
     case 'bossStart':
       audio.music(boss === 'regionalDirector' ? 'bossRodolphe' : 'bossJulien');
       setIntensity(0.5);
