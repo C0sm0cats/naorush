@@ -35,6 +35,7 @@ const trophies = new Trophies((t) => {
 });
 const SAVE_KEY = 'naorush.stage';
 const PREFS_KEY = 'naorush.prefs';
+const BEST_KEY = 'naorush.best';
 
 /** Player preferences, saved locally. */
 const prefs = {
@@ -446,10 +447,19 @@ function stageWon() {
   $('wonKicker').textContent = `Étape ${stage + 1} sur ${LEVELS.length} terminée`;
   $('wonTitle').textContent = STAGE_END[stage].title;
   $('wonText').textContent = STAGE_END[stage].text;
+  // Best time per stage and hero.
+  const bests = JSON.parse(localStorage.getItem(BEST_KEY) ?? '{}');
+  const key = `${level.id}:${heroId}`;
+  const record = !(bests[key] <= sim.time);
+  if (record) {
+    bests[key] = sim.time;
+    localStorage.setItem(BEST_KEY, JSON.stringify(bests));
+  }
   const rows = [
     ['Tickets Swile', sim.tickets],
     ['Secrets', `${sim.secrets} / ${sim.secretTotal}`],
     ['Temps', clock(sim.time)],
+    ['Record', record ? 'Nouveau record !' : clock(bests[key])],
     ['Retours au badge', sim.deaths],
   ];
   $('wonStats').replaceChildren(
