@@ -579,7 +579,7 @@ const vibrate = (pattern) => {
 /** @param {import('./game/sim.js').SimEvent} e */
 function onEvent(e) {
   // Clockwork traps tick all over the stage: only the ones in view make noise.
-  if (AMBIENT.has(e.type) && Math.abs(e.x - sim.hero.x) > 12) return;
+  if (AMBIENT.has(e.type) && !sim.bossActive && Math.abs(e.x - sim.hero.x) > 12) return;
   hud.event(e);
   trophies.event(e, sim, level.id);
   view.event(e, sim.time);
