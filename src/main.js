@@ -219,7 +219,18 @@ function updateContinue() {
   const d = today();
   $('dailyBtn').textContent =
     `Défi du jour : ${LEVELS[d.stage].name} · ${CAST[d.hero].name} · ${d.twist.label}`;
-  $('bonusBtn').hidden = !trophies.data.got.nao;
+  // Bonus stages, unlocked once the envelope is signed.
+  const bonusRow = $('bonusRow');
+  bonusRow.hidden = !trophies.data.got.nao;
+  bonusRow.replaceChildren(
+    ...LEVELS.slice(CAMPAIGN).map((l, k) => {
+      const b = document.createElement('button');
+      b.className = 'ghost';
+      b.textContent = l.name;
+      b.onclick = () => startFrom(CAMPAIGN + k);
+      return b;
+    }),
+  );
   const got = trophies.list().filter((t) => t.got).length;
   $('trophiesBtn').textContent = `Trophées ${got}/${trophies.list().length}`;
   const n = saved();
@@ -345,7 +356,6 @@ $('castBtn').onclick = () => {
   show('cast');
 };
 $('castClose').onclick = () => show('title');
-$('bonusBtn').onclick = () => startFrom(CAMPAIGN);
 function closeOptions() {
   input.capture = null;
   show(optionsFrom === 'pause' ? 'pause' : 'title');
@@ -394,6 +404,10 @@ const STAGE_END = [
   {
     title: 'Ordre de mission signé !',
     text: 'Fin de l’intercontrat : départ en mission lundi. Bravo, et bon week-end !',
+  },
+  {
+    title: 'Badge cafét’ récupéré !',
+    text: 'Échappé aux bonbonnes, et les cafés sont offerts. Une pause bien méritée.',
   },
 ];
 

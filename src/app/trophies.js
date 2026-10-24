@@ -21,6 +21,7 @@ export const TROPHIES = [
   { id: 'meetings', name: 'Agenda plein', text: 'Envoyer 20 collègues en réunion.' },
   { id: 'tickets', name: 'Repas offerts', text: 'Ramasser 150 tickets Swile au total.' },
   { id: 'bonus', name: 'Départ en mission', text: 'Finir l’étape bonus Intercontrat.' },
+  { id: 'pause', name: 'Pause méritée', text: 'Échapper aux bonbonnes de la salle de pause.' },
 ];
 
 const KEY = 'naorush.trophies';
@@ -114,6 +115,7 @@ export class Trophies {
   stageWon(sim, stageId, last) {
     if (stageId === 'parking') this.unlock('badge');
     if (stageId === 'intercontrat') this.unlock('bonus');
+    if (stageId === 'pause') this.unlock('pause');
     if (sim.deaths === 0) this.unlock('clean');
     if (last) {
       this.unlock('nao');

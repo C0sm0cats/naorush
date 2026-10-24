@@ -56,9 +56,9 @@ Badge aux bornes Chronotime : en cas de pépin, tu repars de là. Les ramettes d
 ## Pour rejouer
 
 - **Défi du jour** : la même étape, le même héros et la même contrainte pour tout le monde (un seul cœur, pas de CR au départ, contre la montre). De quoi comparer ses temps entre collègues.
-- **Étape bonus** : l’Intercontrat, un parcours d’escalade semé de tickets, débloqué une fois l’enveloppe signée.
+- **Étapes bonus**, débloquées une fois l’enveloppe signée : l’Intercontrat, un parcours d’escalade semé de tickets, et la Salle de pause, une course-poursuite avec les bonbonnes d’eau.
 - **Secrets** : deux par étape, un pour chaque héros.
-- **Trophées** : treize objectifs (étapes sans faute, boss convaincus sans être touché, tous les secrets…).
+- **Trophées** : quatorze objectifs (étapes sans faute, boss convaincus sans être touché, tous les secrets…).
 - **Records** : meilleur temps par étape et par héros.
 - **Distribution** : tous les personnages en 3D, avec leur portrait en quelques mots.
 - **Partager mon score** : partage natif sur mobile, texte prêt à coller dans Teams sur PC.

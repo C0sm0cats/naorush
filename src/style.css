@@ -1118,3 +1118,8 @@ body[data-pad='l'] .touch .big {
 .btn-row {
   grid-template-columns: repeat(3, 1fr);
 }
+
+.bonus-row {
+  grid-template-columns: 1fr 1fr;
+  margin-top: 8px;
+}
