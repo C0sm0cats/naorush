@@ -39,6 +39,8 @@ const vary =
     return (r << 16) | (g << 8) | b;
   };
 
+const STICKY = [rgb('#ffe066'), rgb('#ff8fc0'), rgb('#d8ff6a'), rgb('#9fd8ff')];
+
 export const PALETTE = {
   carpet: rgb('#3e5170'),
   carpetEdge: rgb('#2f3b52'),
@@ -73,13 +75,50 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
   const dc = theme === 'datacenter';
   const park = theme === 'parking';
   const concrete = vary(rgb('#7b818c'), 0.08, 4);
+  const pebbles = vary(rgb('#7d7a75'), 0.2, 1);
+  /** Roof gravel: pebbles, with lighter washed patches and a few pale stones. */
+  /** @param {number} x @param {number} y @param {number} z */
+  const gravel = (x, y, z) => {
+    const n = noise(x, y, z);
+    if (n > 0.94) return rgb('#b3ada2');
+    if (noise(x >> 3, z >> 2, 21) > 0.72) return vary(rgb('#908a80'), 0.18, 1)(x, y, z);
+    return pebbles(x, y, z);
+  };
+  /** Parapet coping stones with dark joints. @param {number} x */
+  const parapet = (x) => (x % (2 * V) === 0 ? rgb('#aaa396') : rgb('#d8d2c6'));
+  /** Acoustic ceiling tiles in a light grid. @param {number} x @param {number} _y @param {number} z */
+  const tiles = (x, _y, z) => (x % V === 0 || z % 6 === 2 ? rgb('#cfcabe') : PALETTE.ceiling);
+  /** Columns holding a hidden trapdoor: their floor must match the disguised tile. */
+  const trapCols = new Set();
+  map.forEach((row) => [...row].forEach((ch, c) => ch === 'L' && trapCols.add(c)));
+  const asphalt = vary(rgb('#3b3f47'), 0.16, 2);
   /** Floor finish: carpet in offices, raised-floor tiles in the server hall. */
   const floorTop = park
-    ? /** @param {number} x @param {number} y @param {number} z */ (x, y, z) =>
-        x % (3 * V) < 1 && z > zv(-1.8) ? rgb('#e9e6dc') : vary(rgb('#3b3f47'), 0.16, 2)(x, y, z)
+    ? /** @param {number} x @param {number} y @param {number} z */ (x, y, z) => {
+        if (x % (3 * V) < 1 && z > zv(-1.8)) return rgb('#e9e6dc');
+        // Oil stains where the cars stand.
+        const bay = Math.abs((x % (3 * V)) - 1.5 * V);
+        if (
+          bay < 7 &&
+          z > zv(-1.7) &&
+          z < zv(0.6) &&
+          !trapCols.has(x >> 3) &&
+          noise(x >> 3, z >> 3, 5) > 0.55 &&
+          noise(x >> 1, z >> 1, 11) > 0.45
+        )
+          return noise(x, z, 3) > 0.5 ? rgb('#25282d') : rgb('#2c2f35');
+        return asphalt(x, y, z);
+      }
     : dc
       ? /** @param {number} x @param {number} _y @param {number} z */ (x, _y, z) =>
-          ((x >> 2) + (z >> 2)) % 2 ? rgb('#a3acb7') : rgb('#8d96a2')
+          // Perforated cold-aisle grilles every fourth tile.
+          (x >> 3) % 4 === 1 && !trapCols.has(x >> 3) && z > zv(-1.5) && z < zv(0.8)
+            ? x % 2
+              ? rgb('#5e6774')
+              : rgb('#b8c1cc')
+            : ((x >> 2) + (z >> 2)) % 2
+              ? rgb('#a3acb7')
+              : rgb('#8d96a2')
       : vary(PALETTE.carpet, 0.14, 2);
   /** Visual style of a solid tile, from the level's ASCII map. */
   /** @param {number} c @param {number} r */
@@ -140,6 +179,19 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
                 ? rgb('#8e949e')
                 : vary(rgb('#6b717c'), 0.07, 8)(x, y, 0);
           vol.box(x, y, 0, x + 1, y + 1, 3, c);
+          continue;
+        }
+        if (dc && y >= 78 && y < 84) {
+          // The T&S band: lime, with navy pixel lettering at the start of every room.
+          const lx = x % (20 * V);
+          const letter =
+            lx > 6 * V &&
+            lx < 10 * V &&
+            (lx >> 1) % 4 !== 3 &&
+            y > 78 &&
+            y < 83 &&
+            noise(x >> 1, y, 13) > 0.35;
+          vol.box(x, y, 0, x + 1, y + 1, 3, letter ? PALETTE.fascia : PALETTE.accent);
           continue;
         }
         if (dc && inWindowBand && !panel) {
@@ -213,6 +265,12 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
               [rgb('#46ff9b'), rgb('#58d5ff'), rgb('#ffb347')][k % 3],
               MAT.EMISSIVE,
             );
+        // Door handle, and a warning sticker on the bottom unit of some racks.
+        vol.box(x0 + 6, y0 + 2, sz - 1, x0 + 7, y0 + 6, sz, PALETTE.metal, MAT.GLOSSY);
+        if (styleAt(c, r - 1) !== 'V' && noise(c, r, 31) > 0.4) {
+          vol.box(x0 + 1, y0 + 1, sz - 1, x0 + 4, y0 + 4, sz, PALETTE.hazard);
+          vol.box(x0 + 2, y0 + 2, sz - 1, x0 + 3, y0 + 3, sz, rgb('#1b1b1b'));
+        }
         if (styleAt(c, r + 1) !== 'V')
           vol.box(x0, y0 + V - 1, zv(-2.2), x0 + V, y0 + V, sz, PALETTE.accent);
         continue;
@@ -247,6 +305,13 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
                 : rgb('#9cc6e0'),
           MAT.GLOSSY,
         );
+        // Sticky notes left on the glass after the last workshop.
+        for (let k = 0; k < 2; k++)
+          if (noise(c, r, 17 + k) > 0.72) {
+            const nx = x0 + 1 + Math.floor(noise(c, r, 23 + k) * 5);
+            const ny = y0 + (k ? 4 : 1) + Math.floor(noise(c, r, 29 + k) * 2);
+            vol.box(nx, ny, sz - 1, nx + 2, ny + 2, sz, STICKY[(c + r + k) % STICKY.length]);
+          }
         if (bottom) vol.box(x0, y0 - 1, zv(-2.4), x0 + V, y0, sz, PALETTE.ceiling);
         continue;
       }
@@ -285,8 +350,8 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
               : rgb('#b9b2a6'),
           );
           if (top) {
-            vol.box(x0, y0 + V - 2, zv(-2.6), x0 + V, y0 + V, sz, vary(rgb('#7d7a75'), 0.2, 1));
-            vol.box(x0, y0 + V - 2, sz - 2, x0 + V, y0 + V + 1, sz, rgb('#d8d2c6'));
+            vol.box(x0, y0 + V - 2, zv(-2.6), x0 + V, y0 + V, sz, gravel);
+            vol.box(x0, y0 + V - 2, sz - 2, x0 + V, y0 + V + 1, sz, parapet);
           }
           continue;
         }
@@ -344,8 +409,8 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
           );
           if (above !== TILE.SOLID && roof) {
             // Raised roof terrace: gravel and a pale parapet.
-            vol.box(x0, y0 + V - 2, depthBack, x0 + V, y0 + V, sz, vary(rgb('#7d7a75'), 0.2, 1));
-            vol.box(x0, y0 + V - 2, sz - 2, x0 + V, y0 + V + 1, sz, rgb('#d8d2c6'));
+            vol.box(x0, y0 + V - 2, depthBack, x0 + V, y0 + V, sz, gravel);
+            vol.box(x0, y0 + V - 2, sz - 2, x0 + V, y0 + V + 1, sz, parapet);
           } else if (above !== TILE.SOLID)
             vol.box(x0, y0 + V - 2, depthBack, x0 + V, y0 + V, sz, floorTop);
         }
@@ -356,7 +421,15 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
         }
         if (isCeiling) {
           vol.box(x0, y0, 0, x0 + V, y0 + V, sz, park ? concrete : rgb('#1a2132'));
-          vol.box(x0, y0, 0, x0 + V, y0 + 1, sz, park ? rgb('#8a909a') : PALETTE.ceiling);
+          vol.box(
+            x0,
+            y0,
+            0,
+            x0 + V,
+            y0 + 1,
+            sz,
+            park ? rgb('#8a909a') : dc ? PALETTE.ceiling : tiles,
+          );
           const lamp = park ? c % 6 === 3 && below !== TILE.SOLID : c % 5 === 2;
           if (lamp) {
             // Office ceiling lights, cool tubes in the server room, neon in the car park.
@@ -396,8 +469,312 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
       }
     }
 
+  furnish({ vol, sim, map, decor, theme, zv, onPanel });
   for (const d of decor) placeDecor(vol, d, sz);
   return { vol, mesh: meshVolume(vol), lights };
+}
+
+/**
+ * @typedef {Object} FurnishContext
+ * @property {Volume} vol
+ * @property {import('../game/sim.js').Sim} sim
+ * @property {string[]} map
+ * @property {import('../data/levels/index.js').Decor[]} decor
+ * @property {'office'|'datacenter'|'rooftop'|'parking'} theme
+ * @property {(z: number) => number} zv World z to voxel z.
+ * @property {(x: number) => boolean} onPanel Whether a voxel column is reserved for artwork.
+ */
+
+/** 3×5 pixel digits for the car park bay numbers, rows top to bottom. */
+const DIGITS = [
+  '111101101101111',
+  '010110010010111',
+  '111001111100111',
+  '111001111001111',
+  '101101111001001',
+  '111100111001111',
+  '111100111101111',
+  '111001010010010',
+  '111101111101111',
+  '111101111001111',
+];
+
+/**
+ * Purely visual dressing behind the gameplay plane: the back row of desks, signage,
+ * cable trays, pipes, vents... Collision comes from the sim tiles, never from this.
+ * @param {FurnishContext} ctx
+ */
+function furnish({ vol, sim, map, decor, theme, zv, onPanel }) {
+  const { w, h, tiles } = sim;
+  /** @param {number} c @param {number} r */
+  const tile = (c, r) => (c < 0 || c >= w || r < 0 || r >= h ? TILE.SOLID : tiles[c + r * w]);
+  /** First empty row from the bottom of a column (its ground level). @param {number} c */
+  const groundOf = (c) => {
+    let r = 0;
+    while (r < h && tile(c, r) === TILE.SOLID) r++;
+    return r;
+  };
+  const ground = Array.from({ length: w }, (_, c) => groundOf(c));
+  /** @type {Record<number, number>} */
+  const tally = {};
+  for (const g of ground) tally[g] = (tally[g] ?? 0) + 1;
+  const base = Number(Object.keys(tally).sort((a, b) => tally[+b] - tally[+a])[0]);
+  const F = base * V;
+  const arena = sim.boss ? sim.boss.arena : [w, w];
+  // Props and interactive things standing on the ground floor keep their space.
+  const busy = new Set();
+  for (const d of decor)
+    if (d.type !== 'poster' && d.type !== 'whiteboard' && Math.abs(d.y - base) < 1.5)
+      for (let c = Math.floor(d.x - 1.4); c <= Math.ceil(d.x + (d.type === 'desk' ? 6 : 1.4)); c++)
+        busy.add(c);
+  map.forEach((row, i) => {
+    const r = h - 1 - i;
+    if (r !== base && r !== base + 1) return;
+    [...row].forEach((ch, c) => {
+      if ('dpPDEkJCnSX'.includes(ch)) for (let k = c - 1; k <= c + 1; k++) busy.add(k);
+    });
+  });
+  // Steel posts under the mezzanines (see the filing cabinets) stand in the back too.
+  for (let c = 0; c < w; c += 3)
+    for (let r = base + 2; r < h - 1; r++)
+      if (tile(c, r) === TILE.SOLID && tile(c, r - 1) === TILE.EMPTY) busy.add(c);
+  /** Whether column c has a clear, plain stretch of ground floor (two tiles of headroom). */
+  /** @param {number} c */
+  const clear = (c) =>
+    ground[c] === base &&
+    tile(c, base) === TILE.EMPTY &&
+    tile(c, base + 1) === TILE.EMPTY &&
+    !busy.has(c) &&
+    (c < arena[0] - 1 || c > arena[1]) &&
+    !onPanel(c * V) &&
+    !onPanel(c * V + V - 1);
+  /** Whether column c is open under the ceiling (rows ceilRow-2 .. ceilRow-1). */
+  /** @param {number} c @param {number} ceil */
+  const openBelow = (c, ceil) =>
+    tile(c, ceil - 1) === TILE.EMPTY && tile(c, ceil - 2) === TILE.EMPTY;
+
+  if (theme === 'office') {
+    // Far back row of open-space desks, in pods of three.
+    let pod = 0;
+    for (let c = 1; c < w - 2;) {
+      if (!clear(c) || !clear(c + 1)) {
+        c++;
+        pod = 0;
+        continue;
+      }
+      backDesk(vol, c * V, F, noise(c, base, 41), pod === 0);
+      c += 2;
+      if (++pod === 3) {
+        c++;
+        pod = 0;
+      }
+    }
+    // Cable trunking along the skirting.
+    for (let c = 0; c < w; c++)
+      if (ground[c] === base && tile(c, base) === TILE.EMPTY)
+        vol.box(c * V, F - 2, 3, c * V + V, F + 1, 5, (x) =>
+          x % (2 * V) === 0 ? rgb('#c9c6be') : rgb('#e6e3dc'),
+        );
+    // Plant boxes on the window sills.
+    for (let c = 2; c < w - 2; c += 7) {
+      const x = c * V;
+      if (onPanel(x - 2) || onPanel(x + V + 2) || tile(c, 4) !== TILE.EMPTY) continue;
+      if (noise(c, 3, 43) < 0.25) continue;
+      vol.box(x, 34, 3, x + V, 36, 6, rgb('#f0eee8'));
+      vol.box(x, 35, 5, x + V, 36, 6, PALETTE.fascia);
+      for (let px = x; px < x + V; px++)
+        for (let pz = 3; pz < 6; pz++) {
+          const top = 36 + Math.floor(noise(px, pz, 47) * 3.2);
+          vol.box(
+            px,
+            36,
+            pz,
+            px + 1,
+            top,
+            pz + 1,
+            noise(px, pz, 53) > 0.5 ? PALETTE.leaf : PALETTE.leafLight,
+          );
+        }
+    }
+    // Ceiling-hung room signs: navy, lime trim, a pictogram and a line of "text".
+    for (let room = 0; room * 20 < w; room++) {
+      const cx = room * 20 + 9;
+      const x0 = cx * V - 12,
+        x1 = cx * V + 12;
+      if (cx >= arena[0] - 2) continue;
+      let ok = true;
+      for (let x = x0 - 2; x < x1 + 2; x++) if (onPanel(x)) ok = false;
+      for (let c = cx - 2; c <= cx + 2; c++) if (!openBelow(c, h - 1)) ok = false;
+      if (!ok) continue;
+      const top = (h - 1) * V;
+      for (const wx of [x0 + 3, x1 - 4]) vol.box(wx, top - 4, 9, wx + 1, top, 10, rgb('#2a2f38'));
+      vol.box(x0, top - 10, 8, x1, top - 4, 10, PALETTE.fascia);
+      vol.box(x0, top - 10, 8, x1, top - 9, 11, PALETTE.accent);
+      vol.box(
+        x0 + 2,
+        top - 8,
+        10,
+        x0 + 5,
+        top - 5,
+        11,
+        room % 3 === 1 ? rgb('#ff4f9a') : PALETTE.accent,
+      );
+      const len = 8 + Math.floor(noise(room, 1, 59) * 9);
+      vol.box(x0 + 7, top - 7, 10, x0 + 7 + len, top - 6, 11, rgb('#f4f1ea'));
+    }
+  }
+
+  if (theme === 'datacenter') {
+    // Ceiling cable tray with colour-coded runs, hung on threaded rods.
+    const top = (h - 1) * V;
+    const runs = [
+      rgb('#3d8bfd'),
+      rgb('#f2c230'),
+      PALETTE.cable,
+      PALETTE.accent,
+      rgb('#46c9b8'),
+      rgb('#3d8bfd'),
+    ];
+    for (let c = 0; c < w; c++) {
+      if (!openBelow(c, h - 1)) continue;
+      const x = c * V;
+      vol.box(x, top - 4, 4, x + V, top - 3, 12, rgb('#5d6675'));
+      for (const z of [4, 11]) vol.box(x, top - 3, z, x + V, top - 2, z + 1, rgb('#7c8594'));
+      runs.forEach((col, k) => vol.box(x, top - 3, 5 + k, x + V, top - 2, 6 + k, col));
+      if (c % 2 === 0)
+        for (const z of [4, 11]) vol.box(x + 3, top - 2, z, x + 4, top, z + 1, PALETTE.metal);
+    }
+    // Floor-standing fire-suppression cylinders and cabling in the back.
+    for (let c = 2; c < w - 2; c += 9)
+      if (clear(c) && noise(c, 0, 61) > 0.3) {
+        const x = c * V + 2;
+        vol.box(x, F, 4, x + 3, F + 9, 7, rgb('#d23a3a'));
+        vol.box(x + 1, F + 9, 5, x + 2, F + 10, 6, rgb('#2a2f38'));
+        vol.box(x, F + 5, 6, x + 3, F + 7, 7, rgb('#f4f1ea'));
+      }
+  }
+
+  if (theme === 'parking') {
+    // Ceiling services: a ventilation duct and the red sprinkler main, on brackets.
+    let ceil = h - 1;
+    while (ceil > 0 && tile(Math.floor(w / 2), ceil - 1) === TILE.SOLID) ceil--;
+    const top = ceil * V;
+    for (let c = 0; c < w; c++) {
+      if (!openBelow(c, ceil)) continue;
+      const x = c * V;
+      vol.box(x, top - 4, 3, x + V, top - 1, 7, (px) =>
+        px % (2 * V) < 1 ? rgb('#7d838c') : rgb('#a3a9b2'),
+      );
+      vol.box(x, top - 2, 9, x + V, top - 1, 10, rgb('#d23a3a'));
+      if (c % 3 === 0) vol.box(x + 4, top - 1, 4, x + 5, top, 10, rgb('#5c6170'));
+      if (c % 4 === 2) vol.box(x + 5, top - 3, 9, x + 6, top - 2, 10, rgb('#c9a227'));
+    }
+    // Bay numbers on the wall and wheel stops on the floor.
+    for (let bay = 0; bay * 3 < w; bay++) {
+      const cx = bay * 3 * V + 12;
+      const c = cx >> 3;
+      if (ground[c] !== base || tile(c, base) !== TILE.EMPTY) continue;
+      if (!onPanel(cx - 5) && !onPanel(cx + 5)) {
+        const n = String(bay + 1).padStart(2, '0');
+        [...n].forEach((ch, k) => {
+          const g = DIGITS[+ch];
+          for (let i = 0; i < 15; i++)
+            if (g[i] === '1') {
+              const px = cx - 4 + k * 5 + (i % 3);
+              const py = F + 13 - Math.floor(i / 3);
+              vol.box(px, py, 3, px + 1, py + 1, 4, rgb('#e9e6dc'));
+            }
+        });
+      }
+      if (!busy.has(c))
+        vol.box(cx - 5, F, zv(-2.1), cx + 5, F + 1, zv(-1.85), (x) =>
+          Math.abs(x - cx) > 3 ? rgb('#f2c230') : rgb('#c9c4b8'),
+        );
+    }
+    // Fire extinguisher cabinets.
+    for (let c = 6; c < w - 2; c += 13) {
+      const x = c * V;
+      if (ground[c] !== base || onPanel(x - 2) || onPanel(x + V + 2)) continue;
+      vol.box(x + 1, F + 5, 3, x + 7, F + 13, 5, rgb('#d7263d'));
+      vol.box(x + 2, F + 6, 4, x + 6, F + 12, 5, rgb('#f1f1f1'), MAT.GLOSSY);
+      vol.box(x + 3, F + 7, 4, x + 5, F + 11, 6, rgb('#c41d2f'));
+      vol.box(x + 3, F + 11, 5, x + 4, F + 12, 6, rgb('#2a2f38'));
+      vol.box(x + 2, F + 14, 3, x + 6, F + 16, 4, rgb('#d7263d'));
+    }
+  }
+
+  if (theme === 'rooftop') {
+    // Mushroom vents, a cable duct along the back and a few antennas.
+    for (let c = 1; c < w - 1; c++) {
+      if (ground[c] !== base || tile(c, base) !== TILE.EMPTY) continue;
+      const x = c * V;
+      vol.box(x, F, 4, x + V, F + 2, 6, (px) =>
+        px % (2 * V) === 0 ? rgb('#6f757e') : rgb('#9aa1aa'),
+      );
+      if (c % 2 === 0 && tile(c, base) === TILE.EMPTY)
+        vol.box(x + 3, F, 6, x + 5, F + 1, 7, rgb('#5c6170'));
+      if (!clear(c) || noise(c, 2, 67) < 0.72) continue;
+      vol.box(x + 3, F, 9, x + 5, F + 4, 11, rgb('#c9ced5'));
+      vol.box(x + 2, F + 4, 8, x + 6, F + 5, 12, rgb('#9aa2ad'));
+    }
+    for (let c = 3; c < w - 3; c += 11) {
+      const x = c * V + 4;
+      if (ground[c] !== base || onPanel(x - 6) || onPanel(x + 6) || c >= arena[0] - 2) continue;
+      if (noise(c, 5, 71) < 0.35) continue;
+      const hgt = 14 + Math.floor(noise(c, 6, 73) * 10);
+      vol.box(x, F, 4, x + 1, F + hgt, 5, rgb('#4a505c'));
+      for (let k = 1; k < 4; k++)
+        vol.box(x - 3 + k, F + hgt - k * 4, 4, x + 4 - k, F + hgt - k * 4 + 1, 5, rgb('#4a505c'));
+      vol.box(x, F + hgt, 4, x + 1, F + hgt + 1, 5, rgb('#ff3b3b'), MAT.EMISSIVE);
+    }
+  }
+}
+
+/**
+ * One desk of the far back row: white top, monitor, a chair pushed in front.
+ * @param {Volume} vol
+ * @param {number} a Left voxel x.
+ * @param {number} F Floor voxel y.
+ * @param {number} seed 0..1
+ * @param {boolean} first First desk of its pod (no divider on its left).
+ */
+function backDesk(vol, a, F, seed, first) {
+  const legs = rgb('#3a4560');
+  vol.box(a + 1, F + 5, 3, a + 15, F + 6, 10, rgb('#ebe8e1'));
+  vol.box(a + 1, F, 4, a + 2, F + 5, 9, legs);
+  vol.box(a + 14, F, 4, a + 15, F + 5, 9, legs);
+  if (!first) {
+    vol.box(a, F + 5, 3, a + 1, F + 8, 10, rgb('#8a93a6'));
+    vol.box(a, F + 8, 3, a + 1, F + 9, 10, PALETTE.accent);
+  }
+  // Monitor: lit with a spreadsheet, Teams or the intranet; some are off.
+  const screens = [rgb('#58d5ff'), rgb('#7ee2a8'), rgb('#8b8cf7'), rgb('#d9f7ff')];
+  const on = seed > 0.18;
+  vol.box(a + 7, F + 6, 6, a + 9, F + 7, 7, rgb('#22262e'));
+  vol.box(a + 4, F + 7, 6, a + 12, F + 11, 7, rgb('#1b1f27'));
+  vol.box(
+    a + 5,
+    F + 8,
+    7,
+    a + 11,
+    F + 10,
+    8,
+    on ? screens[Math.floor(seed * 97) % 4] : rgb('#20262f'),
+    on ? MAT.EMISSIVE : MAT.GLOSSY,
+  );
+  if (seed > 0.55) vol.box(a + 11, F + 10, 7, a + 12, F + 11, 8, STICKY[Math.floor(seed * 31) % 4]);
+  vol.box(a + 5, F + 6, 9, a + 11, F + 7, 10, rgb('#d0d4da'));
+  if ((seed * 7) % 1 > 0.5)
+    vol.box(a + 12, F + 6, 8, a + 13, F + 7, 9, seed > 0.5 ? PALETTE.fascia : rgb('#f4f1ea'));
+  else vol.box(a + 2, F + 6, 4, a + 5, F + 7, 7, rgb('#fbfbf6'));
+  // Chair pushed in front, a little off-centre.
+  const dx = (Math.floor(seed * 13) % 5) - 2;
+  const chair = rgb('#34406a');
+  vol.box(a + 6 + dx, F, 11, a + 10 + dx, F + 1, 15, rgb('#22262e'));
+  vol.box(a + 7 + dx, F + 1, 12, a + 9 + dx, F + 3, 14, rgb('#22262e'));
+  vol.box(a + 5 + dx, F + 3, 11, a + 11 + dx, F + 4, 15, chair);
+  vol.box(a + 5 + dx, F + 4, 14, a + 11 + dx, F + 8, 15, chair);
+  vol.box(a + 6 + dx, F + 8, 14, a + 10 + dx, F + 9, 15, chair);
 }
 
 /**
