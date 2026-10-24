@@ -6,8 +6,18 @@
 export const BARKS = {
   kevin: {
     start: ['C’est parti. Jalon 1 : l’enveloppe.', 'Planning serré, on y va.'],
-    checkpoint: ['Jalon atteint.', 'Badgé, tracé, planifié.', 'Point d’étape validé.'],
-    hurt: ['Risque identifié… un peu tard.', 'Je note ça dans le REX.', 'Aïe. Plan B.'],
+    checkpoint: [
+      'Jalon atteint.',
+      'Badgé, tracé, planifié.',
+      'Point d’étape validé.',
+      'Chronotime est content.',
+    ],
+    hurt: [
+      'Risque identifié… un peu tard.',
+      'Je note ça dans le REX.',
+      'Aïe. Plan B.',
+      'Ça, c’était pas dans le RAID.',
+    ],
     key: ['Livrable récupéré !', 'Ça, c’est un jalon.'],
     ammo: ['Trois CR de plus au planning.', 'Du papier frais !'],
     meeting: ['Je t’envoie l’invitation.', 'On en parle en réunion ?'],
@@ -24,8 +34,13 @@ export const BARKS = {
   },
   charline: {
     start: ['Allez, on a une enveloppe à signer !', 'Objectif du jour : closer.'],
-    checkpoint: ['Badgée !', 'Point de passage signé.', 'Check !'],
-    hurt: ['Oups, pas dans le forecast.', 'Je rebondis, c’est mon métier.', 'Aïe !'],
+    checkpoint: ['Badgée !', 'Point de passage signé.', 'Check !', 'Et hop, badgée !'],
+    hurt: [
+      'Oups, pas dans le forecast.',
+      'Je rebondis, c’est mon métier.',
+      'Aïe !',
+      'On ne lâche rien !',
+    ],
     key: ['Deal conclu !', 'Signé, scellé !'],
     ammo: ['De quoi convaincre tout un comité.', 'Rechargée !'],
     meeting: ['Je te cale un créneau !', 'On se fait un point après ?'],
@@ -41,6 +56,20 @@ export const BARKS = {
     idle: ['Le client attend !', 'Allez, on y va ?', 'Je checke mes mails…'],
     respawn: ['On repart sur de bonnes bases.', 'Nouvel essai, nouvelle opportunité.'],
     bossHit: ['Argument imparable !', 'Proposition envoyée !'],
+  },
+  colleague: {
+    bump: [
+      'Tu m’entends ? Je partage mon écran…',
+      'Attends, je suis en call !',
+      'Je te rappelle après mon point !',
+      'Non mais là je suis en réunion…',
+      'Tu es sur mute, je crois !',
+    ],
+    meeting: ['Ah, une réunion ? J’y vais !', 'Oh, un compte rendu ! Merci !'],
+    wake: ['Bon, où en étais-je ?', 'Je reprends mon call !'],
+  },
+  intern: {
+    internStun: ['Une pause café ? Avec plaisir !', 'Ouf, mes dossiers…'],
   },
   partner: {
     waiting: [
