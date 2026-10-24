@@ -62,6 +62,12 @@ export function mountSoundTest(audio) {
     });
     wrap.append(name, input, out);
     box.append(wrap);
+    /** Moves the slider (and applies the value). @param {number} v */
+    return (v) => {
+      input.value = String(v);
+      out.textContent = v.toFixed(2);
+      onInput(v);
+    };
   };
 
   root.append(el('h1', 'NAO Rush — sound test', 'margin:0;font-size:24px'));
@@ -70,7 +76,7 @@ export function mountSoundTest(audio) {
   const mix = section('Mix');
   slider(mix, 'Music', audio.getVolume('music'), (v) => audio.setVolume('music', v));
   slider(mix, 'SFX', audio.getVolume('sfx'), (v) => audio.setVolume('sfx', v));
-  slider(mix, 'Intensity', 0, (v) => audio.intensity(v));
+  const level = slider(mix, 'Intensity', 0, (v) => audio.intensity(v));
   mix.append(
     button(audio.muted ? 'Unmute' : 'Mute', () => {
       audio.setMuted(!audio.muted);
@@ -99,6 +105,19 @@ export function mountSoundTest(audio) {
   const tracks = group();
   const beds = group();
 
+  // The intensity levels main.js uses, so each layer can be heard as in game.
+  const moments = section('Game moments (music intensity)');
+  for (const [label, v] of /** @type {const} */ ([
+    ['menu 0', 0],
+    ['stage 0.25', 0.25],
+    ['last heart 0.7', 0.7],
+    ['boss 0.5', 0.5],
+    ['boss phase 2 · 0.9', 0.9],
+    ['boss finale · 1', 1],
+  ])) {
+    moments.append(button(label, () => level(v)));
+  }
+
   const stages = section('Stages (music + ambience, as in game)');
   for (const id of STAGES) {
     stages.append(
@@ -110,10 +129,13 @@ export function mountSoundTest(audio) {
     );
   }
 
-  const music = section('Tracks');
+  const music = section(
+    'Tracks (restart on click: the hero picked under Foley plays their variant)',
+  );
   for (const name of TRACKS) {
     const { bpm, bars, seconds, loops } = trackInfo(name);
     const b = button(name, () => {
+      audio.music(null);
       audio.music(name);
       tracks.pick(name);
     });

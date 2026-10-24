@@ -14,6 +14,9 @@ import {
   stageTrack,
   trackInfo,
 } from '../src/app/audio.js';
+import { position } from '../src/app/audio/scheduler.js';
+import { BARS, SONGS, barsFor } from '../src/app/audio/tracks/index.js';
+import { chord, degreeOf } from '../src/app/audio/tracks/theory.js';
 
 /**
  * Every event type the game can emit: string literals in the first argument after `s`
@@ -82,8 +85,8 @@ class Param {
   }
 }
 
-/** @type {{ nodes: number, oscillators: number[], starts: number[], ctx: any }} */
-const stats = { nodes: 0, oscillators: [], starts: [], ctx: null };
+/** @type {{ nodes: number, oscillators: number[], modulators: number[], starts: number[], ctx: any }} */
+const stats = { nodes: 0, oscillators: [], modulators: [], starts: [], ctx: null };
 
 class Node {
   constructor() {
@@ -102,9 +105,12 @@ class Node {
     this.type = '';
     /** @type {(() => void) | null} */
     this.onended = null;
+    /** @type {any} */
+    this.out = null;
   }
   /** @param {any} n */
   connect(n) {
+    this.out = n;
     return n;
   }
   disconnect() {}
@@ -119,8 +125,16 @@ class Osc extends Node {
   /** @override @param {number} t */
   start(t = 0) {
     super.start(t);
-    stats.oscillators.push(this.frequency.value);
+    // A modulator (vibrato, FM, chorus) feeds an AudioParam, not the mix: not a note.
+    let n = this.out;
+    for (let hops = 0; n && !(n instanceof Param) && hops < 3; hops++) n = n.out;
+    if (n instanceof Param) stats.modulators.push(this.frequency.value);
+    else stats.oscillators.push(this.frequency.value);
     stats.starts.push(t);
+  }
+  /** @param {any} wave */
+  setPeriodicWave(wave) {
+    if (!wave) throw new TypeError('no wave');
   }
 }
 
@@ -152,6 +166,14 @@ class FakeContext {
   }
   createDelay() {
     return new Node();
+  }
+  createConvolver() {
+    return Object.assign(new Node(), { buffer: null });
+  }
+  /** @param {Float32Array} real @param {Float32Array} imag */
+  createPeriodicWave(real, imag) {
+    if (real.length !== imag.length) throw new RangeError('wave lengths differ');
+    return { real };
   }
   /** @param {number} _c @param {number} len @param {number} sr */
   createBuffer(_c, len, sr) {
@@ -194,6 +216,7 @@ beforeEach(() => {
   });
   stats.nodes = 0;
   stats.oscillators = [];
+  stats.modulators = [];
   stats.starts = [];
 });
 afterEach(() => {
@@ -227,6 +250,10 @@ describe('audio engine', () => {
       expect(stats.oscillators.length, name).toBeGreaterThan(10);
       for (const f of stats.oscillators) {
         expect(f, name).toBeGreaterThan(20);
+        expect(f, name).toBeLessThan(12000);
+      }
+      for (const f of stats.modulators) {
+        expect(f, name).toBeGreaterThan(0);
         expect(f, name).toBeLessThan(12000);
       }
       a.music(null);
@@ -347,5 +374,93 @@ describe('audio engine', () => {
     stats.starts = [];
     a.sfx('record', { delay: -3, pitch: -1 });
     expect(Math.min(...stats.starts)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('reads chord symbols and sharpened melody degrees', () => {
+    expect(chord('I')).toEqual({ root: 0, minor: false, tones: [0, 4, 7] });
+    expect(chord('vi7')).toEqual({ root: 9, minor: true, tones: [0, 3, 7, 10] });
+    expect(chord('bVII')).toEqual({ root: 10, minor: false, tones: [0, 4, 7] });
+    expect(chord('III7').tones).toEqual([0, 4, 7, 10]);
+    expect(chord('iv6')).toEqual({ root: 5, minor: true, tones: [0, 3, 7, 9] });
+    expect(chord('Vs7').tones).toEqual([0, 5, 7, 10]);
+    expect(chord('viio').tones).toEqual([0, 3, 6]);
+    expect(() => chord('H7')).toThrow();
+    expect(degreeOf('4')).toEqual([4, 0]);
+    expect(degreeOf('$')).toEqual([4, 1]);
+    expect(degreeOf('a')).toEqual([10, 0]);
+    expect(degreeOf('A')).toEqual([10, 1]);
+  });
+
+  it('quotes the main motif (sol mi sol do) in every track', () => {
+    for (const name of TRACKS) {
+      const def = SONGS[name];
+      /** @type {number[][]} */
+      const lines = [[], [], []];
+      for (const bar of BARS[name]) {
+        const d = bar.def;
+        const root = def.root + bar.key;
+        [bar.mel, bar.counter, bar.finale].forEach((p, k) => {
+          for (const c of p) {
+            if (c === '.' || c === '-') continue;
+            const [deg, sharp] = degreeOf(c);
+            lines[k].push(root + d.scale[deg % 7] + 12 * Math.floor(deg / 7) + sharp);
+          }
+        });
+      }
+      // Down a third, back up, then up a fourth: in major, minor and the modes.
+      const quotes = lines.some((n) =>
+        n.some(
+          (x, k) =>
+            k + 3 < n.length &&
+            [3, 4].includes(x - n[k + 1]) &&
+            n[k + 2] === x &&
+            n[k + 3] - x === 5,
+        ),
+      );
+      expect(quotes, name).toBe(true);
+    }
+  });
+
+  it('gives each hero their variant of the theme, at the same length', () => {
+    for (const name of ['win', 'credits', 'rooftop']) {
+      const kevin = barsFor(/** @type {any} */ (name), 'kevin').bars;
+      const charline = barsFor(/** @type {any} */ (name), 'charline').bars;
+      expect(charline.length, name).toBe(kevin.length);
+      expect(
+        charline.map((b) => b.mel),
+        name,
+      ).not.toEqual(kevin.map((b) => b.mel));
+    }
+    expect(barsFor('office', 'charline').bars).toBe(BARS.office);
+  });
+
+  it('plays an intro once, then loops the song from its first bar', () => {
+    const { bars, loop } = barsFor('title', 'kevin');
+    expect(loop).toBeGreaterThan(0);
+    const total = bars.length * 16;
+    const run = /** @type {any} */ ({ loop, step: 0 });
+    expect(position(run, total)).toBe(0);
+    run.step = total;
+    expect(position(run, total)).toBe(loop * 16);
+    run.step = total + (total - loop * 16) + 5;
+    expect(position(run, total)).toBe(loop * 16 + 5);
+    // The last bar leads back into the loop's first chord, not the intro's.
+    expect(bars[bars.length - 1].next).toBe(bars[loop].chords[0].root + bars[loop].key);
+  });
+
+  it('keeps the finale layer for the last phase of a boss', () => {
+    const a = engine();
+    a.music('bossRodolphe');
+    advance(0.5);
+    const run = /** @type {NonNullable<typeof a.run>} */ (a.run);
+    a.intensity(0.9);
+    expect(/** @type {any} */ (run.lead.gain).last.v).toBe(1);
+    expect(/** @type {any} */ (run.finale.gain).last.v).toBe(0);
+    a.intensity(1);
+    expect(/** @type {any} */ (run.finale.gain).last.v).toBe(1);
+    stats.oscillators = [];
+    run.finale.gain.value = 1;
+    advance(3);
+    expect(stats.oscillators.length).toBeGreaterThan(10);
   });
 });

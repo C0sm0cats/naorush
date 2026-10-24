@@ -92,19 +92,19 @@ export const SFX_TRIM_DB = {
 };
 /** Loudness trim per track (dB), measured so all tracks sit at a similar RMS. @type {Record<TrackName, number>} */
 export const TRACK_TRIM_DB = {
-  title: 4,
-  parking: 4,
-  office: 2,
-  datacenter: 4,
-  copil: 2,
-  rooftop: 1,
-  intercontrat: 2,
-  cafe: 2,
-  seminar: 0,
-  bossJulien: 2,
-  bossRodolphe: 2,
+  title: 3.5,
+  parking: 1.5,
+  office: 3.5,
+  datacenter: 2,
+  copil: 3,
+  rooftop: 0,
+  intercontrat: 6,
+  cafe: 5.5,
+  seminar: -0.5,
+  bossJulien: -0.5,
+  bossRodolphe: 1,
   win: 2,
-  gameover: 8,
-  credits: 4,
+  gameover: 7,
+  credits: 3.5,
 };
 /* AUDIT-TRIM-END */

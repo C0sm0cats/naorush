@@ -5,7 +5,7 @@ import { MUTE_KEY, VOL_KEYS, load, loadVolume, save } from './prefs.js';
 import { startClock } from './scheduler.js';
 import { SFX } from './sfx.js';
 import { stageBed, stageFloor, stageTrack } from './stages.js';
-import { BARS, SONGS } from './tracks/index.js';
+import { SONGS, barsFor } from './tracks/index.js';
 import { SFX_TRIM_DB, TRACK_TRIM_DB } from './trim.js';
 import { clamp01, dbToGain } from './util.js';
 import { makeVoice } from './voice.js';
@@ -28,6 +28,38 @@ const FADE = 0.6;
 // and leave gently.
 const LAYER_IN_TC = 0.06;
 const LAYER_OUT_TC = 0.5;
+// Music reverb: one shared hall (a synthesised impulse response), fed per track. Mono in,
+// mono out: half the cost of a stereo convolution (the width comes from the panned parts).
+const VERB_SECONDS = 1.6;
+
+/**
+ * Impulse response of a warm hall: a few early reflections, then a dense tail that darkens
+ * as it decays (no sound file: noise shaped in code).
+ * @param {BaseAudioContext} ctx
+ */
+function hallImpulse(ctx) {
+  const rate = ctx.sampleRate;
+  const n = Math.floor(rate * VERB_SECONDS);
+  const ir = ctx.createBuffer(1, n, rate);
+  const data = ir.getChannelData(0);
+  const pre = Math.floor(rate * 0.012);
+  let lp = 0;
+  for (let i = pre; i < n; i++) {
+    const x = (i - pre) / (n - pre);
+    // One-pole lowpass whose cutoff falls with time: air absorbs the highs first.
+    lp += (0.75 - 0.6 * x) * (Math.random() * 2 - 1 - lp);
+    data[i] = lp * Math.exp(-6.2 * x) * (1 - x);
+  }
+  for (const [ms, g] of [
+    [17, 0.5],
+    [29, -0.35],
+    [41, 0.28],
+    [58, -0.2],
+  ]) {
+    data[Math.floor((rate * ms) / 1000)] += g;
+  }
+  return ir;
+}
 
 export class Audio {
   constructor() {
@@ -47,6 +79,8 @@ export class Audio {
     this.wanted = null;
     /** @type {GainNode | null} */
     this.ambBus = null;
+    /** Shared music reverb input. @type {AudioNode | null} */
+    this.verbIn = null;
     /** @type {ReturnType<typeof buildBed> | null} */
     this.bed = null;
     /** @type {Bed | null} */
@@ -109,10 +143,21 @@ export class Audio {
     music.connect(master);
     const amb = ctx.createGain();
     amb.connect(sfx);
+    // Music reverb, shared by every track (each run feeds it through its own send).
+    /** @type {AudioNode | null} */
+    let verbIn = null;
+    if (ctx.createConvolver) {
+      const verb = ctx.createConvolver();
+      verb.channelCount = 1;
+      verb.channelCountMode = 'explicit';
+      verb.buffer = hallImpulse(ctx);
+      verb.connect(music);
+      verbIn = verb;
+    }
     const buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const data = buf.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-    Object.assign(this, { ctx, buf, master, sfxBus: sfx, musicBus: music, ambBus: amb });
+    Object.assign(this, { ctx, buf, master, sfxBus: sfx, musicBus: music, ambBus: amb, verbIn });
   }
 
   /** @param {boolean} m */
@@ -142,7 +187,8 @@ export class Audio {
 
   /**
    * Dynamic layers on the current track: 0 = base, > 0.5 adds drums + bass octave,
-   * 1 adds a lead arpeggio. Ramps smoothly, never restarts the track.
+   * 0.9 adds the lead layer (descant or arpeggio), 1 the finale layer of a boss's last
+   * phase. Ramps smoothly, never restarts the track.
    * @param {number} level 0..1
    */
   intensity(level) {
@@ -152,13 +198,14 @@ export class Audio {
 
   /** @param {Run} run @param {number} now */
   #applyLayers(run, now) {
-    const [drive, lead] = this.#layerTargets();
+    const [drive, lead, finale] = this.#layerTargets();
     // Next beat at or after the next unscheduled step, so a new layer enters on the beat.
     const s16 = 60 / run.def.bpm / 4;
     const beat = Math.max(now, run.next + ((4 - (run.step % 4)) % 4) * s16);
     for (const [node, target] of /** @type {[GainNode, number][]} */ ([
       [run.drive, drive],
       [run.lead, lead],
+      [run.finale, finale],
     ])) {
       const g = node.gain;
       g.cancelScheduledValues(now);
@@ -168,10 +215,13 @@ export class Audio {
     }
   }
 
-  /** @returns {[number, number]} */
+  /** Drive, lead and finale layer gains for the current intensity. */
   #layerTargets() {
     const x = this._intensity;
-    return [clamp01((x - 0.45) / 0.15), clamp01((x - 0.8) / 0.2)];
+    // Rounded, so the levels main.js uses (0.9, 1) land exactly on full layers.
+    const ramp = (/** @type {number} */ a, /** @type {number} */ b) =>
+      clamp01(Math.round(((x - a) / (b - a)) * 1e6) / 1e6);
+    return [ramp(0.45, 0.6), ramp(0.8, 0.9), ramp(0.95, 1)];
   }
 
   /** @param {string} type @param {SfxOpts} [opts] */
@@ -226,29 +276,37 @@ export class Audio {
     const bus = ctx.createGain();
     bus.gain.setValueAtTime(0, now);
     bus.gain.linearRampToValueAtTime(1, now + FADE);
+    const trimGain = dbToGain(TRACK_TRIM_DB[name]);
     const trim = ctx.createGain();
-    trim.gain.value = dbToGain(TRACK_TRIM_DB[name]);
+    trim.gain.value = trimGain;
     trim.connect(this.musicBus);
     bus.connect(trim);
-    const [d0, l0] = this.#layerTargets();
-    const layer = (/** @type {number} */ g) => {
+    const [d0, l0, f0] = this.#layerTargets();
+    /** @param {number} g @param {AudioNode} [to] */
+    const gain = (g, to = bus) => {
       const n = ctx.createGain();
       n.gain.value = g;
-      n.connect(bus);
+      n.connect(to);
       return n;
     };
-    const base = layer(1);
-    const drive = layer(d0);
-    const lead = layer(l0);
-    const wet = ctx.createGain();
-    wet.connect(base);
+    const base = gain(1);
+    const drive = gain(d0);
+    const lead = gain(l0);
+    const finale = gain(f0);
+    const wet = gain(1, base);
+    const pad = gain(1, base);
     /** @type {AudioNode[]} */
-    const nodes = [bus, trim, base, drive, lead, wet];
+    const nodes = [bus, trim, base, drive, lead, finale, wet, pad];
+    /** @type {AudioScheduledSourceNode[]} */
+    const lfos = [];
+    const voice = (/** @type {AudioNode} */ dest) => this.#voice(dest, 1, nodes, lfos);
     const voices = {
-      base: this.#voice(base),
-      wet: this.#voice(wet),
-      drive: this.#voice(drive),
-      lead: this.#voice(lead),
+      base: voice(base),
+      wet: voice(wet),
+      pad: voice(pad),
+      drive: voice(drive),
+      lead: voice(lead),
+      finale: voice(finale),
     };
     if (def.echo) {
       const delay = ctx.createDelay(1);
@@ -261,28 +319,71 @@ export class Audio {
       send.gain.value = def.echo;
       wet.connect(send);
       lead.connect(send);
+      finale.connect(send);
       send.connect(delay).connect(tone).connect(fb).connect(delay);
       tone.connect(bus);
       nodes.push(delay, fb, tone, send);
     }
-    const bars = BARS[name];
+    // Reverb send: melody, pads and the upper layers; it fades with the track.
+    /** @type {GainNode | null} */
+    let verb = null;
+    if (def.reverb && this.verbIn) {
+      verb = ctx.createGain();
+      verb.gain.setValueAtTime(0, now);
+      verb.gain.linearRampToValueAtTime(def.reverb * trimGain, now + FADE);
+      for (const n of [wet, pad, lead, finale]) n.connect(verb);
+      verb.connect(this.verbIn);
+      nodes.push(verb);
+    }
+    // Chorus on the pads: two slowly swaying delays, one each side.
+    if (def.chorus && ctx.createStereoPanner) {
+      const send = ctx.createGain();
+      send.gain.value = def.chorus;
+      pad.connect(send);
+      nodes.push(send);
+      for (const [ms, rate, side] of [
+        [17, 0.31, -0.7],
+        [23, 0.43, 0.7],
+      ]) {
+        const delay = ctx.createDelay(0.05);
+        delay.delayTime.value = ms / 1000;
+        const lfo = ctx.createOscillator();
+        lfo.frequency.value = rate;
+        const depth = ctx.createGain();
+        depth.gain.value = 0.0025;
+        lfo.connect(depth).connect(delay.delayTime);
+        lfo.start(now);
+        const pan = ctx.createStereoPanner();
+        pan.pan.value = side;
+        send.connect(delay).connect(pan).connect(bus);
+        nodes.push(delay, depth, pan, lfo);
+        lfos.push(lfo);
+      }
+    }
+    const { bars, loop } = barsFor(name, this.hero);
     /** @type {Run} */
     const run = {
       name,
       def,
       bars,
+      loop,
       bus,
       base,
       drive,
       lead,
+      finale,
       wet,
+      pad,
+      verb,
       voices,
       nodes,
+      lfos,
       timer: null,
       step: 0,
-      next: now,
+      next: now + 0.08,
+      prev: 0,
+      prevEnd: 0,
     };
-    run.next = now + 0.08;
     const total = bars.length * 16;
     startClock(
       ctx,
@@ -302,10 +403,10 @@ export class Audio {
    * @param {Hero} [hero] who plays it (footsteps); unchanged when omitted
    */
   stage(level, hero) {
+    if (hero === 'kevin' || hero === 'charline') this.hero = hero;
     this.music(stageTrack(level));
     this.ambience(stageBed(level));
     this.floor = stageFloor(level);
-    if (hero === 'kevin' || hero === 'charline') this.hero = hero;
   }
 
   /**
@@ -348,22 +449,30 @@ export class Audio {
   #stop(run, now) {
     if (run.timer) clearInterval(run.timer);
     run.timer = null;
-    const g = run.bus.gain;
-    g.cancelScheduledValues(now);
-    g.setValueAtTime(g.value, now);
-    g.linearRampToValueAtTime(0, now + FADE);
+    for (const node of [run.bus, run.verb]) {
+      if (!node) continue;
+      const g = node.gain;
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(g.value, now);
+      g.linearRampToValueAtTime(0, now + FADE);
+    }
     setTimeout(
       () => {
+        for (const lfo of run.lfos) lfo.stop();
         for (const n of run.nodes) n.disconnect();
       },
       (FADE + 0.3) * 1000,
     );
   }
 
-  /** @param {AudioNode} dest @param {number} [pitch] frequency multiplier @returns {Voice} */
-  #voice(dest, pitch = 1) {
+  /**
+   * @param {AudioNode} dest @param {number} [pitch] frequency multiplier
+   * @param {AudioNode[]} [keep] shared nodes of a music run
+   * @param {AudioScheduledSourceNode[]} [lfos] shared LFOs of a music run @returns {Voice}
+   */
+  #voice(dest, pitch = 1, keep, lfos) {
     const ctx = /** @type {AudioContext} */ (this.ctx);
     const buf = /** @type {AudioBuffer} */ (this.buf);
-    return makeVoice(ctx, buf, dest, pitch);
+    return makeVoice(ctx, buf, dest, pitch, keep, lfos);
   }
 }
