@@ -39,6 +39,19 @@ Une étape est un fichier de `src/data/levels/`, enregistré dans `LEVELS` de `s
 - **Souplesse des commandes** (`src/game/sim.js`) : saut accepté 0,1 s après avoir quitté un bord, saut appuyé 0,13 s avant d’atterrir conservé, pieds qui accrochent un rebord à moins d’un quart de case montent dessus, saut rappuyé au moment de s’accrocher fait grimper. Une trappe cachée cède en 0,55 s, une dalle visible en 0,45 s.
 - **Stagiaire** : il repère un héros à moins de 4,5 cases devant lui sur son étage, s’arrête net 0,4 s, puis fonce sans quitter un rayon de 4,5 cases autour de sa place. Une borne posée hors de ce rayon permet de voir la charge sans risque.
 
+### Cohérence : ce que l’on voit est ce que fait le jeu
+
+La simulation (`src/game/`) applique ces règles partout ; une étape ne doit jamais compter sur l’inverse.
+
+- **Hitbox = modèle** : fauteuil lancé (l’assise, 0,7 de haut), bonbonne (0,6 de diamètre), stagiaire (1,2 : un saut franc le passe), chef de projet en visio (1,3), collègue (1,75 : seul le double saut le passe), aspirateur (son couvercle est un tremplin).
+- **Rien à travers un plancher** : ni personne, ni borne, lecteur, vanne, sortie ou secret ne réagit à un héros à l’étage du dessous ; une dalle de plafond ou des classeurs ne tombent que si rien ne les sépare du héros.
+- **Le poids fissure les dalles** (`-`, `L`) : le héros, debout ou suspendu au bord, mais aussi un collègue, un stagiaire, l’aspirateur ou un fauteuil. Ce qui est dessus tombe quand elle cède ; dans les câbles ou le vide, c’est perdu (de retour à la réapparition). Une dalle se brise sur le sol du dessous et blesse qui s’y trouve.
+- **Un CR s’arrête sur ce qu’il touche** : mur, carton (Kévin le fait tomber), fauteuil, bonbonne (elle éclate, même posée), personne (même déjà en réunion, en pause ou coupée), directeur hors duel, plancher d’une nacelle. Il passe au-dessus de ce qui est plus bas que la poitrine (aspirateur, tiroir, imprimante).
+- **Ce qui roule s’arrête** : la bonbonne éclate contre un mur ou quelqu’un, le fauteuil s’arrête contre un mur, un bord ou quelqu’un.
+- **Les câbles** tuent au contact, par les pieds comme par les côtés ; l’eau d’un sprinkler tombe jusqu’au premier obstacle solide (cartons et dalles compris).
+- **Un coup** projette le héros à l’opposé de ce qui l’a frappé.
+- **À la réapparition tout se réarme** : dalles, dalles de plafond et classeurs, fauteuils, bonbonnes, et ceux qui sont tombés. Cartons cassés, portes ouvertes et vanne fermée restent acquis.
+
 ## 2. La définition
 
 ```js

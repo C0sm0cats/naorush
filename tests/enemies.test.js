@@ -262,3 +262,129 @@ describe('pickups', () => {
     expect(s.secrets).toBe(1);
   });
 });
+
+describe('bodies match what you see', () => {
+  /** Hero pinned `above` tiles over the floor, overlapping the thing at x. @param {Sim} s @param {number} x @param {number} above */
+  const probe = (s, x, above) => {
+    Object.assign(s.hero, {
+      x: x - HERO.w / 2,
+      y: 3 + above,
+      vx: 0,
+      vy: 0,
+      state: 'air',
+      invuln: 0,
+    });
+    return has(run(s, IDLE, 1), 'hurt');
+  };
+
+  it('an intern is hit at chest height, cleared by a fair jump', () => {
+    const s = sim(
+      room(16, [
+        ['S', 2, 3],
+        ['i', 10, 3],
+      ]),
+    );
+    const intern = find(s, 'intern');
+    intern.vx = 0;
+    expect(probe(s, intern.x, 1)).toBe(true);
+    const t = sim(
+      room(16, [
+        ['S', 2, 3],
+        ['i', 10, 3],
+      ]),
+    );
+    find(t, 'intern').vx = 0;
+    expect(probe(t, find(t, 'intern').x, 1.25)).toBe(false);
+  });
+
+  it('a video-call manager is hit at chest height too', () => {
+    const s = sim(
+      room(16, [
+        ['S', 2, 3],
+        ['z', 10, 3],
+      ]),
+    );
+    expect(probe(s, 10.5, 1.1)).toBe(true);
+  });
+
+  it('nobody reaches through a floor: colleague, intern, vacuum on a shelf above the hero', () => {
+    for (const ch of ['n', 'i', 'v']) {
+      // A one-tile-thick shelf (y = 5) with the walker on top, the hero walking underneath.
+      const s = sim(room(16, [['S', 2, 3], ...fill('#', 5, 12, 5, 5), [ch, 8, 6]]));
+      const events = run(s, input({ right: true }), 120);
+      expect(s.hero.x, ch).toBeGreaterThan(11);
+      expect(has(events, 'bump') || has(events, 'hurt'), ch).toBe(false);
+    }
+  });
+});
+
+describe('walkers on loose floor', () => {
+  it('crack it like the hero, fall when it goes, and are back at their post on respawn', () => {
+    for (const ch of ['n', 'i', 'v']) {
+      const s = sim(
+        room(16, [
+          ['S', 2, 3],
+          ['-', 10, 2],
+          ['^', 10, 1],
+          [ch, 10, 3],
+        ]),
+      );
+      const walker = s.things.find((t) => t.kind !== 'loose' && t.kind !== 'lift' && t.x === 10.5);
+      if (!walker) throw new Error(ch);
+      walker.vx = 0;
+      const r = runUntil(s, IDLE, () => !walker.alive, 120);
+      expect(r.ok, ch).toBe(true);
+      expect(has(r.events, 'crack'), ch).toBe(true);
+      s.hero.state = 'dead';
+      s.hero.stateTime = 0;
+      runUntil(s, IDLE, (x) => x.hero.state !== 'dead', 200);
+      expect([walker.alive, walker.y], ch).toEqual([true, 3]);
+    }
+  });
+});
+
+describe('CRs stop at whatever they hit', () => {
+  it('a stunned intern soaks up a CR instead of letting it through', () => {
+    const s = sim(
+      room(20, [
+        ['S', 2, 3],
+        ['i', 8, 3],
+        ['i', 12, 3],
+      ]),
+    );
+    const [first, second] = s.things.filter((t) => t.kind === 'intern');
+    first.vx = second.vx = 0;
+    Object.assign(first, { state: 'stunned', t: 0 });
+    const events = throwCr(s).concat(untilCrGone(s));
+    expect(has(events, 'block')).toBe(true);
+    expect(second.state).not.toBe('stunned');
+  });
+
+  it('a lift deck stops a CR', () => {
+    const s = sim(room(20, [['S', 2, 3]], { lifts: [{ x: 8, y: 4.2, top: 4.2, w: 2 }] }));
+    throwCr(s);
+    const cr = s.things.find((t) => t.kind === 'cr');
+    untilCrGone(s);
+    expect(cr?.x).toBeLessThan(10);
+  });
+
+  it('a director standing by before the duel blocks a CR', () => {
+    const s = sim(
+      room(
+        30,
+        [
+          ['S', 6, 3],
+          ['X', 18, 3],
+        ],
+        {
+          boss: { id: 'techServicesDirector', hp: 3, arena: [14, 28] },
+        },
+      ),
+    );
+    throwCr(s);
+    const cr = s.things.find((t) => t.kind === 'cr');
+    const events = untilCrGone(s);
+    expect(has(events, 'block')).toBe(true);
+    expect(cr?.x).toBeLessThan(19);
+  });
+});

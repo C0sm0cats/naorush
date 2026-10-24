@@ -20,6 +20,7 @@ import {
   stepPaper,
   stepPrinter,
   stepSprinkler,
+  weigh,
 } from './traps.js';
 import {
   DT,
@@ -32,6 +33,7 @@ import {
   hurt,
   make,
   solid,
+  standsIn,
   tileAt,
   touches,
 } from './world.js';
@@ -114,19 +116,20 @@ export function createSim(def, heroId) {
       else if (c === 'p') thing('reader', col + 0.5, y);
       else if (c === 'K') thing('key', col + 0.5, y + 0.5);
       else if (c === 'E') thing('exit', col + 0.5, y);
-      else if (c === 'F') thing('panel', col, y, { state: 'armed' });
-      else if (c === 'O') thing('panel', col, y, { state: 'armed', variant: 'binders' });
+      else if (c === 'F') thing('panel', col, y, { state: 'armed', y0: y });
+      else if (c === 'O') thing('panel', col, y, { state: 'armed', variant: 'binders', y0: y });
       else if (c === 'R')
         thing('bottle', col + 0.5, y, { state: 'waiting', home: col + 0.5, y0: y });
       else if (c === 'a') thing('ammo', col + 0.5, y + 0.45);
       else if (c === 'h') thing('cup', col + 0.5, y + 0.3);
       else if (c === 'n')
-        thing('colleague', col + 0.5, y, { vx: 1.4, state: 'walk', home: col + 0.5 });
+        thing('colleague', col + 0.5, y, { vx: 1.4, state: 'walk', home: col + 0.5, y0: y });
       else if (c === 'i')
-        thing('intern', col + 0.5, y, { vx: 2.2, state: 'walk', home: col + 0.5 });
-      else if (c === 'v') thing('vacuum', col + 0.5, y, { vx: 3, state: 'walk' });
-      else if (c === 'z') thing('visio', col + 0.5, y, { dir: -1 });
-      else if (c === 'c') thing('chair', col + 0.5, y, { home: col + 0.5 });
+        thing('intern', col + 0.5, y, { vx: 2.2, state: 'walk', home: col + 0.5, y0: y });
+      else if (c === 'v')
+        thing('vacuum', col + 0.5, y, { vx: 3, state: 'walk', home: col + 0.5, y0: y });
+      else if (c === 'z') thing('visio', col + 0.5, y, { dir: -1, home: col + 0.5, y0: y });
+      else if (c === 'c') thing('chair', col + 0.5, y, { home: col + 0.5, y0: y });
       else if (c === 'd') {
         // Slides out of the wall it is built into.
         const dir = SOLID_STYLES.includes(at(col - 1, y)) ? 1 : -1;
@@ -214,6 +217,9 @@ export function createSim(def, heroId) {
 
 /** @typedef {ReturnType<typeof createSim>} Sim */
 
+/** Things that walk on the floor (and can fall when it goes). */
+const WALKERS = new Set(['colleague', 'intern', 'vacuum', 'visio']);
+
 /** @param {Sim} s */
 function respawn(s) {
   const hero = s.hero;
@@ -238,7 +244,22 @@ function respawn(s) {
       t.vy = 0;
       s.tiles[t.x + t.y * s.w] = TILE.LOOSE;
     }
-    if (t.kind === 'chair') Object.assign(t, { x: t.home ?? t.x, state: 'idle', t: 0, vx: 0 });
+    if (t.kind === 'chair')
+      Object.assign(t, {
+        x: t.home ?? t.x,
+        y: t.y0 ?? t.y,
+        state: 'idle',
+        t: 0,
+        vx: 0,
+        vy: 0,
+        alive: true,
+      });
+    // Panels and binders hang back in place, like the slabs.
+    if (t.kind === 'panel' && t.state !== 'armed')
+      Object.assign(t, { y: t.y0 ?? t.y, state: 'armed', t: 0, vy: 0 });
+    // Someone who fell with a slab is back at their post.
+    if (WALKERS.has(t.kind) && !t.alive)
+      Object.assign(t, { x: t.home ?? t.x, y: t.y0 ?? t.y, vy: 0, t: 0, alive: true });
     // Bottles go back on their shelf; with the key in hand, the chase starts over.
     if (t.kind === 'bottle')
       Object.assign(t, {
@@ -286,6 +307,12 @@ function findLedge(s, hero) {
   return null;
 }
 
+/** Column of the tile the hero hangs from. @param {Hero} hero */
+const ledgeCol = (hero) => (hero.facing > 0 ? hero.ledge.x : hero.ledge.x - 1);
+
+/** Is the tile the hero hangs from still there? @param {Sim} s @param {Hero} hero */
+const ledgeHolds = (s, hero) => solid(s, ledgeCol(hero), hero.ledge.y - 1);
+
 /**
  * @param {Sim} s
  * @param {Input} input
@@ -308,8 +335,18 @@ export function step(s, input) {
     return;
   }
 
+  // The ledge in the hands gave way (a loose slab): let go.
+  if ((hero.state === 'hang' || hero.state === 'climb') && !ledgeHolds(s, hero)) {
+    hero.state = 'air';
+    hero.stateTime = 0;
+    hero.fallFrom = hero.y;
+    hero.vx = hero.vy = 0;
+  }
+
   if (hero.state === 'hang') {
     hero.vx = hero.vy = 0;
+    // Hanging weighs on the ledge like standing on it.
+    weigh(s, ledgeCol(hero), hero.ledge.y - 1);
     if (input.down) {
       hero.state = 'air';
       hero.fallFrom = hero.y;
@@ -499,24 +536,13 @@ export function step(s, input) {
   // Standing on loose tiles starts their countdown.
   if (hero.state === 'ground') {
     const r = Math.round(hero.y) - 1;
-    for (let c = Math.floor(hero.x); c <= Math.floor(hero.x + HERO.w); c++) {
-      if (tileAt(s, c, r) !== TILE.LOOSE) continue;
-      const t = s.things.find((t) => t.kind === 'loose' && t.x === c && Math.round(t.y) === r);
-      if (t && t.state === 'idle') {
-        t.state = 'shaking';
-        t.t = 0;
-        emit(s, 'crack', c + 0.5, r + 1);
-      }
-    }
+    for (let c = Math.floor(hero.x); c <= Math.floor(hero.x + HERO.w); c++) weigh(s, c, r);
   }
 
-  // Hazard tiles under or inside the hero.
+  // Live cables under the feet or anywhere against the body (sides and top too).
   for (let c = Math.floor(hero.x); c <= Math.floor(hero.x + HERO.w); c++)
-    if (
-      tileAt(s, c, Math.floor(hero.y - 0.05)) === TILE.HAZARD ||
-      tileAt(s, c, Math.floor(hero.y + 0.2)) === TILE.HAZARD
-    )
-      hurt(s, hero, 'cables');
+    for (let r = Math.floor(hero.y - 0.05); r <= Math.floor(hero.y + HERO.h - 0.05); r++)
+      if (tileAt(s, c, r) === TILE.HAZARD) hurt(s, hero, 'cables');
   if (hero.y < -2) hurt(s, hero, 'void');
   // Entering a boss arena closes the gate behind you.
   if (
@@ -549,14 +575,14 @@ function stepThings(s) {
         }
         break;
       case 'checkpoint':
-        if (t.state !== 'on' && touches(hero, t, 0.4, 1.4)) {
+        if (t.state !== 'on' && standsIn(hero, t, 0.4, 2)) {
           t.state = 'on';
           s.checkpoint = { x: t.x - HERO.w / 2, y: t.y };
           emit(s, 'checkpoint', t.x, t.y + 1);
         }
         break;
       case 'reader':
-        if (t.state !== 'on' && touches(hero, t, 0.5, 1.4)) {
+        if (t.state !== 'on' && standsIn(hero, t, 0.5, 2)) {
           t.state = 'on';
           s.doorOpen = true;
           emit(s, 'door', t.x, t.y + 1);
@@ -572,7 +598,7 @@ function stepThings(s) {
         }
         break;
       case 'exit':
-        if (!s.won && s.hasKey && touches(hero, t, 0.5, 1.4)) {
+        if (!s.won && s.hasKey && standsIn(hero, t, 0.5, 2)) {
           s.won = true;
           emit(s, 'win', t.x, t.y + 1);
         }
@@ -605,14 +631,14 @@ function stepThings(s) {
         break;
       case 'switch':
         // The water shut-off valve: every sprinkler in the stage stops.
-        if (t.state === 'idle' && alive && touches(hero, t, 0.5, 1)) {
+        if (t.state === 'idle' && alive && standsIn(hero, t, 0.5, 1.5)) {
           t.state = 'on';
           for (const k of s.things) if (k.kind === 'sprinkler') k.state = 'dry';
           emit(s, 'switch', t.x, t.y + 1);
         }
         break;
       case 'secret':
-        if (t.state === 'idle' && alive && touches(hero, t, 0.6, 1)) {
+        if (t.state === 'idle' && alive && standsIn(hero, t, 0.6, 1.5)) {
           t.state = 'found';
           s.secrets++;
           emit(s, 'secret', t.x, t.y + 1);

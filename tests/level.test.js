@@ -1,23 +1,30 @@
 import { describe, expect, it } from 'vitest';
 import { LEVELS } from '../src/data/levels/index.js';
 import { LCP7 } from '../src/data/levels/lcp7.js';
-import { TILE, createSim, step, tileAt } from '../src/game/sim.js';
+import { HERO, TILE, createSim, step, tileAt } from '../src/game/sim.js';
 import { solve } from '../src/game/solver.js';
 
 const HEROES = /** @type {const} */ (['kevin', 'charline']);
+/** Solver proofs are long searches (boss stages most of all): generous time limits. */
+const SEARCH = 300_000;
+const BOSS_SEARCH = 900_000;
 
 describe.each(LEVELS)('$name', (level) => {
-  it.each(HEROES)('%s can finish it', (hero) => {
-    const result = solve(createSim(level, hero), {
-      maxNodes: 200000,
-      allowDamage: Boolean(level.boss),
-    });
-    expect(result.won).toBe(true);
-    // Replaying the found inputs on a fresh simulation reaches the exit too.
-    const sim = createSim(level, hero);
-    for (const input of result.inputs) step(sim, input);
-    expect(sim.won).toBe(true);
-  });
+  it.each(HEROES)(
+    '%s can finish it',
+    (hero) => {
+      const result = solve(createSim(level, hero), {
+        maxNodes: 200000,
+        allowDamage: Boolean(level.boss),
+      });
+      expect(result.won).toBe(true);
+      // Replaying the found inputs on a fresh simulation reaches the exit too.
+      const sim = createSim(level, hero);
+      for (const input of result.inputs) step(sim, input);
+      expect(sim.won).toBe(true);
+    },
+    level.boss ? BOSS_SEARCH : SEARCH,
+  );
 
   it.runIf(Boolean(level.boss)).each(HEROES)(
     '%s can win the boss fight without taking a hit',
@@ -29,6 +36,7 @@ describe.each(LEVELS)('$name', (level) => {
       sim.checkpoint = { x, y: 3 };
       expect(solve(sim, { maxNodes: 300000 }).won).toBe(true);
     },
+    BOSS_SEARCH,
   );
 
   it('has no two-tile walls (too high to jump, too low to hang from)', () => {
@@ -52,21 +60,36 @@ describe.each(LEVELS)('$name', (level) => {
     expect(walls).toEqual([]);
   });
 
-  it('hides a secret for each hero', () => {
+  it(
+    'hides a secret for each hero',
+    () => {
+      const sim = createSim(level, 'kevin');
+      const spots = sim.things.filter((t) => t.kind === 'secret');
+      expect(spots.length).toBe(2);
+      // Each hero can reach at least one of them.
+      for (const hero of HEROES) {
+        const found = spots.some((spot) => {
+          const s = createSim(level, hero);
+          return solve(s, {
+            maxNodes: 40000,
+            allowDamage: true,
+            goal: { x: spot.x, y: spot.y, done: (x) => x.secrets > 0 },
+          }).won;
+        });
+        expect(found, hero).toBe(true);
+      }
+    },
+    SEARCH,
+  );
+
+  it('leaves headroom above every lift at the top of its run', () => {
+    // A rider is never pushed into a ceiling.
     const sim = createSim(level, 'kevin');
-    const spots = sim.things.filter((t) => t.kind === 'secret');
-    expect(spots.length).toBe(2);
-    // Each hero can reach at least one of them.
-    for (const hero of HEROES) {
-      const found = spots.some((spot) => {
-        const s = createSim(level, hero);
-        return solve(s, {
-          maxNodes: 40000,
-          allowDamage: true,
-          goal: { x: spot.x, y: spot.y, done: (x) => x.secrets > 0 },
-        }).won;
-      });
-      expect(found, hero).toBe(true);
+    for (const l of level.lifts ?? []) {
+      const w = l.w ?? 2;
+      for (let c = Math.floor(l.x); c <= Math.floor(l.x + w - 1e-6); c++)
+        for (let r = Math.floor(l.top); r <= Math.floor(l.top + HERO.h); r++)
+          expect(tileAt(sim, c, r), `lift ${l.x}: ${c},${r}`).not.toBe(TILE.SOLID);
     }
   });
 

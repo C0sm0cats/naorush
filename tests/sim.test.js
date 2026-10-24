@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { LCP7 } from '../src/data/levels/lcp7.js';
 import { createSim } from '../src/game/sim.js';
 import { hurt } from '../src/game/world.js';
-import { IDLE, input, room, runUntil, sim } from './mechanics-kit.js';
+import { IDLE, fill, input, room, run, runUntil, sim } from './mechanics-kit.js';
 
 describe('relaxed mode', () => {
   it('keeps hearts on ordinary hits but still sends you back on live cables', () => {
@@ -19,6 +19,21 @@ describe('relaxed mode', () => {
     const sim = createSim(LCP7, 'kevin');
     hurt(sim, sim.hero, 'kpi');
     expect(sim.hero.hearts).toBe(3);
+  });
+});
+
+describe('things on another floor', () => {
+  it('a badge, a reader, a valve or a secret above the ceiling are not triggered from below', () => {
+    for (const ch of ['C', 'p', 'k', '*']) {
+      // A one-tile-thick floor (y = 5) with the thing on it, the hero walking underneath.
+      const s = sim(room(16, [['S', 2, 3], ...fill('#', 5, 12, 5, 5), [ch, 8, 6]]));
+      const events = run(s, input({ right: true }), 120);
+      expect(s.hero.x, ch).toBeGreaterThan(11);
+      expect(
+        events.filter((e) => ['checkpoint', 'door', 'switch', 'secret'].includes(e.type)),
+        ch,
+      ).toEqual([]);
+    }
   });
 });
 

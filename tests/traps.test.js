@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TILE, tileAt } from '../src/game/sim.js';
+import { HERO, TILE, tileAt } from '../src/game/sim.js';
 import { IDLE, fill, has, input, room, run, runUntil, sim, throwCr } from './mechanics-kit.js';
 
 /** @typedef {import('./mechanics-kit.js').Sim} Sim */
@@ -228,5 +228,221 @@ describe('projectiles a CR can parry', () => {
       }
     }
     expect(parried).toBeGreaterThan(0);
+  });
+});
+
+describe('falling things land like anything heavy', () => {
+  it('a loose slab shatters on the floor below instead of sinking through it', () => {
+    // A slab at y = 6 over open space down to the floor (top y = 3).
+    const s = sim(
+      room(12, [['S', 2, 3], ...fill('#', 4, 4, 6, 6), ['-', 5, 6], ...fill('#', 6, 7, 6, 6)]),
+    );
+    const slab = find(s, 'loose');
+    slab.state = 'shaking';
+    const r = runUntil(s, IDLE, () => slab.state === 'gone', 120);
+    expect(r.ok).toBe(true);
+    expect(has(r.events, 'smash')).toBe(true);
+    expect(slab.y).toBe(3);
+  });
+
+  it('a loose slab falling on the hero hurts like a ceiling panel', () => {
+    const s = sim(
+      room(12, [['S', 5, 3], ...fill('#', 4, 4, 6, 6), ['-', 5, 6], ...fill('#', 6, 7, 6, 6)]),
+    );
+    s.hero.x = 5.19;
+    find(s, 'loose').state = 'shaking';
+    const r = runUntil(s, IDLE, (x) => x.hero.hearts < 4, 90);
+    expect(r.ok).toBe(true);
+  });
+
+  it('a ceiling panel does not drop on a hero walking a floor further down', () => {
+    // Panel at y = 10 above a shelf (top y = 7); the hero walks beneath the shelf.
+    const s = sim(room(14, [['S', 2, 3], ['F', 7, 10], ...fill('#', 5, 9, 6, 6)]));
+    const panel = find(s, 'panel');
+    run(s, input({ right: true }), 90);
+    expect(s.hero.x).toBeGreaterThan(9);
+    expect(panel.state).toBe('armed');
+    // On the shelf, right beneath it, it does.
+    Object.assign(s.hero, { x: 7.2, y: 7, vx: 0, vy: 0, state: 'ground' });
+    expect(has(run(s, IDLE, 1), 'crack')).toBe(true);
+  });
+
+  it('panels and binders hang back in place when the hero respawns', () => {
+    const s = sim(
+      room(14, [
+        ['S', 2, 3],
+        ['F', 7, 10],
+        ['O', 9, 8],
+      ]),
+    );
+    run(s, input({ right: true }), 100);
+    const [panel, binders] = s.things.filter((t) => t.kind === 'panel');
+    runUntil(s, IDLE, () => panel.state === 'broken' && binders.state === 'broken', 200);
+    expect(panel.state).toBe('broken');
+    s.hero.state = 'dead';
+    s.hero.stateTime = 0;
+    runUntil(s, IDLE, (x) => x.hero.state !== 'dead', 200);
+    expect([panel.state, panel.y, binders.state, binders.y]).toEqual(['armed', 10, 'armed', 8]);
+  });
+});
+
+describe('office chair and loose floor', () => {
+  it('cracks a loose slab it rolls over and drops when it gives way; back home on respawn', () => {
+    const s = sim(
+      room(20, [
+        ['S', 12, 3],
+        ['c', 8, 3],
+        ['-', 9, 2],
+        ['^', 9, 1],
+      ]),
+    );
+    const chair = find(s, 'chair');
+    const slab = find(s, 'loose');
+    // Parked on the slab, as after a charge.
+    chair.x = 9.5;
+    s.hero.x = 18;
+    const r = runUntil(s, IDLE, () => !chair.alive, 120);
+    expect(r.ok).toBe(true);
+    expect(has(r.events, 'crack')).toBe(true);
+    expect(slab.state).not.toBe('idle');
+    s.hero.state = 'dead';
+    s.hero.stateTime = 0;
+    runUntil(s, IDLE, (x) => x.hero.state !== 'dead', 200);
+    expect([chair.alive, chair.x, chair.y, chair.state]).toEqual([true, 8.5, 3, 'idle']);
+  });
+});
+
+describe('knockback', () => {
+  it('throws the hero away from the trap, whichever way the hero faces', () => {
+    for (const facing of [1, -1]) {
+      const s = sim(
+        room(12, [
+          ['S', 6, 3],
+          ['d', 1, 3],
+        ]),
+      );
+      runUntil(s, IDLE, () => (find(s, 'drawer').w ?? 0) > 0.8, 400);
+      Object.assign(s.hero, { x: 1.3, facing, invuln: 0 });
+      run(s, IDLE, 1);
+      expect(s.hero.hearts).toBe(3);
+      // The drawer comes out of the left wall: the hero flies right.
+      expect(s.hero.vx).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('water-cooler bottle', () => {
+  const def = room(16, [
+    ['S', 2, 3],
+    ['R', 10, 3],
+    ['K', 3, 3],
+  ]);
+
+  it('only hurts where the bottle is (0.6 across)', () => {
+    const s = sim(def);
+    const bottle = find(s, 'bottle');
+    bottle.state = 'rolling';
+    bottle.vx = 0;
+    s.things = s.things.filter((t) => t.kind !== 'key');
+    // 0.36 from its centre (one step rolls it a hair closer): clear of it.
+    Object.assign(s.hero, { x: bottle.x - 0.36 - HERO.w, invuln: 0 });
+    run(s, IDLE, 1);
+    expect(s.hero.hearts).toBe(4);
+    // Right against it: hurt.
+    Object.assign(s.hero, { x: bottle.x - 0.25 - HERO.w, invuln: 0 });
+    run(s, IDLE, 1);
+    expect(s.hero.hearts).toBe(3);
+  });
+
+  it('bursts under a CR while still on its shelf', () => {
+    const s = sim(
+      room(16, [
+        ['S', 2, 3],
+        ['R', 10, 3],
+      ]),
+    );
+    const events = throwCr(s).concat(run(s, IDLE, 60));
+    expect(has(events, 'splash')).toBe(true);
+    expect(find(s, 'bottle').state).toBe('burst');
+  });
+});
+
+describe('rolling things run into people', () => {
+  it('a rolling bottle bowls over someone in its way, like the hero, and bursts on a chair', () => {
+    const s = sim(
+      room(20, [
+        ['S', 2, 3],
+        ['c', 5, 3],
+        ['n', 9, 3],
+        ['R', 14, 3],
+      ]),
+    );
+    const colleague = find(s, 'colleague');
+    colleague.vx = 0;
+    s.hero.x = 17;
+    const bottle = find(s, 'bottle');
+    bottle.state = 'rolling';
+    const r = runUntil(s, IDLE, () => bottle.state === 'burst', 180);
+    expect(r.ok).toBe(true);
+    expect(has(r.events, 'meeting')).toBe(true);
+    expect(colleague.state).toBe('meeting');
+    // Past the colleague, stopped by the chair.
+    expect(bottle.x).toBeLessThan(colleague.x);
+    expect(bottle.x).toBeGreaterThan(find(s, 'chair').x);
+  });
+
+  it('a charging chair stops against someone in its way', () => {
+    const s = sim(
+      room(24, [
+        ['S', 18, 3],
+        ['c', 6, 3],
+        ['i', 12, 3],
+      ]),
+    );
+    const chair = find(s, 'chair');
+    const intern = find(s, 'intern');
+    Object.assign(intern, { vx: 0, state: 'stunned', t: -100 });
+    Object.assign(chair, { state: 'rolling', vx: 6.5 });
+    const r = runUntil(s, IDLE, () => chair.state !== 'rolling', 120);
+    expect(r.ok).toBe(true);
+    expect(chair.x).toBeLessThan(intern.x);
+    expect(has(r.events, 'chairBump')).toBe(true);
+  });
+
+  it('a charging chair that rams the hero stops there', () => {
+    const s = sim(
+      room(24, [
+        ['S', 12, 3],
+        ['c', 6, 3],
+      ]),
+    );
+    const chair = find(s, 'chair');
+    Object.assign(chair, { state: 'rolling', vx: 6.5 });
+    const r = runUntil(s, IDLE, () => chair.state !== 'rolling', 120);
+    expect(r.ok).toBe(true);
+    expect(s.hero.hearts).toBe(3);
+    expect(chair.x).toBeLessThan(13);
+  });
+});
+
+describe('sprinkler water', () => {
+  it('splashes on top of archive boxes, and down to the floor once they are knocked out', () => {
+    const s = sim(room(12, [['S', 2, 3], ['w', 6, 10], ...fill('A', 6, 6, 3, 4)]), 'kevin');
+    const sprinkler = find(s, 'sprinkler');
+    run(s, IDLE, 1);
+    expect(sprinkler.y0).toBe(5);
+    throwCr(s);
+    run(s, IDLE, 60);
+    expect(sprinkler.y0).toBe(3);
+  });
+});
+
+describe('water-cooler bottle support', () => {
+  it('falls and bursts when the archive boxes under it are knocked out', () => {
+    const s = sim(room(16, [['S', 2, 3], ...fill('A', 8, 8, 3, 4), ['R', 8, 5]]), 'kevin');
+    const bottle = find(s, 'bottle');
+    const events = throwCr(s).concat(runUntil(s, IDLE, () => bottle.state === 'burst', 120).events);
+    expect(has(events, 'archive')).toBe(true);
+    expect(has(events, 'splash')).toBe(true);
   });
 });

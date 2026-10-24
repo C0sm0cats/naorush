@@ -194,8 +194,10 @@ export const LETHAL = new Set(['cables', 'void']);
  * @param {World & {deaths: number, gameOver: boolean, assist?: boolean}} s
  * @param {Hero} hero
  * @param {string} cause
+ * @param {number} [from] Where the blow comes from: the hero is thrown away from it
+ *   (without it, backwards from where the hero faces).
  */
-export function hurt(s, hero, cause) {
+export function hurt(s, hero, cause, from) {
   if (hero.state === 'dead') return;
   if (hero.invuln > 0 && !LETHAL.has(cause)) return;
   // Relaxed mode: knocks still happen, hearts are never lost.
@@ -219,7 +221,8 @@ export function hurt(s, hero, cause) {
   hero.invuln = 1.4;
   if (cause !== 'fall') {
     hero.vy = 7;
-    hero.vx = -hero.facing * 4;
+    const away = from === undefined ? 0 : Math.sign(hero.x + HERO.w / 2 - from);
+    hero.vx = (away || -hero.facing) * 4;
     hero.state = 'air';
   }
 }
@@ -231,6 +234,41 @@ export function hurt(s, hero, cause) {
 export function touches(hero, t, rx, ry) {
   const hx = hero.x + HERO.w / 2;
   return Math.abs(t.x - hx) < rx + HERO.w / 2 && t.y + ry > hero.y && t.y - ry < hero.y + HERO.h;
+}
+
+/**
+ * Does someone or something standing at (centre x, feet y), `h` tall and
+ * `rx` half wide, overlap the hero? Unlike {@link touches}, nothing below the
+ * feet counts: a floor between them always separates them.
+ * @param {Hero} hero @param {{x: number, y: number}} t @param {number} rx @param {number} h
+ */
+export function standsIn(hero, t, rx, h) {
+  const hx = hero.x + HERO.w / 2;
+  return Math.abs(t.x - hx) < rx + HERO.w / 2 && t.y + h > hero.y && t.y < hero.y + HERO.h;
+}
+
+/**
+ * Gravity for things that walk or roll on the floor: when the floor under their
+ * centre goes (a slab gives way, boxes are knocked out), they drop like the hero
+ * would, and are lost in live cables or the void.
+ * @param {World} s @param {Thing} t
+ * @returns {boolean} Whether it is airborne or lost this step (no walking then).
+ */
+export function fallThing(s, t) {
+  const c = Math.floor(t.x);
+  if (!t.vy && Number.isInteger(t.y) && solid(s, c, t.y - 1)) return false;
+  t.vy = Math.max(-22, (t.vy ?? 0) - GRAVITY * DT);
+  const ny = t.y + t.vy * DT;
+  if (solid(s, c, Math.floor(ny))) {
+    t.y = Math.floor(ny) + 1;
+    t.vy = 0;
+    emit(s, 'land', t.x, t.y);
+  } else t.y = ny;
+  if (t.y < -2 || tileAt(s, c, Math.floor(t.y + 0.2)) === TILE.HAZARD) {
+    t.alive = false;
+    emit(s, 'poof', t.x, t.y + 0.5);
+  }
+  return true;
 }
 
 /** Pushes the hero away from x and hurts. @param {Parameters<typeof hurt>[0]} s @param {Hero} hero @param {number} x @param {string} cause */

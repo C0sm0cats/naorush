@@ -1,14 +1,17 @@
 import { hitBoss } from './boss.js';
+import { knockDown, weigh } from './traps.js';
 import {
   DT,
   GRAVITY,
   HERO,
   TILE,
   emit,
+  fallThing,
   hurt,
   knock,
   make,
   solid,
+  standsIn,
   tileAt,
   touches,
 } from './world.js';
@@ -23,16 +26,22 @@ import {
  * @typedef {import('./world.js').Thing} Thing
  */
 
+/** How tall each walker is (tiles): walls and overhangs below that turn them back. */
+const HEIGHT = { colleague: 1.75, intern: 1.5, vacuum: 0.18, visio: 1.6 };
+
 /**
  * Walks back and forth around `home` (or between walls when range is 0),
- * turning at walls and floor edges.
+ * turning at walls (as tall as the walker) and floor edges.
  * @param {Sim} s @param {Thing} t @param {number} range
  */
 function patrol(s, t, range) {
   const nx = t.x + t.vx * DT;
   const ahead = Math.floor(nx + Math.sign(t.vx) * 0.4);
+  const top = Math.floor(t.y + (HEIGHT[/** @type {keyof HEIGHT} */ (t.kind)] ?? 1) - 0.01);
+  let wall = false;
+  for (let r = Math.floor(t.y); r <= top; r++) wall ||= solid(s, ahead, r);
   if (
-    solid(s, ahead, Math.floor(t.y + 0.5)) ||
+    wall ||
     !solid(s, ahead, Math.floor(t.y) - 1) ||
     // Out of range only turns back when the step leads further out, so a rush or a
     // knock that carried it beyond the range walks it home instead of freezing it.
@@ -44,9 +53,21 @@ function patrol(s, t, range) {
   else t.x = nx;
 }
 
+/**
+ * Like the hero, walkers weigh on loose slabs and fall when the floor goes.
+ * @param {Sim} s @param {Thing} t
+ * @returns {boolean} Whether it is airborne or lost (no walking this step).
+ */
+function grounded(s, t) {
+  if (fallThing(s, t)) return false;
+  weigh(s, Math.floor(t.x), t.y - 1);
+  return true;
+}
+
 /** Colleague in a call: blocks the way and pushes you back, harmlessly. @param {Sim} s @param {Thing} t */
 export function stepColleague(s, t) {
   const hero = s.hero;
+  if (!grounded(s, t)) return;
   if (t.state === 'meeting') {
     if (t.t > 4.5) {
       t.state = 'walk';
@@ -57,7 +78,7 @@ export function stepColleague(s, t) {
   }
   patrol(s, t, 2.5);
   // Tall enough that only a double jump clears them.
-  if (touches(hero, t, 0.35, 1.75) && hero.state !== 'dead' && hero.state !== 'hang') {
+  if (standsIn(hero, t, 0.35, HEIGHT.colleague) && hero.state !== 'dead' && hero.state !== 'hang') {
     hero.vx = Math.sign(hero.x + HERO.w / 2 - t.x || 1) * 7;
     hero.vy = 5;
     hero.state = 'air';
@@ -68,6 +89,10 @@ export function stepColleague(s, t) {
 /** Intern pace: strolling, then rushing once they spot you ahead. */
 const INTERN_WALK = 2.2;
 const INTERN_RUSH = 4.4;
+/** Hurtbox height: the intern minus the head, so a fair jump clears them. */
+export const INTERN_HURT = 1.2;
+/** Same for the video-call manager standing at the laptop. */
+export const VISIO_HURT = 1.3;
 
 /**
  * Intern rushing with a pile of files: hurts on contact; a CR earns them a coffee break.
@@ -76,6 +101,7 @@ const INTERN_RUSH = 4.4;
  */
 export function stepIntern(s, t) {
   const hero = s.hero;
+  if (!grounded(s, t)) return;
   if (t.state === 'stunned') {
     if (t.t > 4) {
       Object.assign(t, { state: 'walk', t: 0, vx: Math.sign(t.vx || 1) * INTERN_WALK });
@@ -106,15 +132,19 @@ export function stepIntern(s, t) {
     if (t.vx !== before || t.t > 0.9)
       Object.assign(t, { state: 'walk', t: 0, vx: Math.sign(t.vx) * INTERN_WALK });
   }
-  if (touches(hero, t, 0.3, 0.8)) knock(s, hero, t.x, 'intern');
+  // Legs, body and the pile of files: a jump has to clear more than the knees.
+  if (standsIn(hero, t, 0.3, INTERN_HURT)) knock(s, hero, t.x, 'intern');
 }
 
 /** Robot vacuum: fast, unstoppable, but its lid is a springboard. @param {Sim} s @param {Thing} t */
 export function stepVacuum(s, t) {
   const hero = s.hero;
+  if (!grounded(s, t)) return;
   patrol(s, t, 0);
   const hx = hero.x + HERO.w / 2;
   if (hero.state === 'dead' || Math.abs(hx - t.x) > 0.35 + HERO.w / 2) return;
+  // A floor between them keeps them apart.
+  if (hero.y + HERO.h <= t.y) return;
   if (hero.vy < 0 && hero.y > t.y + 0.02 && hero.y < t.y + 0.4) {
     hero.vy = s.stats.jump * 1.12;
     hero.state = 'air';
@@ -128,6 +158,7 @@ export function stepVacuum(s, t) {
 export function stepVisio(s, t) {
   const hero = s.hero;
   const hx = hero.x + HERO.w / 2;
+  if (!grounded(s, t)) return;
   if (t.state === 'muted') {
     if (t.t > 5) {
       t.state = 'idle';
@@ -148,7 +179,7 @@ export function stepVisio(s, t) {
     t.state = 'idle';
     t.t = 0;
   }
-  if (touches(hero, t, 0.3, 0.8)) knock(s, hero, t.x, 'visio');
+  if (standsIn(hero, t, 0.3, VISIO_HURT)) knock(s, hero, t.x, 'visio');
 }
 
 /** Meeting invite and paper projectiles fly flat; KPI slides arc. @param {Sim} s @param {Thing} t */
@@ -159,7 +190,7 @@ export function stepInvite(s, t) {
     emit(s, 'poof', t.x, t.y);
   } else if (s.hero.state !== 'dead' && touches(s.hero, t, 0.2, 0.15)) {
     t.alive = false;
-    hurt(s, s.hero, 'invite');
+    hurt(s, s.hero, 'invite', t.x - Math.sign(t.vx));
   }
 }
 
@@ -173,7 +204,7 @@ export function stepKpi(s, t) {
     emit(s, 'poof', t.x, t.y);
   } else if (s.hero.state !== 'dead' && touches(s.hero, t, 0.35, 0.35)) {
     t.alive = false;
-    hurt(s, s.hero, 'kpi');
+    hurt(s, s.hero, 'kpi', t.x - Math.sign(t.vx));
   }
 }
 
@@ -188,7 +219,7 @@ export function stepWave(s, t) {
     Math.abs(t.x - (hero.x + HERO.w / 2)) < 0.45 &&
     hero.y < t.y + 0.5
   )
-    hurt(s, hero, 'wave');
+    hurt(s, hero, 'wave', t.x - Math.sign(t.vx));
 }
 
 const PARRIED = new Set(['kpi', 'invite', 'paper']);
@@ -227,32 +258,34 @@ export function stepCr(s, t) {
       emit(s, 'parry', t.x, t.y);
       return;
     }
+    // A lift's deck is solid metal: a CR flying into it stops there.
+    if (
+      k.kind === 'lift' &&
+      t.x > k.x &&
+      t.x < k.x + (k.w ?? 2) &&
+      t.y > k.y - 0.3 &&
+      t.y < k.y + 0.05
+    ) {
+      t.alive = false;
+      emit(s, 'poof', t.x, t.y);
+      return;
+    }
     const body = dx < 0.5 && t.y > k.y && t.y < k.y + 1.8;
     if (!body) continue;
-    if (k.kind === 'boss' && k.state !== 'idle' && k.state !== 'convinced' && k.state !== 'sign') {
+    if (k.kind === 'boss') {
       t.alive = false;
-      hitBoss(s, k);
+      // Before the duel and once convinced, a CR just bounces off his jacket.
+      if (k.state !== 'idle' && k.state !== 'convinced' && k.state !== 'sign') hitBoss(s, k);
+      else emit(s, 'block', t.x, t.y);
       return;
     }
-    if (k.kind === 'colleague' && k.state === 'walk') {
+    if (k.kind === 'colleague' || k.kind === 'intern' || k.kind === 'visio') {
       t.alive = false;
-      Object.assign(k, { state: 'meeting', t: 0 });
-      emit(s, 'meeting', k.x, k.y + 1.6);
+      // Already down, an extra CR just lands on the pile.
+      if (!knockDown(s, k)) emit(s, 'block', t.x, t.y);
       return;
     }
-    if (k.kind === 'intern' && k.state !== 'stunned') {
-      t.alive = false;
-      Object.assign(k, { state: 'stunned', t: 0 });
-      emit(s, 'internStun', k.x, k.y + 1.4);
-      return;
-    }
-    if (k.kind === 'visio' && k.state !== 'muted') {
-      t.alive = false;
-      Object.assign(k, { state: 'muted', t: 0 });
-      emit(s, 'visioMute', k.x, k.y + 1.6);
-      return;
-    }
-    // A CR in the way stops a charging chair and bursts a rolling bottle.
+    // A CR in the way stops a charging chair.
     if (k.kind === 'chair' && t.y < k.y + 1.2) {
       t.alive = false;
       if (k.state === 'rolling' || k.state === 'wobble')
@@ -260,7 +293,12 @@ export function stepCr(s, t) {
       emit(s, 'chairBump', k.x, k.y + 0.6);
       return;
     }
-    if (k.kind === 'bottle' && k.state === 'rolling' && t.y < k.y + 1.2) {
+    // Rolling or still on its shelf, a full bottle bursts under a CR.
+    if (
+      k.kind === 'bottle' &&
+      (k.state === 'rolling' || k.state === 'waiting') &&
+      t.y < k.y + 1.2
+    ) {
       t.alive = false;
       k.state = 'burst';
       emit(s, 'splash', k.x, k.y + 0.4);

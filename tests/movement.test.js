@@ -145,6 +145,45 @@ describe('ledge forgiveness', () => {
   });
 });
 
+describe('ledges that give way', () => {
+  it('a loose slab cracks under a hanging hero and drops them when it goes', () => {
+    for (const hero of /** @type {const} */ (['kevin', 'charline'])) {
+      // A four-tile wall whose top tile (y = 6, column 6) is a loose slab.
+      const s = sim(
+        room(16, [['S', 5, 3], ...fill('#', 6, 14, 3, 5), ['-', 6, 6], ...fill('#', 7, 14, 6, 6)]),
+        hero,
+      );
+      s.hero.x = 6 - 0.63;
+      const grab = runUntil(
+        s,
+        input({ right: true, jump: true }),
+        (x) => x.hero.state === 'hang',
+        120,
+      );
+      expect(grab.ok, hero).toBe(true);
+      // Hold on without climbing.
+      const r = runUntil(s, IDLE, (x) => x.hero.state !== 'hang', 120);
+      expect(r.ok, hero).toBe(true);
+      expect(has(r.events, 'crack'), hero).toBe(true);
+      expect(s.hero.state, hero).toBe('air');
+      // Never back on the vanished ledge (the wall below may be caught again).
+      run(s, IDLE, 60);
+      expect(s.hero.state === 'hang' && s.hero.ledge.y === 7, hero).toBe(false);
+      expect(s.hero.y, hero).toBeLessThan(7 - HERO_STATS[hero].reach);
+    }
+  });
+});
+
+describe('live cables', () => {
+  it('hurt from the side as well as underfoot', () => {
+    // A wall with bare cables at chest height (y = 4) facing the hero.
+    const s = sim(room(16, [['S', 2, 3], ...fill('#', 9, 9, 3, 6), ['^', 8, 4]]));
+    const r = runUntil(s, input({ right: true }), (x) => x.hero.state === 'dead', 120);
+    expect(r.ok).toBe(true);
+    expect(has(r.events, 'zap')).toBe(true);
+  });
+});
+
 describe('ceilings', () => {
   it('a jump under a one-tile-thick shelf bonks the head and never comes up through it', () => {
     for (const hero of /** @type {const} */ (['kevin', 'charline'])) {
