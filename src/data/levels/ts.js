@@ -80,7 +80,7 @@ export const TS = {
     { who: 'boss', text: 'Une enveloppe NAO ? Montrez-moi que votre dossier tient la charge.' },
     {
       who: 'hint',
-      text: 'Quand il consulte PRIMO, sa garde tombe : lance un CR (X). Surveille les ombres au sol et les câbles qui s’allument.',
+      text: 'Quand il consulte PRIMO, sa garde tombe : lance un compte rendu (X ou CR). Surveille les ombres au sol et les câbles qui s’allument.',
     },
   ],
   outro: [

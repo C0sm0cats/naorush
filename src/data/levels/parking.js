@@ -86,7 +86,7 @@ export const PARKING = {
   intro: [
     {
       who: 'partner',
-      text: 'Lundi, 8 h 40. L’enveloppe des NAO a disparu, et les négociations commencent jeudi !',
+      text: 'Te voilà ! Pas de temps à perdre : l’enveloppe doit être retrouvée et signée avant jeudi.',
     },
     {
       who: 'hero',
