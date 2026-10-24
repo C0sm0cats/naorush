@@ -168,6 +168,57 @@ function ticket() {
   return b;
 }
 
+/**
+ * Five-pointed star facing +z (or -z when `back`), centred on [x, y].
+ * @param {MeshBuilder} b @param {number} x @param {number} y @param {number} z @param {number} r
+ * @param {string} color @param {number} [mat] @param {boolean} [back]
+ */
+function star(b, x, y, z, r, color, mat = MATTE, back = false) {
+  for (let i = 0; i < 5; i++) {
+    const a0 = (i / 5) * Math.PI * 2,
+      a1 = a0 + Math.PI / 5,
+      a2 = a0 + (Math.PI * 2) / 5;
+    const o0 = [x + Math.sin(a0) * r, y + Math.cos(a0) * r];
+    const n1 = [x + Math.sin(a1) * r * 0.45, y + Math.cos(a1) * r * 0.45];
+    const o2 = [x + Math.sin(a2) * r, y + Math.cos(a2) * r];
+    tri(b, [o0, n1, [x, y]], z, color, mat, back);
+    tri(b, [n1, o2, [x, y]], z, color, mat, back);
+  }
+}
+
+/**
+ * Céline Dion concert tickets: two gold tickets fanned out, each with a tear-off
+ * stub, a pink star and a music note, the same on both faces (they spin).
+ */
+function concertTickets() {
+  const b = new MeshBuilder();
+  const GOLD = '#ffc63a';
+  for (const [a, dx, dy, dz] of [
+    [0.32, -0.05, 0.05, -0.03],
+    [-0.14, 0.05, -0.04, 0.03],
+  ])
+    posed(b, rotZ(a), [dx, dy, dz], () => {
+      rb(b, [-0.05, 0, 0], [0.2, 0.12, 0.018], 0.022, GOLD, GLOSSY, 4);
+      rb(b, [0.2, 0, 0], [0.052, 0.12, 0.018], 0.02, '#ffe08a', GLOSSY, 3);
+      for (const s of [1, -1]) {
+        const z = s * 0.02;
+        // Perforation between ticket and stub.
+        for (let i = 0; i < 5; i++)
+          flatBox(b, [0.145, -0.09 + i * 0.045, z], [0.005, 0.01, 0.002], '#b8750f');
+        for (const y of [0.095, -0.095]) flatBox(b, [-0.05, y, z], [0.17, 0.005, 0.002], '#d08a16');
+        star(b, -0.14, 0, z + s * 0.002, 0.058, PINK, EMISSIVE, s < 0);
+        flatBox(b, [0.02, 0.035, z], [0.075, 0.014, 0.002], NAVY);
+        flatBox(b, [0.005, -0.008, z], [0.06, 0.008, 0.002], '#a5650d');
+        flatBox(b, [0.015, -0.045, z], [0.07, 0.008, 0.002], '#a5650d');
+        // Music note on the stub.
+        b.ellipsoid([0.19, -0.04, z], [0.02, 0.016, 0.005], NAVY, { seg: 6 });
+        flatBox(b, [0.207, 0.0, z], [0.005, 0.042, 0.002], NAVY);
+        flatBox(b, [0.222, 0.036, z], [0.016, 0.007, 0.002], NAVY);
+      }
+    });
+  return b;
+}
+
 /** Signed purchase order: yellow folder, paper with typed lines and a green stamp. */
 function purchaseOrder() {
   const b = new MeshBuilder();
@@ -286,17 +337,26 @@ function loose() {
       ),
     );
   }
-  // Zigzag cracks on the top.
+  // Zigzag cracks on the top, with a pale chipped edge so they read from afar.
   for (const [z, k] of [
     [1.45, 1],
+    [0.55, -1],
     [-0.4, -1],
   ])
     for (let i = 0; i < 4; i++)
-      posed(b, rotY(k * (i % 2 ? 0.6 : -0.6)), [-0.36 + i * 0.24, 0.002, z], () =>
-        flatBox(b, [0, 0, 0], [0.14, 0.003, 0.012], '#2b3142'),
-      );
-  // Orange warning strip along the front edge.
-  flatBox(b, [0, -0.1, 1.876], [0.48, 0.025, 0.002], '#ff9f43', EMISSIVE);
+      posed(b, rotY(k * (i % 2 ? 0.6 : -0.6)), [-0.36 + i * 0.24, 0.002, z], () => {
+        flatBox(b, [0, 0, 0], [0.145, 0.003, 0.016], '#1d2230');
+        flatBox(b, [0, 0.001, 0.02], [0.12, 0.003, 0.004], '#94a2ba');
+      });
+  // Caution checker along the front edge: amber and graphite blocks.
+  for (let i = 0; i < 6; i++)
+    flatBox(
+      b,
+      [-0.4 + i * 0.16, -0.1, 1.877],
+      [0.08, 0.04, 0.002],
+      i % 2 ? '#1f2430' : '#ffb52e',
+      i % 2 ? MATTE : EMISSIVE,
+    );
   return b;
 }
 
@@ -443,6 +503,102 @@ function reader(led) {
 }
 
 /**
+ * Water shut-off valve on the wall, drawn 0.9 above the floor: a blue riser pipe
+ * from the floor, a brass body and a big handwheel facing the camera, with a tag.
+ * Open (idle): red wheel and an amber "!" tag. Shut (on): the wheel turned an
+ * eighth, green, and a green tag with a tick.
+ * @param {boolean} shut
+ */
+function valve(shut) {
+  const b = new MeshBuilder();
+  const PIPE = '#3a7bd5';
+  // Riser from the floor (y = -0.9) into the ceiling void, with chrome collars.
+  b.lathe(
+    [0, -0.9, -0.02],
+    [
+      [0, 0],
+      [0.055, 0],
+      [0.055, 1.75],
+      [0, 1.75],
+    ],
+    PIPE,
+    { mat: GLOSSY, seg: 14 },
+  );
+  for (const y of [-0.86, 0.02, 0.58])
+    b.lathe(
+      [0, y, -0.02],
+      [
+        [0.07, 0],
+        [0.07, 0.045],
+      ],
+      ALU,
+      { mat: GLOSSY, seg: 14 },
+    );
+  // Wall bracket and brass body.
+  rb(b, [0, 0.26, -0.07], [0.1, 0.14, 0.02], 0.02, '#6b7484', MATTE, 3);
+  rb(b, [0, 0.26, 0.01], [0.085, 0.1, 0.075], 0.04, '#c9a046', GLOSSY, 4);
+  // Stem out to the wheel.
+  posed(b, rotX(Math.PI / 2), [0, 0.26, 0.08], () =>
+    b.lathe(
+      [0, 0, 0],
+      [
+        [0.025, 0],
+        [0.025, 0.07],
+      ],
+      ALU,
+      { mat: GLOSSY, seg: 10 },
+    ),
+  );
+  // Handwheel: rim, hub and four spokes, facing +z.
+  const wheel = shut ? '#2fbf62' : '#e8323c';
+  posed(b, rotZ(shut ? Math.PI / 4 : 0), [0, 0.26, 0.15], () => {
+    /** @type {number[][]} */
+    const prof = [];
+    for (let i = 0; i <= 8; i++) {
+      const a = -Math.PI / 2 + (i / 8) * Math.PI * 2;
+      prof.push([0.15 + Math.cos(a) * 0.022, Math.sin(a) * 0.022]);
+    }
+    posed(b, rotX(Math.PI / 2), [0, 0, 0], () =>
+      b.lathe([0, 0, 0], prof, wheel, { mat: GLOSSY, seg: 22 }),
+    );
+    for (let k = 0; k < 2; k++)
+      posed(b, rotZ((k * Math.PI) / 2), [0, 0, 0], () =>
+        rb(b, [0, 0, 0], [0.14, 0.014, 0.012], 0.012, wheel, GLOSSY, 2),
+      );
+    disc(b, [0, 0, 0.005], 0.04, 0.03, '#f4f6f8', GLOSSY, 12);
+  });
+  // Tag on a little chain, hanging from the body.
+  rb(b, [0.13, 0.06, 0.05], [0.004, 0.05, 0.004], 0.004, ALU, MATTE, 1);
+  posed(b, rotZ(shut ? 0 : 0.12), [0.13, -0.07, 0.055], () => {
+    rb(b, [0, 0, 0], [0.065, 0.085, 0.008], 0.015, shut ? '#58ff9a' : '#ffc53d', EMISSIVE, 2);
+    if (shut)
+      for (const [x, y, a, l] of [
+        [-0.018, -0.01, 0.8, 0.022],
+        [0.016, 0.006, -0.7, 0.04],
+      ])
+        posed(b, rotZ(a), [x, y, 0.01], () => flatBox(b, [0, 0, 0], [0.01, l, 0.002], '#0b5d2c'));
+    else {
+      flatBox(b, [0, 0.015, 0.01], [0.011, 0.04, 0.002], NAVY);
+      flatBox(b, [0, -0.052, 0.01], [0.011, 0.011, 0.002], NAVY);
+    }
+  });
+  // Blue "water" plate above: a drop on white.
+  rb(b, [0, 0.62, -0.06], [0.09, 0.06, 0.012], 0.015, '#ffffff', MATTE, 2);
+  b.ellipsoid([0, 0.605, -0.045], [0.026, 0.03, 0.006], PIPE, { seg: 8 });
+  tri(
+    b,
+    [
+      [-0.022, 0.615],
+      [0.022, 0.615],
+      [0, 0.66],
+    ],
+    -0.044,
+    PIPE,
+  );
+  return b;
+}
+
+/**
  * Chronotime time clock on a post: screen, keypad and card slot.
  * @param {string} screen
  */
@@ -539,43 +695,60 @@ function ream() {
 }
 
 /**
- * The way out: an open lift doorway facing the camera, set back so characters
- * stand in front of it, with lime glow strips and a lit threshold.
+ * The way out: a lift doorway facing the camera, set back so characters stand in
+ * front of it. Locked (no key item yet): steel doors shut, slate trims and an amber
+ * padlock above. Open: doors slid aside on a lit car, lime glow strips, a lit
+ * up arrow and threshold.
+ * @param {boolean} open
  */
-function exitDoor() {
+function exitDoor(open) {
   const b = new MeshBuilder();
   const z = -0.4,
     W = 0.62,
     H = 2.15;
+  const TRIM = open ? LIME : '#56607a';
+  const TRIM_MAT = open ? EMISSIVE : MATTE;
   // Lit lift car behind the opening.
-  rb(b, [0, H / 2, z - 0.12], [W, H / 2, 0.05], 0.02, '#e9ffd0', EMISSIVE, 2);
+  rb(
+    b,
+    [0, H / 2, z - 0.12],
+    [W, H / 2, 0.05],
+    0.02,
+    open ? '#e9ffd0' : '#3c4658',
+    open ? EMISSIVE : MATTE,
+    2,
+  );
   rb(b, [0, 0.01, z - 0.02], [W, 0.012, 0.12], 0.008, '#8f99a8', MATTE, 2);
-  // Inside the car: a kick plate, a handrail and a lime running-figure panel.
-  rb(b, [0, 0.16, z - 0.065], [W - 0.02, 0.15, 0.008], 0.006, '#b8c2cf', GLOSSY, 2);
-  rb(b, [0, 0.95, z - 0.045], [W - 0.12, 0.022, 0.022], 0.02, ALU, GLOSSY, 3);
-  rb(b, [0, 1.45, z - 0.064], [0.16, 0.22, 0.008], 0.02, '#0f9d58', EMISSIVE, 2);
-  b.ellipsoid([0.02, 1.56, z - 0.05], [0.028, 0.028, 0.008], '#ffffff', { mat: EMISSIVE, seg: 5 });
-  for (const [x, y, a, l] of [
-    [0, 1.46, 0.3, 0.07],
-    [-0.04, 1.33, -0.5, 0.07],
-    [0.05, 1.33, 0.5, 0.07],
-    [-0.03, 1.48, 1.2, 0.05],
-    [0.05, 1.47, -1.0, 0.05],
-  ])
-    posed(b, rotZ(a), [x, y, z - 0.052], () =>
-      flatBox(b, [0, 0, 0], [0.016, l, 0.004], '#ffffff', EMISSIVE),
-    );
-  // Brushed steel doors, slid aside.
-  for (const s of [-1, 1])
-    rb(
-      b,
-      [s * (W - 0.12), H / 2, z - 0.04],
-      [0.11, H / 2 - 0.02, 0.025],
-      0.01,
-      '#d5dbe2',
-      GLOSSY,
-      2,
-    );
+  if (open) {
+    // Inside the car: a kick plate, a handrail and a lime running-figure panel.
+    rb(b, [0, 0.16, z - 0.065], [W - 0.02, 0.15, 0.008], 0.006, '#b8c2cf', GLOSSY, 2);
+    rb(b, [0, 0.95, z - 0.045], [W - 0.12, 0.022, 0.022], 0.02, ALU, GLOSSY, 3);
+    rb(b, [0, 1.45, z - 0.064], [0.16, 0.22, 0.008], 0.02, '#0f9d58', EMISSIVE, 2);
+    b.ellipsoid([0.02, 1.56, z - 0.05], [0.028, 0.028, 0.008], '#ffffff', {
+      mat: EMISSIVE,
+      seg: 5,
+    });
+    for (const [x, y, a, l] of [
+      [0, 1.46, 0.3, 0.07],
+      [-0.04, 1.33, -0.5, 0.07],
+      [0.05, 1.33, 0.5, 0.07],
+      [-0.03, 1.48, 1.2, 0.05],
+      [0.05, 1.47, -1.0, 0.05],
+    ])
+      posed(b, rotZ(a), [x, y, z - 0.052], () =>
+        flatBox(b, [0, 0, 0], [0.016, l, 0.004], '#ffffff', EMISSIVE),
+      );
+  }
+  // Brushed steel doors: slid aside, or shut with a dark seam down the middle.
+  for (const s of [-1, 1]) {
+    const cx = open ? s * (W - 0.12) : s * (W / 2),
+      hw = open ? 0.11 : W / 2 - 0.004;
+    rb(b, [cx, H / 2, z - 0.04], [hw, H / 2 - 0.02, 0.025], 0.01, '#d5dbe2', GLOSSY, 2);
+    if (!open)
+      for (const y of [0.55, 1.1, 1.65])
+        flatBox(b, [cx, y, z - 0.013], [hw - 0.04, 0.004, 0.002], '#b3bcc7');
+  }
+  if (!open) flatBox(b, [0, H / 2, z - 0.012], [0.006, H / 2 - 0.03, 0.003], '#59626f');
   // Frame: posts and lintel.
   for (const s of [-1, 1]) {
     rb(
@@ -587,26 +760,39 @@ function exitDoor() {
       MATTE,
       3,
     );
-    flatBox(b, [s * (W + 0.012), H / 2, z + 0.06], [0.022, H / 2, 0.035], LIME, EMISSIVE);
+    flatBox(b, [s * (W + 0.012), H / 2, z + 0.06], [0.022, H / 2, 0.035], TRIM, TRIM_MAT);
   }
   rb(b, [0, H + 0.08, z], [W + 0.18, 0.1, 0.1], 0.03, '#3a4458', MATTE, 3);
-  flatBox(b, [0, H - 0.005, z + 0.06], [W, 0.022, 0.035], LIME, EMISSIVE);
-  // Floor indicator above the opening: a lit up arrow.
+  flatBox(b, [0, H - 0.005, z + 0.06], [W, 0.022, 0.035], TRIM, TRIM_MAT);
+  // Call button on the right post.
+  rb(b, [W + 0.09, 1.05, z + 0.105], [0.045, 0.08, 0.008], 0.012, '#1b212c', MATTE, 2);
+  b.ellipsoid([W + 0.09, 1.05, z + 0.115], [0.022, 0.022, 0.008], open ? LIME : '#ffb02e', {
+    mat: EMISSIVE,
+    seg: 6,
+  });
+  // Indicator above the opening: a lit up arrow, or an amber padlock.
   rb(b, [0, H + 0.08, z + 0.1], [0.14, 0.06, 0.008], 0.01, '#10151f', MATTE, 2);
-  tri(
-    b,
-    [
-      [-0.05, H + 0.05],
-      [0.05, H + 0.05],
-      [0, H + 0.12],
-    ],
-    z + 0.112,
-    LIME,
-    EMISSIVE,
-  );
+  if (open)
+    tri(
+      b,
+      [
+        [-0.05, H + 0.05],
+        [0.05, H + 0.05],
+        [0, H + 0.12],
+      ],
+      z + 0.112,
+      LIME,
+      EMISSIVE,
+    );
+  else {
+    rb(b, [0, H + 0.065, z + 0.112], [0.04, 0.03, 0.004], 0.008, '#ffb02e', EMISSIVE, 2);
+    for (const s of [-1, 1])
+      flatBox(b, [s * 0.024, H + 0.11, z + 0.112], [0.007, 0.02, 0.003], '#ffb02e', EMISSIVE);
+    flatBox(b, [0, H + 0.128, z + 0.112], [0.031, 0.007, 0.003], '#ffb02e', EMISSIVE);
+  }
   // Threshold plate and a glowing strip on the floor in front.
   rb(b, [0, 0.012, z + 0.2], [W + 0.18, 0.012, 0.12], 0.008, '#c3cad3', GLOSSY, 2);
-  flatBox(b, [0, 0.026, z + 0.3], [W, 0.003, 0.018], LIME, EMISSIVE);
+  flatBox(b, [0, 0.026, z + 0.3], [W, 0.003, 0.018], TRIM, TRIM_MAT);
   return b;
 }
 
@@ -631,6 +817,10 @@ export function buildThings(gl) {
     checkpointOn: mesh(checkpoint('#58ff9a')),
     cr: mesh(report()),
     ammo: mesh(ream()),
-    exit: mesh(exitDoor()),
+    exit: mesh(exitDoor(true)),
+    exitLocked: mesh(exitDoor(false)),
+    concert: mesh(concertTickets()),
+    valve: mesh(valve(false)),
+    valveOn: mesh(valve(true)),
   };
 }

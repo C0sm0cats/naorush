@@ -4,7 +4,7 @@ import { bossPose, heroPose, idlePose } from '../src/app/poses.js';
 import { CAST } from '../src/data/cast.js';
 import { LEVELS } from '../src/data/levels/index.js';
 import { buildCharacter, poseCharacter } from '../src/gfx/characters.js';
-import { buildProps } from '../src/gfx/props.js';
+import { buildProps, propGeometry } from '../src/gfx/props.js';
 import { buildThings } from '../src/gfx/things.js';
 import { createSim } from '../src/game/sim.js';
 
@@ -74,6 +74,7 @@ describe('rendering', () => {
     props,
     cast,
     keyMesh: things.key,
+    cube: things.key,
     theme: 'office',
     hiddenFloor: { office: things.key, dc: things.key, roof: things.key, parking: things.key },
     glow: () => ({ mesh: things.key, model: new Float32Array(16) }),
@@ -88,6 +89,27 @@ describe('rendering', () => {
         const items = [];
         expect(() => drawThing(view, items, sim, { ...th, state }, 1.5)).not.toThrow();
       }
+  });
+
+  it('shows state changes on the exit lift and the shut-off valve', () => {
+    const level = LEVELS.find((l) => l.id === 'copil') ?? LEVELS[0];
+    const sim = createSim(level, 'kevin');
+    /** @param {any} th */
+    const meshes = (th) => {
+      /** @type {any[]} */
+      const items = [];
+      drawThing(view, items, sim, th, 1.5);
+      return items.map((it) => it.mesh);
+    };
+    const exit = /** @type {any} */ ({ kind: 'exit', x: 5, y: 3, state: 'idle', t: 0 });
+    sim.hasKey = false;
+    expect(meshes(exit)).toContain(things.exitLocked);
+    sim.hasKey = true;
+    expect(meshes(exit)).toContain(things.exit);
+    const valve = /** @type {any} */ ({ kind: 'switch', x: 5, y: 3, state: 'idle', t: 0 });
+    expect(meshes(valve)).toContain(things.valve);
+    expect(meshes({ ...valve, state: 'on' })).toContain(things.valveOn);
+    expect(propGeometry('puddle').count).toBeGreaterThan(0);
   });
 
   it('poses every character without errors', () => {

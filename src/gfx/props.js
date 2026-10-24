@@ -133,6 +133,21 @@ function flatBox(b, c, h, color, mat = MATTE) {
 }
 
 /**
+ * Single flat triangle with its normal turned upwards (culling is off, so either side shows).
+ * @param {MeshBuilder} b @param {number[][]} p Three corners. @param {string} color
+ * @param {number} [mat]
+ */
+function tri3(b, p, color, mat = MATTE) {
+  const u = p[1].map((x, i) => x - p[0][i]),
+    v = p[2].map((x, i) => x - p[0][i]);
+  let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+  const len = Math.hypot(...n) || 1;
+  n = n.map((x) => x / len);
+  if (n[1] < 0) n = n.map((x) => -x);
+  b.grid(1, 1, (s, t) => ({ p: t ? p[2] : s ? p[1] : p[0], n }), rgb(color), mat);
+}
+
+/**
  * Smooth step from 0 at `a` to 1 at `c`.
  * @param {number} a @param {number} c @param {number} x
  */
@@ -533,7 +548,7 @@ function glyph(b, rows, o, px, color) {
 // Props.
 
 /**
- * @typedef {'plant'|'plantSmall'|'cooler'|'printer'|'coffee'|'chair'|'rack'|'hvac'|'antenna'|'parasol'|'bistro'|'speaker'|'lampPost'|'monitor'|'kpi'|'wave'|'lift'|'gate'|'carBlue'|'carRed'|'carWhite'|'barrier'|'pillarSign'|'drawer'|'sprinkler'|'spray'|'paper'|'binders'|'vacuum'|'laptopStand'|'invite'|'cup'|'archive'|'copilTable'|'projector'|'truss'|'spotlight'|'curtain'|'shadow'|'warn'|'arrow'|'rackFall'|'confetti'} PropId
+ * @typedef {'plant'|'plantSmall'|'cooler'|'printer'|'coffee'|'chair'|'rack'|'hvac'|'antenna'|'parasol'|'bistro'|'speaker'|'lampPost'|'monitor'|'kpi'|'wave'|'lift'|'gate'|'carBlue'|'carRed'|'carWhite'|'barrier'|'pillarSign'|'drawer'|'sprinkler'|'spray'|'paper'|'binders'|'vacuum'|'laptopStand'|'invite'|'cup'|'archive'|'copilTable'|'projector'|'truss'|'spotlight'|'curtain'|'shadow'|'puddle'|'warn'|'arrow'|'rackFall'|'confetti'} PropId
  */
 
 /** @type {Record<PropId, (b: MeshBuilder) => void>} */
@@ -1329,6 +1344,8 @@ const BUILDERS = {
   },
 
   kpi(b) {
+    // Navy frame behind the slide: a dark outline that reads against bright walls.
+    b.roundedBox([0, 0, -0.012], [0.28, 0.21, 0.02], 0.03, NAVY, { mat: GLOSSY, seg: 4 });
     b.roundedBox([0, 0, 0], [0.25, 0.18, 0.025], 0.02, '#fbfbfd', { mat: GLOSSY, seg: 4 });
     const z = 0.026;
     flatBox(b, [0, 0.135, z], [0.21, 0.022, 0.002], NAVY);
@@ -1350,7 +1367,23 @@ const BUILDERS = {
         EMISSIVE,
       );
     });
-    b.ellipsoid([0.17, 0.12, -0.026], [0.03, 0.03, 0.004], LIME, { seg: 12 });
+    // Rising trend line with an arrow head.
+    const s = mark(b);
+    flatBox(b, [0, 0, 0], [0.16, 0.009, 0.002], '#ff8a1f', EMISSIVE);
+    place(b, s, rotZ(0.49), [0.0, 0.0, z + 0.006]);
+    const h = mark(b);
+    b.grid(
+      1,
+      1,
+      (u, v) => ({
+        p: [v ? 0 : u ? -0.03 : 0.03, v ? 0.05 : 0, 0],
+        n: [0, 0, 1],
+      }),
+      rgb('#ff8a1f'),
+      EMISSIVE,
+    );
+    place(b, h, rotZ(0.49 - Math.PI / 2), [0.14, 0.074, z + 0.006]);
+    b.ellipsoid([0.17, 0.12, -0.034], [0.03, 0.03, 0.004], LIME, { seg: 12 });
   },
 
   wave(b) {
@@ -1477,33 +1510,59 @@ const BUILDERS = {
     // Slides along +x: back face at x = 0, front panel at x = 0.9.
     const M = '#9aa4b0';
     flatBox(b, [0.43, -0.16, 0], [0.43, 0.015, 0.39], M);
-    for (const z of [-0.385, 0.385]) flatBox(b, [0.43, -0.02, z], [0.43, 0.155, 0.015], M);
+    flatBox(b, [0.43, -0.02, -0.385], [0.43, 0.155, 0.015], M);
     flatBox(b, [0.015, -0.02, 0], [0.015, 0.155, 0.39], M);
-    // Hanging folders.
+    // The side the camera sees: darker steel, a bright lip, an amber safety band
+    // and a file label, so the drawer stands out from the wall behind it.
+    flatBox(b, [0.43, -0.02, 0.385], [0.43, 0.155, 0.015], '#5f6d83');
+    flatBox(b, [0.43, 0.13, 0.401], [0.43, 0.012, 0.002], '#dfe4ea');
+    flatBox(b, [0.43, -0.135, 0.401], [0.43, 0.018, 0.002], '#ffb52e', EMISSIVE);
+    for (let i = 0; i < 6; i++)
+      flatBox(b, [0.08 + i * 0.15, -0.135, 0.403], [0.03, 0.018, 0.002], '#2a2f3a');
+    flatBox(b, [0.62, 0.0, 0.401], [0.12, 0.05, 0.002], WHITE);
+    flatBox(b, [0.6, 0.015, 0.403], [0.08, 0.008, 0.002], PINK);
+    flatBox(b, [0.6, -0.015, 0.403], [0.06, 0.006, 0.002], '#5a6372');
+    // Hanging folders, their tabs poking out above the rim.
     const cols = ['#f3d36b', PINK, '#6fc3ff', LIME, '#f3d36b', WHITE];
-    cols.forEach((c, i) => flatBox(b, [0.1 + i * 0.12, 0.0, 0], [0.012, 0.13, 0.36], c));
-    b.roundedBox([0.875, 0, 0], [0.025, 0.175, 0.4], 0.015, '#c3cad3', { mat: GLOSSY, seg: 4 });
-    b.roundedBox([0.91, 0.02, 0], [0.012, 0.018, 0.14], 0.012, CHROME, { mat: GLOSSY, seg: 3 });
-    flatBox(b, [0.9005, 0.11, 0], [0.001, 0.035, 0.1], WHITE);
+    cols.forEach((c, i) => {
+      flatBox(b, [0.1 + i * 0.12, 0.0, 0], [0.012, 0.13, 0.36], c);
+      flatBox(b, [0.1 + i * 0.12, 0.155, -0.2 + (i % 3) * 0.2], [0.013, 0.03, 0.07], c);
+    });
+    // Front panel: steel face, amber safety edge, card holder and a big pull handle.
+    b.roundedBox([0.875, 0, 0], [0.03, 0.18, 0.4], 0.018, '#c3cad3', { mat: GLOSSY, seg: 4 });
+    flatBox(b, [0.906, -0.155, 0], [0.002, 0.014, 0.37], '#ffb52e', EMISSIVE);
+    flatBox(b, [0.906, 0.105, 0], [0.002, 0.042, 0.115], '#8a929c');
+    flatBox(b, [0.908, 0.105, 0], [0.002, 0.032, 0.1], WHITE);
+    flatBox(b, [0.91, 0.112, -0.02], [0.002, 0.008, 0.06], PINK);
+    flatBox(b, [0.91, 0.094, 0.0], [0.002, 0.005, 0.07], '#5a6372');
+    for (const z of [-0.13, 0.13])
+      b.roundedBox([0.925, -0.01, z], [0.025, 0.016, 0.016], 0.012, CHROME, {
+        mat: GLOSSY,
+        seg: 2,
+      });
+    b.roundedBox([0.95, -0.01, 0], [0.016, 0.02, 0.16], 0.014, CHROME, { mat: GLOSSY, seg: 3 });
   },
 
   sprinkler(b) {
-    cyl(b, [0, -0.03, 0], 0.05, 0.03, CHROME, { mat: GLOSSY, seg: 16 });
-    cyl(b, [0, -0.06, 0], 0.018, 0.03, CHROME, { mat: GLOSSY, seg: 12 });
-    for (const x of [-0.025, 0.025])
-      rod(b, [x, -0.06, 0], [x * 0.6, -0.13, 0], 0.005, CHROME, { mat: GLOSSY, seg: 6 });
-    b.ellipsoid([0, -0.095, 0], [0.008, 0.025, 0.008], '#ff2a3a', { mat: GLOSSY, seg: 8 });
-    cyl(b, [0, -0.14, 0], 0.035, 0.008, CHROME, { mat: GLOSSY, seg: 16 });
+    // Supply pipe into the ceiling, a red escutcheon ring, the glass bulb between
+    // two chrome arms and a wide deflector: big enough to spot from a distance.
+    cyl(b, [0, -0.02, 0], 0.035, 0.3, '#c8ced6', { mat: GLOSSY, seg: 12 });
+    cyl(b, [0, -0.035, 0], 0.09, 0.02, '#e2343f', { mat: GLOSSY, seg: 20 });
+    cyl(b, [0, -0.07, 0], 0.03, 0.04, CHROME, { mat: GLOSSY, seg: 12 });
+    for (const x of [-0.04, 0.04])
+      rod(b, [x, -0.07, 0], [x * 0.55, -0.19, 0], 0.008, CHROME, { mat: GLOSSY, seg: 6 });
+    b.ellipsoid([0, -0.125, 0], [0.013, 0.038, 0.013], '#ff2a3a', { mat: EMISSIVE, seg: 8 });
     b.lathe(
-      [0, -0.15, 0],
+      [0, -0.205, 0],
       [
         [0, 0],
-        [0.012, 0],
-        [0.012, 0.01],
-        [0, 0.01],
+        [0.07, 0],
+        [0.075, 0.008],
+        [0.03, 0.016],
+        [0, 0.016],
       ],
       CHROME,
-      { mat: GLOSSY, seg: 8 },
+      { mat: GLOSSY, seg: 16 },
     );
   },
 
@@ -1537,21 +1596,34 @@ const BUILDERS = {
   },
 
   paper(b) {
+    // A sheet curling in flight: white face up, a grey-blue underside so it stands
+    // out against pale walls, a pink header, typed lines and a dog-eared corner.
     /** @param {number} u @param {number} v @param {number} off */
     const sheet = (u, v, off) => {
-      const x = (u - 0.5) * 0.35,
-        z = (v - 0.5) * 0.25;
-      return [x, 0.015 * Math.cos(u * Math.PI) * -1 + 0.01 * (v - 0.5) * (v - 0.5) * 4 + off, z];
+      const x = (u - 0.5) * 0.4,
+        z = (v - 0.5) * 0.28;
+      return [x, -0.03 * Math.cos(u * Math.PI) + 0.025 * (v - 0.5) * (v - 0.5) * 4 + off, z];
     };
-    surf(b, 8, 4, (u, v) => sheet(u, v, 0.001), WHITE, MATTE);
-    surf(b, 8, 4, (u, v) => sheet(u, v, -0.001), '#e4e8ee', MATTE, [0, -1, 0]);
-    for (let i = 0; i < 4; i++)
-      flatBox(
-        b,
-        [-0.04 + (i % 2) * 0.02, 0.0025, -0.07 + i * 0.045],
-        [0.1 - (i % 2) * 0.03, 0.0008, 0.006],
-        '#9aa3b2',
-      );
+    surf(b, 8, 4, (u, v) => sheet(u, v, 0.002), WHITE, MATTE);
+    surf(b, 8, 4, (u, v) => sheet(u, v, -0.002), '#8d9bb3', MATTE, [0, -1, 0]);
+    /** Height of the face at x, z (for decals). @param {number} x @param {number} z */
+    const top = (x, z) => sheet(x / 0.4 + 0.5, z / 0.28 + 0.5, 0.006)[1];
+    flatBox(b, [-0.06, top(-0.06, -0.09), -0.09], [0.1, 0.002, 0.018], PINK);
+    for (let i = 0; i < 4; i++) {
+      const x = -0.02 + (i % 2) * 0.02,
+        z = -0.03 + i * 0.04;
+      flatBox(b, [x, top(x, z), z], [0.12 - (i % 2) * 0.035, 0.0015, 0.007], '#6d7890');
+    }
+    // Dog-ear on the leading corner.
+    tri3(
+      b,
+      [
+        [0.2, top(0.2, 0.1) + 0.002, 0.14],
+        [0.13, top(0.13, 0.14) + 0.002, 0.14],
+        [0.2, top(0.2, 0.07) + 0.002, 0.07],
+      ],
+      '#dfe4ec',
+    );
   },
 
   binders(b) {
@@ -1928,6 +2000,22 @@ const BUILDERS = {
     );
   },
 
+  puddle(b) {
+    // Water on the floor under a sprinkler: radius 0.5, scaled by the renderer.
+    b.lathe(
+      [0, 0, 0],
+      [
+        [0, 0.012],
+        [0.36, 0.012],
+        [0.5, 0.004],
+        [0.5, 0],
+      ],
+      '#7cc8ff',
+      { mat: GLOSSY, seg: 24, scaleZ: 0.6 },
+    );
+    ring(b, [0, 0.012, 0], 0.3, 0.008, '#d8f1ff', { mat: EMISSIVE, seg: 24, sides: 3 });
+  },
+
   warn(b) {
     flatBox(b, [0, 0.02, 0], [0.5, 0.02, 0.4], '#ff7a14', EMISSIVE);
     for (let i = 0; i < 5; i++)
@@ -2059,6 +2147,7 @@ export const PROP_IDS = [
   'spotlight',
   'curtain',
   'shadow',
+  'puddle',
   'warn',
   'arrow',
   'rackFall',
