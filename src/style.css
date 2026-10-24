@@ -1123,3 +1123,34 @@ body[data-pad='l'] .touch .big {
   grid-template-columns: 1fr 1fr;
   margin-top: 8px;
 }
+
+/* Menus pop in, buttons respond to the touch. */
+.screen:not([hidden]) .card {
+  animation: card-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+}
+.go,
+.ghost,
+.hero-card,
+.keyrow {
+  transition:
+    transform 0.12s,
+    filter 0.12s,
+    box-shadow 0.12s;
+}
+.go:hover,
+.ghost:hover,
+.hero-card:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+.go:active,
+.ghost:active,
+.hero-card:active {
+  transform: translateY(1px) scale(0.99);
+}
