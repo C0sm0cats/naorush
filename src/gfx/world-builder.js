@@ -64,6 +64,39 @@ export const PALETTE = {
 };
 
 /**
+ * Light mood of an office stage, read from what furnishes it: the seminar has its
+ * stage truss, the break room its bistro tables, the steering committee its long
+ * meeting tables, a manned open space its desks and whiteboards; a floor with none
+ * of them is the half-empty intercontrat plateau late on a Friday.
+ * @typedef {'morning'|'corporate'|'lounge'|'late'|'event'} Mood
+ * @param {import('../data/levels/index.js').Decor[]} decor
+ * @param {string[]} map
+ * @returns {Mood}
+ */
+export function officeMood(decor, map) {
+  const has = (/** @type {string} */ type) => decor.some((d) => d.type === type);
+  if (has('truss')) return 'event';
+  if (has('bistro')) return 'lounge';
+  if (map.some((row) => row.includes('Y'))) return 'corporate';
+  if (has('desk') || has('whiteboard')) return 'morning';
+  return 'late';
+}
+
+/**
+ * Ceiling fixtures per mood: emissive panel colour and the light it casts.
+ * @type {Record<Mood|'parking'|'datacenter', {panel: number, color: number[], radius: number}>}
+ */
+const FIXTURES = {
+  morning: { panel: rgb('#fff6d8'), color: [0.52, 0.49, 0.42], radius: 6.5 },
+  corporate: { panel: rgb('#f4f8ff'), color: [0.52, 0.54, 0.58], radius: 6.8 },
+  lounge: { panel: rgb('#ffdca0'), color: [0.72, 0.5, 0.28], radius: 5.5 },
+  late: { panel: rgb('#ffe7b8'), color: [0.58, 0.46, 0.32], radius: 6.5 },
+  event: { panel: rgb('#ffcf8a'), color: [0.8, 0.5, 0.26], radius: 7 },
+  parking: { panel: rgb('#dff6ff'), color: [0.3, 0.55, 0.7], radius: 7.5 },
+  datacenter: { panel: rgb('#bfe9ff'), color: [0.24, 0.46, 0.72], radius: 6.5 },
+};
+
+/**
  * @param {import('../game/sim.js').Sim} sim
  * @param {import('../data/levels/index.js').Decor[]} decor
  * @param {string[]} [map] Level rows, used for tile styles ('M' meeting room, 'B' paper reams,
@@ -74,6 +107,8 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
   const roof = theme === 'rooftop';
   const dc = theme === 'datacenter';
   const park = theme === 'parking';
+  const mood = theme === 'office' ? officeMood(decor, map) : null;
+  const fixture = FIXTURES[mood ?? (park ? 'parking' : 'datacenter')];
   const concrete = vary(rgb('#7b818c'), 0.08, 4);
   const pebbles = vary(rgb('#7d7a75'), 0.2, 1);
   /** Roof gravel: pebbles, with lighter washed patches and a few pale stones. */
@@ -431,7 +466,22 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
             park ? rgb('#8a909a') : dc ? PALETTE.ceiling : tiles,
           );
           const lamp = park ? c % 6 === 3 && below !== TILE.SOLID : c % 5 === 2;
-          if (lamp) {
+          // Friday 16:30 on the intercontrat floor: half the rows are already switched off.
+          const off = mood === 'late' && c % 10 === 7;
+          if (lamp && mood === 'lounge' && below !== TILE.SOLID) {
+            // Break room: warm pendant shades on cords instead of ceiling panels.
+            const cx = x0 + 3,
+              z0 = zv(-1);
+            vol.box(cx + 1, y0 - 6, z0 + 1, cx + 2, y0, z0 + 2, rgb('#2a2f38'));
+            vol.box(cx - 1, y0 - 8, z0 - 1, cx + 4, y0 - 6, z0 + 4, rgb('#e86a3a'));
+            vol.box(cx, y0 - 6, z0, cx + 3, y0 - 5, z0 + 3, rgb('#c4532b'));
+            vol.box(cx, y0 - 9, z0, cx + 3, y0 - 8, z0 + 3, fixture.panel, MAT.EMISSIVE);
+            lights.push({
+              pos: [c + 0.5, r - 1.4, -0.6],
+              radius: fixture.radius,
+              color: fixture.color,
+            });
+          } else if (lamp) {
             // Office ceiling lights, cool tubes in the server room, neon in the car park.
             vol.box(
               x0 + (park ? 0 : 1),
@@ -440,14 +490,15 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
               x0 + V - (park ? 0 : 1),
               y0,
               zv(park ? -0.6 : 0.4),
-              dc ? rgb('#bfe9ff') : park ? rgb('#e6f6ff') : PALETTE.lamp,
-              MAT.EMISSIVE,
+              off ? rgb('#b9b6ae') : fixture.panel,
+              off ? MAT.MATTE : MAT.EMISSIVE,
             );
-            lights.push({
-              pos: [c + 0.5, r - 0.6, -0.6],
-              radius: park ? 7 : 6.5,
-              color: dc ? [0.3, 0.45, 0.6] : park ? [0.42, 0.5, 0.62] : [0.55, 0.5, 0.42],
-            });
+            if (!off)
+              lights.push({
+                pos: [c + 0.5, r - 0.6, -0.6],
+                radius: fixture.radius,
+                color: fixture.color,
+              });
           }
         }
       } else if (t === TILE.HAZARD) {
@@ -469,7 +520,7 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
       }
     }
 
-  furnish({ vol, sim, map, decor, theme, zv, onPanel });
+  furnish({ vol, sim, map, decor, theme, zv, onPanel, lights, mood });
   for (const d of decor) placeDecor(vol, d, sz);
   return { vol, mesh: meshVolume(vol), lights };
 }
@@ -483,6 +534,8 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
  * @property {'office'|'datacenter'|'rooftop'|'parking'} theme
  * @property {(z: number) => number} zv World z to voxel z.
  * @property {(x: number) => boolean} onPanel Whether a voxel column is reserved for artwork.
+ * @property {Array<{pos: number[], radius: number, color: number[]}>} lights Point lights to add to.
+ * @property {Mood|null} mood Light mood of an office stage.
  */
 
 /** 3×5 pixel digits for the car park bay numbers, rows top to bottom. */
@@ -504,7 +557,7 @@ const DIGITS = [
  * cable trays, pipes, vents... Collision comes from the sim tiles, never from this.
  * @param {FurnishContext} ctx
  */
-function furnish({ vol, sim, map, decor, theme, zv, onPanel }) {
+function furnish({ vol, sim, map, decor, theme, zv, onPanel, lights, mood }) {
   const { w, h, tiles } = sim;
   /** @param {number} c @param {number} r */
   const tile = (c, r) => (c < 0 || c >= w || r < 0 || r >= h ? TILE.SOLID : tiles[c + r * w]);
@@ -726,6 +779,81 @@ function furnish({ vol, sim, map, decor, theme, zv, onPanel }) {
       for (let k = 1; k < 4; k++)
         vol.box(x - 3 + k, F + hgt - k * 4, 4, x + 4 - k, F + hgt - k * 4 + 1, 5, rgb('#4a505c'));
       vol.box(x, F + hgt, 4, x + 1, F + hgt + 1, 5, rgb('#ff3b3b'), MAT.EMISSIVE);
+    }
+    // Golden hour: festoon lights strung between posts over the terrace.
+    const bulbs = [rgb('#ffd27a'), rgb('#ffb066'), rgb('#fff1c9')];
+    const z = zv(-2);
+    const top = (base + 5) * V;
+    /** Whether a post can stand in column c, from the roof up to the string. @param {number} c */
+    const post = (c) => {
+      if (ground[c] !== base || onPanel(c * V) || c >= arena[0] - 2) return false;
+      for (let r = base; r <= base + 5; r++) if (tile(c, r) !== TILE.EMPTY) return false;
+      return true;
+    };
+    for (let c = 2; c + 10 < w; c += 10) {
+      if (!post(c) || !post(c + 10)) continue;
+      const a = c * V + 4,
+        b = (c + 10) * V + 4;
+      for (const px of [a, b]) vol.box(px, F, z, px + 1, top + 1, z + 1, rgb('#4a505c'));
+      for (let x = a + 1; x < b; x++) {
+        const t = (x - a) / (b - a);
+        const y = top - Math.round(7 * 4 * t * (1 - t));
+        if (tile(x >> 3, y >> 3) !== TILE.EMPTY) continue;
+        vol.box(x, y, z, x + 1, y + 1, z + 1, rgb('#2a2f38'));
+        if ((x - a) % 5 === 2)
+          vol.box(x, y - 1, z, x + 1, y, z + 1, bulbs[(((x - a) / 5) % 3) | 0], MAT.EMISSIVE);
+      }
+      lights.push({ pos: [c + 5.5, base + 4.2, -1.6], radius: 5.5, color: [0.62, 0.38, 0.16] });
+    }
+  }
+
+  if (theme === 'parking') {
+    // The lime and pink neon strips wash the concrete in colour.
+    for (let c = 2; c < w; c += 6) {
+      const pink = c % 12 === 2;
+      if (tile(c, 8) !== TILE.EMPTY) continue;
+      lights.push({
+        pos: [c + 0.5, pink ? 8.2 : 8.5, -2.4],
+        radius: 5,
+        color: pink ? [0.75, 0.14, 0.42] : [0.4, 0.62, 0.1],
+      });
+    }
+  }
+
+  if (theme === 'datacenter') {
+    // Cold-aisle LED line along the skirting and a blue wash from the floor grilles.
+    for (let c = 0; c < w; c++)
+      if (ground[c] === base && tile(c, base) === TILE.EMPTY && !onPanel(c * V))
+        vol.box(c * V, F, 3, c * V + V, F + 1, 4, rgb('#3fa9ff'), MAT.EMISSIVE);
+    for (let c = 4; c < w; c += 10)
+      if (ground[c] === base)
+        lights.push({ pos: [c + 0.5, base + 0.5, -2.2], radius: 5, color: [0.08, 0.26, 0.6] });
+    // Racks glow green from their status LEDs.
+    for (let c = 0; c < w; c++)
+      for (let r = 1; r < h - 1; r++) {
+        const row = map[h - 1 - r];
+        if (row?.[c] === 'V' && map[h - 2 - r]?.[c] !== 'V')
+          lights.push({ pos: [c + 0.5, r + 0.5, 2], radius: 3.2, color: [0.08, 0.4, 0.3] });
+      }
+  }
+
+  if (mood === 'event') {
+    // Seminar evening: coloured uplights along the back wall.
+    const tints = [
+      [0.75, 0.18, 0.5],
+      [0.85, 0.46, 0.14],
+      [0.36, 0.26, 0.85],
+    ];
+    const lens = [rgb('#ff5fb4'), rgb('#ffb347'), rgb('#7d6bff')];
+    let k = 0;
+    for (let c = 3, last = -9; c < w - 2; c++) {
+      if (c - last < 7 || ground[c] !== base || tile(c, base) !== TILE.EMPTY) continue;
+      if (onPanel(c * V) || onPanel(c * V + V - 1) || busy.has(c)) continue;
+      last = c;
+      const x = c * V + 2;
+      vol.box(x, F, 3, x + 4, F + 2, 6, rgb('#1d2028'));
+      vol.box(x + 1, F + 2, 3, x + 3, F + 3, 5, lens[k % 3], MAT.EMISSIVE);
+      lights.push({ pos: [c + 0.5, base + 0.6, -2.2], radius: 5.5, color: tints[k++ % 3] });
     }
   }
 }
