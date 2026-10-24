@@ -536,12 +536,17 @@ export class LevelView {
     }
     if (h.invuln > 0 && h.state !== 'dead' && Math.floor(t * 14) % 2 === 0) return;
     if (this.showcase) {
-      // Title screen: facing us, with a friendly wave.
+      // Title screen: relaxed and smiling, weight shifting gently from foot to foot.
+      const sway = Math.sin(t * 1.1);
       const wave = {
         ...idlePose(t),
-        armR: 2.6 + Math.sin(t * 7) * 0.3,
-        armSpread: 0.7,
-        head: -0.1,
+        legL: sway * 0.05,
+        legR: -sway * 0.05,
+        armL: 0.08 + Math.sin(t * 1.1 + 0.6) * 0.06,
+        armR: 0.08 - Math.sin(t * 1.1 + 0.6) * 0.06,
+        lean: -0.03,
+        bob: Math.abs(sway) * 0.4,
+        head: Math.sin(t * 0.7) * 0.08,
         mood: /** @type {const} */ ('happy'),
       };
       items.push(
