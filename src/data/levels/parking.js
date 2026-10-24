@@ -65,6 +65,7 @@ export const PARKING = {
     { type: 'pillarSign', x: 35.5, y: 3 },
     { type: 'barrier', x: 39.6, y: 3, z: -0.9 },
     { type: 'poster', id: 'note-de-frais', x: 54.4, y: 4 },
+    { type: 'poster', id: 'inetum-et-moi', x: 45, y: 4 },
     { type: 'pillarSign', x: 60, y: 3 },
     { type: 'poster', id: 'my-way', x: 73.6, y: 6.6 },
   ],

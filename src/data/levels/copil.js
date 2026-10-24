@@ -45,6 +45,7 @@ export const COPIL = {
     { type: 'cup', x: 54.2, y: 4, z: -1.1 },
     { type: 'poster', id: 'cooptation', x: 60.6, y: 4 },
     { type: 'poster', id: 'my-way', x: 82.6, y: 4 },
+    { type: 'poster', id: 'adopt-tools', x: 75.6, y: 4 },
     { type: 'projector', x: 49.5, y: 4.4, z: -2.2 },
     { type: 'chair', x: 60.6, y: 3, z: -1.3 },
     { type: 'monitor', x: 66, y: 6, z: -2 },

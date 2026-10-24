@@ -2031,6 +2031,282 @@ function drawLcp7(ctx) {
   footer(ctx, W - 50, H - 36, 24, C.paper, 'right');
 }
 
+/** Friendly face on a rounded app icon. @param {Ctx} ctx @param {number} x @param {number} y @param {number} s @param {string} c */
+function appFace(ctx, x, y, s, c) {
+  circle(ctx, x - s * 0.2, y - s * 0.05, s * 0.07, c);
+  circle(ctx, x + s * 0.2, y - s * 0.05, s * 0.07, c);
+  arc(ctx, x, y + s * 0.02, s * 0.2, s * 0.06, c, 0.15 * Math.PI, 0.85 * Math.PI);
+}
+
+/** Avatar bust centred on x,y with radius r. @param {Ctx} ctx @param {number} x @param {number} y @param {number} r
+ * @param {string} skin @param {string} hair @param {string} shirt */
+function avatar(ctx, x, y, r, skin, hair, shirt) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, TAU);
+  ctx.clip();
+  circle(ctx, x, y, r, mix(shirt, '#ffffff', 0.55));
+  circle(ctx, x, y + r * 1.0, r * 0.75, shirt);
+  circle(ctx, x, y - r * 0.15, r * 0.4, skin);
+  ctx.beginPath();
+  ctx.arc(x, y - r * 0.2, r * 0.43, Math.PI * 1.02, Math.PI * 1.98);
+  ctx.closePath();
+  ctx.fillStyle = hair;
+  ctx.fill();
+  ctx.restore();
+  arc(ctx, x, y, r, r * 0.07, C.navy);
+}
+
+/** @type {Art} */
+const artMe = {
+  w: 620,
+  h: 440,
+  draw(ctx) {
+    const px = 195;
+    const py = 10;
+    box(ctx, px + 8, py + 12, 230, 420, 44, mix(C.navy, '#000000', 0.4));
+    box(ctx, px, py, 230, 420, 44, C.navy);
+    box(ctx, px + 12, py + 12, 206, 396, 34, C.paper);
+    box(ctx, px + 12, py + 12, 206, 78, [34, 34, 0, 0], C.blue);
+    avatar(ctx, px + 52, py + 52, 22, SKIN[1], HAIR[1], C.pink);
+    text(ctx, 'Salut !', px + 84, py + 62, 28, C.paper, { maxW: 110 });
+    const tiles = [
+      C.sky,
+      C.sun,
+      mix(C.pink, '#ffffff', 0.35),
+      C.lime,
+      mix(C.blue, '#ffffff', 0.6),
+      C.sun,
+    ];
+    for (let i = 0; i < 6; i++) {
+      const tx = px + 25 + (i % 2) * 102;
+      const ty = py + 106 + Math.floor(i / 2) * 98;
+      box(ctx, tx, ty + 4, 92, 86, 20, mix(tiles[i], C.navy, 0.25));
+      box(ctx, tx, ty, 92, 86, 20, tiles[i]);
+      const cx = tx + 46;
+      const cy = ty + 43;
+      if (i === 0) {
+        circle(ctx, cx, cy - 8, 14, C.navy);
+        box(ctx, cx - 24, cy + 10, 48, 26, [22, 22, 6, 6], C.navy);
+      } else if (i === 1) {
+        circle(ctx, cx, cy, 15, C.navy);
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * TAU;
+          path(
+            ctx,
+            [
+              cx + Math.cos(a) * 22,
+              cy + Math.sin(a) * 22,
+              cx + Math.cos(a) * 31,
+              cy + Math.sin(a) * 31,
+            ],
+            5,
+            C.navy,
+          );
+        }
+      } else if (i === 2) {
+        box(ctx, cx - 22, cy - 18, 38, 40, 8, C.navy);
+        arc(ctx, cx + 16, cy + 2, 12, 6, C.navy, -Math.PI / 2, Math.PI / 2);
+        box(ctx, cx - 22, cy + 4, 38, 18, [0, 0, 8, 8], C.sun);
+        path(ctx, [cx - 12, cy - 26, cx - 6, cy - 36], 4, C.navy);
+        path(ctx, [cx + 2, cy - 26, cx + 8, cy - 36], 4, C.navy);
+        box(ctx, cx - 28, cy + 24, 56, 6, 3, C.navy);
+      } else if (i === 3) {
+        box(ctx, cx - 20, cy - 28, 40, 54, 7, C.navy);
+        for (let k = 0; k < 3; k++) box(ctx, cx - 12, cy - 17 + k * 14, 24, 5, 2, C.lime);
+      } else if (i === 4) {
+        heart(ctx, cx, cy, 20, C.navy);
+      } else {
+        arc(ctx, cx, cy, 24, 6, C.navy);
+        path(ctx, [cx, cy - 14, cx, cy, cx + 11, cy + 8], 6, C.navy);
+      }
+    }
+    // Notification bubbles.
+    box(ctx, 440, 40, 170, 78, 26, C.sun);
+    poly(ctx, [452, 108, 480, 108, 446, 140], C.sun);
+    text(ctx, 'Café ?', 525, 76, 32, C.navy, { align: 'center', maxW: 140 });
+    text(ctx, 'presque…', 525, 106, 28, C.blue, { align: 'center', weight: 800, maxW: 140 });
+    box(ctx, 10, 250, 160, 68, 24, C.lime);
+    poly(ctx, [140, 308, 168, 308, 168, 338], C.lime);
+    check(ctx, 52, 284, 14, 8, C.navy);
+    text(ctx, 'Congés OK', 116, 292, 26, C.navy, { align: 'center', maxW: 90 });
+    heart(ctx, 520, 260, 26, C.pink);
+    spark(ctx, 60, 90, 26, C.sun);
+    spark(ctx, 560, 380, 22, C.sky);
+    spark(ctx, 110, 400, 16, C.paper);
+  },
+};
+
+/** @type {Art} */
+const artAdopt = {
+  w: 620,
+  h: 420,
+  draw(ctx) {
+    const cx = 310;
+    // Handle, behind the little tools peeking out of the box.
+    arc(ctx, cx, 270, 150, 18, C.navy, Math.PI * 1.12, Math.PI * 1.88);
+    /** @type {[number, number, number, string, number][]} */
+    const icons = [
+      [150, 190, -0.25, C.sky, 96],
+      [255, 130, 0.1, C.lime, 104],
+      [370, 150, -0.08, C.sun, 100],
+      [470, 205, 0.28, C.paper, 92],
+    ];
+    for (const [x, y, a, c, s] of icons) {
+      at(ctx, x, y, a, () => {
+        box(ctx, -s / 2, -s / 2 + 6, s, s, s * 0.24, mix(c, C.navy, 0.35));
+        box(ctx, -s / 2, -s / 2, s, s, s * 0.24, c);
+        appFace(ctx, 0, 0, s, C.navy);
+      });
+    }
+    // Body.
+    box(ctx, 90, 252, 440, 150, 30, mix(C.pink, C.navy, 0.35));
+    box(ctx, 90, 244, 440, 150, 30, C.pink);
+    box(ctx, 90, 244, 440, 36, [30, 30, 0, 0], mix(C.pink, '#ffffff', 0.3));
+    box(ctx, cx - 36, 262, 72, 52, 12, C.sun);
+    box(ctx, cx - 14, 276, 28, 24, 6, C.navy);
+    // Wrench and hammer on the front.
+    at(ctx, 190, 340, -0.5, () => {
+      box(ctx, -8, -44, 16, 88, 8, C.paper);
+      circle(ctx, 0, -48, 20, C.paper);
+      box(ctx, -7, -72, 14, 26, 4, C.pink);
+    });
+    at(ctx, 430, 340, 0.5, () => {
+      box(ctx, -8, -34, 16, 84, 8, C.paper);
+      box(ctx, -30, -52, 60, 28, 8, C.paper);
+    });
+    // Adoption tag.
+    at(ctx, 90, 110, -0.2, () => {
+      box(ctx, -66, -26, 132, 52, 14, C.paper);
+      circle(ctx, -50, 0, 6, C.sky);
+      text(ctx, 'Adopté !', 8, 10, 30, C.navy, { align: 'center', maxW: 90 });
+    });
+    heart(ctx, 560, 120, 24, C.pink);
+    heart(ctx, 40, 300, 16, C.sun);
+    spark(ctx, 560, 300, 24, C.sky);
+    spark(ctx, 330, 40, 18, C.paper);
+  },
+};
+
+/** @type {Art} */
+const artAiHub = {
+  w: 420,
+  h: 640,
+  draw(ctx) {
+    const cx = 210;
+    const cy = 330;
+    const nodes = [-90, -30, 30, 90, 150, 210].map((d) => {
+      const a = (d * Math.PI) / 180;
+      return [cx + Math.cos(a) * 165, cy + Math.sin(a) * 235];
+    });
+    const cols = [C.sky, C.lime, C.sun, C.pink, C.sky, C.lime];
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 165, 235, 0, 0, TAU);
+    ctx.setLineDash([4, 12]);
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = mix(C.sky, C.navy, 0.45);
+    ctx.stroke();
+    ctx.restore();
+    nodes.forEach(([x, y], i) => {
+      path(ctx, [cx, cy, x, y], 6, mix(cols[i], C.navy, 0.45));
+      // A little data pulse on every link.
+      circle(ctx, cx + (x - cx) * 0.55, cy + (y - cy) * 0.55, 7, cols[i]);
+    });
+    nodes.forEach(([x, y], i) => {
+      glow(ctx, x, y, 78, cols[i], 0.45);
+      circle(ctx, x, y, 44, mix(cols[i], C.navy, 0.3));
+      circle(ctx, x, y, 38, cols[i]);
+      if (i === 0) {
+        box(ctx, x - 20, y - 18, 40, 28, 10, C.navy);
+        poly(ctx, [x - 8, y + 8, x + 4, y + 8, x - 10, y + 22], C.navy);
+      } else if (i === 1) {
+        box(ctx, x - 16, y - 22, 32, 44, 5, C.navy);
+        for (let k = 0; k < 3; k++) box(ctx, x - 9, y - 12 + k * 10, 18, 4, 2, cols[i]);
+      } else if (i === 2) {
+        for (let k = 0; k < 3; k++)
+          box(ctx, x - 20 + k * 15, y + 16 - (14 + k * 11), 11, 14 + k * 11, 3, C.navy);
+      } else if (i === 3) {
+        // Shield: trust.
+        poly(
+          ctx,
+          [x - 20, y - 18, x + 20, y - 18, x + 20, y + 2, x, y + 24, x - 20, y + 2],
+          C.navy,
+        );
+        check(ctx, x, y - 2, 8, 5, cols[i]);
+      } else if (i === 4) {
+        spark(ctx, x, y, 24, C.navy);
+      } else {
+        circle(ctx, x - 9, y - 4, 10, C.navy);
+        circle(ctx, x + 10, y - 4, 10, C.navy);
+        box(ctx, x - 26, y + 6, 52, 16, 8, C.navy);
+      }
+    });
+    // Friendly robot at the centre.
+    glow(ctx, cx, cy, 170, C.sky, 0.5);
+    path(ctx, [cx, cy - 88, cx, cy - 118], 7, C.paper);
+    circle(ctx, cx, cy - 124, 16, C.pink);
+    box(ctx, cx - 112, cy - 24, 24, 60, 11, C.pink);
+    box(ctx, cx + 88, cy - 24, 24, 60, 11, C.pink);
+    box(ctx, cx - 92, cy - 88, 184, 162, 40, C.paper);
+    box(ctx, cx - 72, cy - 66, 144, 108, 26, C.navy);
+    arc(ctx, cx - 30, cy - 18, 16, 8, C.sky, Math.PI * 1.1, Math.PI * 1.9);
+    arc(ctx, cx + 30, cy - 18, 16, 8, C.sky, Math.PI * 1.1, Math.PI * 1.9);
+    arc(ctx, cx, cy, 16, 6, C.pink, 0.2 * Math.PI, 0.8 * Math.PI);
+    box(ctx, cx - 44, cy + 66, 88, 26, [0, 0, 12, 12], mix(C.paper, C.sky, 0.4));
+    spark(ctx, 40, 90, 22, C.lime);
+    spark(ctx, 380, 590, 18, C.pink);
+    spark(ctx, 60, 580, 14, C.sky);
+  },
+};
+
+/** @type {Art} */
+const artDirectory = {
+  w: 620,
+  h: 420,
+  draw(ctx) {
+    const skins = [SKIN[0], SKIN[3], SKIN[2]];
+    const hairs = [HAIR[3], HAIR[0], HAIR[2]];
+    const shirts = [C.pink, C.blue, C.lime];
+    // Alphabet tabs.
+    ['A', 'M', 'Z'].forEach((l, i) => {
+      box(ctx, 556, 70 + i * 100, 54, 62, 14, [C.sun, C.sky, C.pink][i]);
+      text(ctx, l, 586, 112 + i * 100, 30, C.navy, { align: 'center' });
+    });
+    // Book.
+    box(ctx, 52, 22, 520, 396, 30, mix(C.blue, C.navy, 0.5));
+    box(ctx, 40, 8, 520, 396, 30, C.blue);
+    box(ctx, 70, 24, 478, 364, 20, C.paper);
+    for (let i = 0; i < 6; i++) {
+      box(ctx, 22, 40 + i * 60, 44, 20, 10, C.navy);
+      circle(ctx, 62, 50 + i * 60, 7, C.paper);
+    }
+    // Search bar.
+    box(ctx, 96, 40, 426, 52, 26, mix(C.sky, C.paper, 0.55));
+    arc(ctx, 128, 64, 12, 5, C.navy);
+    path(ctx, [137, 73, 146, 82], 5, C.navy);
+    text(ctx, 'Prénom Nom…', 164, 77, 26, mix(C.navy, C.paper, 0.4), { weight: 700, maxW: 250 });
+    // Rows.
+    const names = [124, 100, 138];
+    for (let i = 0; i < 3; i++) {
+      const y = 112 + i * 92;
+      const hl = i === 1;
+      box(ctx, 90, y, 438, 80, 24, hl ? C.sun : mix(C.sky, C.paper, 0.8));
+      avatar(ctx, 140, y + 40, 28, skins[i], hairs[i], shirts[i]);
+      box(ctx, 190, y + 20, names[i] + 60, 16, 8, C.navy);
+      box(ctx, 190, y + 46, names[i] + 10, 12, 6, mix(C.navy, C.paper, 0.6));
+      circle(ctx, 490, y + 40, 18, hl ? C.navy : C.blue);
+      check(ctx, 490, y + 40, 8, 5, C.paper);
+    }
+    // Cursor clicking the highlighted row.
+    poly(ctx, [430, 232, 430, 292, 446, 278, 458, 304, 472, 298, 460, 272, 482, 270], C.navy);
+    poly(ctx, [434, 242, 434, 284, 445, 273, 458, 300, 464, 297, 451, 269, 470, 268], C.paper);
+    spark(ctx, 500, 220, 18, C.pink);
+    spark(ctx, 20, 400, 16, C.sun);
+  },
+};
+
 // ---------------------------------------------------------------- catalogue
 
 /** @type {Record<string, Spec>} */
@@ -2464,6 +2740,68 @@ const SPECS = {
     tagBg: C.navy,
     tagFg: C.lime,
     art: artExpenses,
+  },
+  'inetum-et-moi': {
+    title: 'Inetum & moi',
+    shape: 'portrait',
+    kicker: 'Appli · Portail salarié',
+    lines: ['INETUM', '& MOI'],
+    colors: [C.paper, C.sun],
+    shadow: C.navy,
+    tagline: 'Mes infos, mes congés,\nmon café (presque).',
+    bg: [C.blue, mix(C.blue, C.pink, 0.45)],
+    ink: C.paper,
+    accent: C.sun,
+    tagBg: C.sun,
+    tagFg: C.navy,
+    art: artMe,
+  },
+  'adopt-tools': {
+    title: 'Adopt’ Tools',
+    shape: 'portrait',
+    kicker: 'Boîte à outils',
+    lines: ['ADOPT’', 'TOOLS'],
+    colors: [C.navy, C.pink],
+    shadow: C.paper,
+    tagline: 'Un outil, ça s’adopte.\nEt ça se partage.',
+    bg: [mix(C.sky, C.paper, 0.5), mix(C.lime, C.paper, 0.4)],
+    ink: C.navy,
+    accent: C.blue,
+    tagBg: C.navy,
+    tagFg: C.lime,
+    art: artAdopt,
+  },
+  'gen-ai-hub': {
+    title: 'Gen AI Hub',
+    shape: 'landscape',
+    kicker: 'Intelligence artificielle',
+    lines: ['GEN AI', 'HUB'],
+    colors: [C.paper, C.sky],
+    shadow: C.pink,
+    titleSize: 150,
+    tagline: 'L’IA, en équipe\net en confiance.',
+    bg: [C.navy, mix(C.navy, C.blue, 0.7)],
+    ink: C.sky,
+    accent: C.sky,
+    tagBg: C.sky,
+    tagFg: C.navy,
+    art: artAiHub,
+  },
+  annuaire: {
+    title: 'Annuaire',
+    shape: 'portrait',
+    kicker: 'Collègues · Contacts',
+    lines: ['ANNUAIRE'],
+    colors: [C.navy],
+    shadow: C.paper,
+    titleSize: 170,
+    tagline: 'Retrouver un collègue ?\nUn clic.',
+    bg: [mix(C.sun, C.paper, 0.5), mix(C.sun, C.pink, 0.2)],
+    ink: C.navy,
+    accent: C.pink,
+    tagBg: C.navy,
+    tagFg: C.sun,
+    art: artDirectory,
   },
 };
 

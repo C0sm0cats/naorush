@@ -38,6 +38,7 @@ export const TS = {
     { type: 'rack', x: 12.5, y: 3 },
     { type: 'poster', id: 'power-up', x: 17.8, y: 4.4 },
     { type: 'poster', id: 'gen-ai', x: 34.4, y: 7.3 },
+    { type: 'poster', id: 'gen-ai-hub', x: 25.6, y: 7.6 },
     { type: 'rack', x: 39.5, y: 3 },
     { type: 'poster', id: 'lets-connect', x: 48.6, y: 7.3 },
     { type: 'monitor', x: 54, y: 7, z: -2 },

@@ -48,6 +48,7 @@ export const LCP7 = {
     { type: 'plant', x: 38.6, y: 3 },
     { type: 'poster', id: 'global-service-center', x: 40.2, y: 4.6 },
     { type: 'poster', id: 'ordre-mission', x: 49.6, y: 3.9 },
+    { type: 'poster', id: 'annuaire', x: 55.2, y: 4 },
     { type: 'coffee', x: 59, y: 3 },
     { type: 'poster', id: 'sap-concur', x: 61.6, y: 4 },
     { type: 'poster', id: 'swile', x: 67.2, y: 6.6 },

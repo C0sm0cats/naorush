@@ -33,6 +33,11 @@ export const POSTER_HINTS = {
   copil: 'En COPIL, tout est planifié… même les pièges. Observe, puis passe.',
   covoiturage: 'Le toit des voitures fait un excellent trottoir.',
   'note-de-frais': 'Les cafés rendent un cœur. Les notes de frais, plus tard.',
+  'inetum-et-moi': 'Tes infos, tes congés… et ton badge visiteur, si tu l’avais pris.',
+  'adopt-tools': 'Un outil s’adopte : la coupure d’eau, par exemple, calme les sprinklers.',
+  'gen-ai-hub':
+    'Astuce IA : les nacelles montent et descendent en rythme. Observe avant de sauter.',
+  annuaire: 'Le binôme t’attend à la sortie de chaque étape.',
   'espace-vip': 'Rodolphe, le Directeur Région Ouest, négocie ici. Vise pendant qu’il consulte.',
 };
 
