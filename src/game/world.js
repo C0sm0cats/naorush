@@ -200,8 +200,9 @@ export const LETHAL = new Set(['cables', 'void']);
 export function hurt(s, hero, cause, from) {
   if (hero.state === 'dead') return;
   if (hero.invuln > 0 && !LETHAL.has(cause)) return;
-  // Relaxed mode: knocks still happen, hearts are never lost.
-  if (!s.assist || LETHAL.has(cause)) hero.hearts--;
+  // Relaxed mode: knocks still happen and cables or the void still send you back
+  // to the last badge, but hearts are never lost (so never a game over).
+  if (!s.assist) hero.hearts--;
   emit(
     s,
     cause === 'fall' ? 'hardland' : LETHAL.has(cause) ? 'zap' : 'hurt',

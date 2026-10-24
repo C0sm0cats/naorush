@@ -68,3 +68,25 @@ describe('respawn', () => {
     expect(s.ammo).toBe(1);
   });
 });
+
+describe('relaxed mode and lethal hazards', () => {
+  it('sends you back to the badge without costing a heart, so never a game over', () => {
+    const s = sim(
+      room(16, [
+        ['S', 2, 3],
+        ['^', 8, 2],
+      ]),
+    );
+    s.assist = true;
+    const hearts = s.hero.hearts;
+    for (let i = 0; i < 5; i++) {
+      Object.assign(s.hero, { x: 8.19, y: 3, vx: 0, vy: 0, state: 'ground', invuln: 0 });
+      expect(runUntil(s, IDLE, (x) => x.hero.state === 'dead', 10).ok).toBe(true);
+      expect(runUntil(s, IDLE, (x) => x.hero.state !== 'dead', 200).ok).toBe(true);
+      expect(s.hero.x).toBeCloseTo(2.2, 5);
+    }
+    expect(s.deaths).toBe(5);
+    expect(s.gameOver).toBe(false);
+    expect(s.hero.hearts).toBe(hearts);
+  });
+});
