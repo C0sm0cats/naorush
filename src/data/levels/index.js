@@ -4,6 +4,7 @@ import { LCP7 } from './lcp7.js';
 import { PARKING } from './parking.js';
 import { PAUSE } from './pause.js';
 import { ROOFTOP } from './rooftop.js';
+import { SEMINAIRE } from './seminaire.js';
 import { TS } from './ts.js';
 
 /**
@@ -62,7 +63,7 @@ import { TS } from './ts.js';
 export const ROOM_W = 20;
 
 /** @type {Level[]} */
-export const LEVELS = [PARKING, LCP7, TS, COPIL, ROOFTOP, INTERCONTRAT, PAUSE];
+export const LEVELS = [PARKING, LCP7, TS, COPIL, ROOFTOP, INTERCONTRAT, PAUSE, SEMINAIRE];
 
 /** Stages of the story; the ones after are bonus stages, unlocked at the end. */
 export const CAMPAIGN = 5;

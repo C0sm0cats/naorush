@@ -425,6 +425,10 @@ const STAGE_END = [
     title: 'Badge cafét’ récupéré !',
     text: 'Échappé aux bonbonnes, et les cafés sont offerts. Une pause bien méritée.',
   },
+  {
+    title: 'Séminaire réussi !',
+    text: 'Photo de groupe, petits-fours et standing ovation : rendez-vous l’an prochain.',
+  },
 ];
 
 /** @param {number} s */
