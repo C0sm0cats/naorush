@@ -82,7 +82,7 @@ export function createSim(def, heroId) {
       if (SOLID_STYLES.includes(c)) tiles[i] = TILE.SOLID;
       else if (c === '-' || c === 'L') {
         tiles[i] = TILE.LOOSE;
-        thing('loose', col, y, { hidden: c === 'L' });
+        thing('loose', col, y, { hidden: c === 'L', y0: y });
       } else if (c === '^') tiles[i] = TILE.HAZARD;
       else if (c === 'D') tiles[i] = TILE.DOOR;
       else if (c === 'G') tiles[i] = TILE.GATE;
@@ -227,9 +227,10 @@ function respawn(s) {
     if (t.kind === 'loose' && t.state !== 'idle') {
       t.state = 'idle';
       t.t = 0;
-      t.y = Math.round(t.y);
+      // Back to its own row (a fallen tile has dropped out of the map by now).
+      t.y = t.y0 ?? Math.round(t.y);
       t.vy = 0;
-      s.tiles[t.x + Math.round(t.y) * s.w] = TILE.LOOSE;
+      s.tiles[t.x + t.y * s.w] = TILE.LOOSE;
     }
     if (t.kind === 'chair') Object.assign(t, { x: t.home ?? t.x, state: 'idle', t: 0, vx: 0 });
     // Bottles go back on their shelf; with the key in hand, the chase starts over.
