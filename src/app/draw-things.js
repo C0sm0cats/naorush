@@ -110,8 +110,9 @@ function at(mesh, x, y, z, e1, e2, e3) {
  * A four-pointed twinkle: two thin glowing bars crossed, `size` tiles across.
  * @param {import('./scene.js').LevelView} view @param {number} x @param {number} y @param {number} z
  * @param {number} size @param {number} spin @param {number[]} color
+ * @param {number} [thick] Bar thickness relative to `size`.
  */
-function sparkle(view, x, y, z, size, spin, color) {
+function sparkle(view, x, y, z, size, spin, color, thick = 0.16) {
   for (let k = 0; k < 2; k++) {
     const it = at(
       view.cube,
@@ -119,7 +120,7 @@ function sparkle(view, x, y, z, size, spin, color) {
       y,
       z,
       rotationZ(spin + k * Math.PI * 0.5, E1),
-      scaling(size, size * 0.16, size * 0.16, E2),
+      scaling(size, size * thick, size * thick, E2),
     );
     it.tint = color;
     it.noShadow = true;
@@ -565,20 +566,6 @@ const SHOW_SLAM = [1.9, 1.6, 1.2];
 const LIME_OFF = [0.1, 0.22, 0.06];
 const CABLE_PLATE = [0.012, 0.025, 0.06];
 const CONFETTI = [SHOW_PINK, SHOW_LIME, [0.35, 0.85, 1.95], SHOW_GOLD, SHOW_WHITE];
-/** Colour of the tell flashed at the start of each attack. @type {Record<string, number[]>} */
-const TELL = {
-  volley: SHOW_GOLD,
-  fan: SHOW_GOLD,
-  rackDrop: SHOW_CYAN,
-  cables: SHOW_CYAN,
-  teleport: SHOW_CYAN,
-  leap: SHOW_ORANGE,
-  dash: SHOW_ORANGE,
-  zones: SHOW_PINK,
-};
-/** When Julien's volley lets each KPI go (see stepBoss). */
-const THROWS = [0.89, 1.44, 1.99];
-
 /** Pseudo-random in [0, 1) for procedural sprinkles. @param {number} i */
 function hash(i) {
   const s = Math.sin(i * 127.1 + 311.7) * 43758.5453;
@@ -690,24 +677,13 @@ function drawBossShow(view, sim, b, t) {
   const floor = b.y0 ?? b.y;
   const bt = b.t ?? 0;
   const state = b.state;
-  const face = Math.sign(hx - b.x) || -1;
   if (sim.bossActive) {
     if (julien) drawServerRoom(view, sim, b, t, mid, floor);
     else drawStage(view, sim, b, t, x0, x1, floor);
   }
-  // The tell: a glint beside his head as each attack starts, in the attack's colour.
-  const tell = TELL[state];
-  if (tell && bt < 0.4) {
-    const k = Math.sin((bt / 0.4) * Math.PI);
-    sparkle(view, b.x + face * 0.45, b.y + 2.05, 0.3, 0.12 + k * 0.36, t * 4, tell);
-  }
   switch (state) {
     case 'intro': {
-      // The name-card moment: a glint, then a ring sweeps the arena as the duel opens.
-      if (bt > 0.95 && bt < 1.35) {
-        const k = Math.sin(((bt - 0.95) / 0.4) * Math.PI);
-        sparkle(view, b.x + face * 0.45, b.y + 2.05, 0.3, 0.15 + k * 0.45, t * 3, SHOW_WHITE);
-      }
+      // The name-card moment: a ring sweeps the arena as the duel opens.
       if (bt > 1.2 && bt < 1.8) {
         const k = (bt - 1.2) / 0.6;
         const c = julien ? SHOW_CYAN : SHOW_GOLD;
@@ -717,21 +693,6 @@ function drawBossShow(view, sim, b, t) {
     }
     case 'consult':
       drawConsult(view, b, t, floor, id);
-      break;
-    case 'volley':
-      // The throwing hand gleams just before each KPI flies.
-      for (let i = 0; i < THROWS.length; i++) {
-        const k = (bt - THROWS[i] + 0.3) / 0.3;
-        if (k > 0 && k < 1)
-          sparkle(view, b.x - face * 0.35, b.y + 2.05, 0.3, 0.15 + k * 0.35, t * 6, SHOW_GOLD);
-      }
-      break;
-    case 'fan':
-      if (bt > 0.2 && bt < 0.6) {
-        const k = (bt - 0.2) / 0.4;
-        for (let s = -1; s <= 1; s += 2)
-          sparkle(view, b.x + s * 0.5, b.y + 0.75 + k * 0.4, 0.3, 0.12 + k * 0.3, t * 6, SHOW_GOLD);
-      }
       break;
     case 'teleport': {
       // Failover: a column of data rises where he stands, and the spot he will
