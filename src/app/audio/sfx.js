@@ -1,15 +1,70 @@
 // The sound effects, one synth recipe each.
 
-import { rnd, pick, click, thump, ring, chime, note, brass, sizzle, signature } from './sfx-kit.js';
+import {
+  rnd,
+  pick,
+  click,
+  thump,
+  ring,
+  chime,
+  note,
+  brass,
+  sizzle,
+  signature,
+  foot,
+  gait,
+  GAIT,
+} from './sfx-kit.js';
 
 /** @typedef {import('./types.js').Voice} Voice */
+/** @typedef {import('./types.js').Foley} Foley */
 
-/** @type {Record<string, (v: Voice) => void>} */
+/**
+ * Speaking voices: pitch range of the blips, formant cutoff, wave, and a gain that evens
+ * out their loudness (darker waves and the band-limited video call need more).
+ * @typedef {{ lo: number, hi: number, lp: number, type: OscillatorType, gain: number }} VoiceDef
+ * @type {Record<string, VoiceDef>}
+ */
+const VOICES = {
+  kevin: { lo: 210, hi: 320, lp: 1500, type: 'square', gain: 1 },
+  charline: { lo: 360, hi: 520, lp: 2200, type: 'square', gain: 1 },
+  techServicesDirector: { lo: 240, hi: 330, lp: 1700, type: 'sawtooth', gain: 1.75 },
+  regionalDirector: { lo: 160, hi: 230, lp: 1200, type: 'sawtooth', gain: 2 },
+  colleague: { lo: 300, hi: 420, lp: 1800, type: 'square', gain: 1 },
+  intern: { lo: 440, hi: 620, lp: 2600, type: 'square', gain: 1 },
+  visio: { lo: 300, hi: 420, lp: 1500, type: 'sawtooth', gain: 6 },
+  partner: { lo: 300, hi: 460, lp: 1900, type: 'square', gain: 1 },
+  narrator: { lo: 280, hi: 380, lp: 1300, type: 'triangle', gain: 1.45 },
+};
+/** @type {VoiceDef} */
+const VOICE_DEFAULT = { lo: 300, hi: 550, lp: 1800, type: 'square', gain: 1 };
+/** One voiced syllable: buzzy source through a formant, the video-call voice band-limited. */
+const syllable = (
+  /** @type {Voice} */ v,
+  /** @type {number} */ t,
+  /** @type {string} */ who,
+  /** @type {number} */ d,
+  /** @type {number} */ vol,
+) => {
+  const { lo, hi, lp, type, gain } = VOICES[who] ?? VOICE_DEFAULT;
+  const f = rnd(lo, hi);
+  const g = vol * gain;
+  if (who === 'visio') {
+    v.tone({ f, t, d, type, v: g, lp, ft: 'bandpass', q: 2.5 });
+    return;
+  }
+  v.tone({ f, t, d, type, v: g, lp: rnd(lp * 0.8, lp * 1.25), q: 3 });
+  v.tone({ f: f * pick([2, 2.5, 3]), t, d: d * 0.8, v: g * 0.33 });
+};
+
+/** @type {Record<string, (v: Voice, f: Foley) => void>} */
 export const SFX = {
   // Springy push-off: scuff, rising triangle "hop", whoosh of air.
-  jump: (v) => {
+  jump: (v, f) => {
     const t = v.now;
-    const k = rnd(0.94, 1.07);
+    const g = GAIT[f.hero] ?? GAIT.kevin;
+    const k = rnd(0.94, 1.07) * (0.55 + g.k * 0.5);
+    foot(v, t, f.floor, g.w * 0.45, g.k);
     click(v, t, 1800, 0.1, 1.2);
     v.tone({ f: 250 * k, to: 600 * k, t, d: 0.15, type: 'triangle', v: 0.34 });
     v.tone({ f: 500 * k, to: 1200 * k, t: t + 0.01, d: 0.09, v: 0.07 });
@@ -24,16 +79,32 @@ export const SFX = {
     chime(v, t + 0.06, top, 0.16, 0.08);
     chime(v, t + 0.11, top * 1.5, 0.2, 0.06);
   },
-  // Soft landing: dull thud, sole scuff.
-  land: (v) => {
+  // Landing from a jump: both feet on the floor's material, then the body's weight.
+  land: (v, f) => {
     const t = v.now;
-    thump(v, t, rnd(140, 170), 55, 0.09, 0.3);
-    v.noise({ t, d: 0.08, f: rnd(750, 950), to: 250, v: 0.2 });
-    click(v, t, rnd(1200, 1600), 0.08, 1.5, 0.015);
+    const { w, k } = gait(f);
+    // Body weight, kept audible for the lighter hero too.
+    const b = 0.55 + 0.45 * w;
+    foot(v, t, f.floor, w * 1.5, k * 0.95);
+    foot(v, t + 0.022, f.floor, w * 1.1, k);
+    thump(v, t, rnd(140, 170) * k, 55 * k, 0.07 + 0.04 * w, 0.26 * b);
+    v.noise({ t, d: 0.08, f: rnd(750, 950), to: 250, v: 0.17 * b });
+    click(v, t, rnd(1200, 1600), 0.06, 1.5, 0.015);
+    // Kévin's weight: a sub thump you feel more than hear.
+    if (w > 1) thump(v, t + 0.01, 70, 40, 0.12, 0.18 * (w - 0.6));
+  },
+  // A short drop: a quick two-foot plant, a touch heavier than a step.
+  touchdown: (v, f) => {
+    const t = v.now;
+    const { w, k } = gait(f);
+    foot(v, t, f.floor, w * 1.2, k);
+    foot(v, t + 0.028, f.floor, w * 0.9, k * 1.03);
+    thump(v, t, 120 * k, 60 * k, 0.06, 0.08 * w);
   },
   // Heavy landing: deep boom, crunch, then a little debris settling.
-  hardland: (v) => {
+  hardland: (v, f) => {
     const t = v.now;
+    foot(v, t, f.floor, 1.8, gait(f).k * 0.9);
     thump(v, t, 125, 38, 0.3, 0.7);
     v.tone({ f: 250, to: 80, t, d: 0.08, type: 'triangle', v: 0.2 });
     v.noise({ t, d: 0.16, f: 650, to: 150, v: 0.4 });
@@ -305,11 +376,15 @@ export const SFX = {
     sizzle(v, top, 0.6, 0.035);
   },
   // Dialogue blip: a tiny two-formant "voice" with a random vowel.
-  talk: (v) => {
+  // Pitched and coloured by the speaker (`who`), so each character sounds like themself.
+  talk: (v, f) => syllable(v, v.now, f.who, 0.045, 0.09),
+  // Speech bubble: a soft pop, then a two- or three-syllable mumble in the speaker's voice.
+  bubble: (v, f) => {
     const t = v.now;
-    const f = rnd(300, 550);
-    v.tone({ f, t, d: 0.045, type: 'square', v: 0.09, lp: rnd(1400, 2200), q: 3 });
-    v.tone({ f: f * pick([2, 2.5, 3]), t, d: 0.035, v: 0.03 });
+    v.tone({ f: 620, to: 1000, t, d: 0.04, v: 0.06 });
+    click(v, t, 3000, 0.03, 2, 0.006);
+    const n = pick([2, 3]);
+    for (let i = 0; i < n; i++) syllable(v, t + 0.05 + i * 0.075, f.who, 0.055, 0.07);
   },
   select: (v) => {
     const t = v.now;
@@ -326,12 +401,10 @@ export const SFX = {
   },
 
   // --- movement ---
-  // Footstep: soft heel thud with a varying carpet scuff.
-  step: (v) => {
-    const t = v.now;
-    thump(v, t, rnd(85, 105), 58, 0.055, 0.12);
-    v.noise({ t, d: 0.035, f: rnd(300, 450), v: 0.1 });
-    click(v, t, rnd(1800, 2800), 0.025, 2, 0.01);
+  // Footstep: the floor's own material, weighted by the hero, alternating feet.
+  step: (v, f) => {
+    const { w, k } = gait(f);
+    foot(v, v.now, f.floor, w, k);
   },
   // Grab a ledge: palm slap and a small knock.
   grab: (v) => {
@@ -386,6 +459,104 @@ export const SFX = {
     for (const [i, f] of [2093, 2637, 3136, 4186].entries()) {
       v.tone({ f, t: t + 0.16 + i * 0.05, d: 0.3, v: 0.05, pan: i % 2 ? 0.4 : -0.4 });
     }
+  },
+
+  // --- events with their own sound (were aliases) ---
+  // Kévin's heavy CR knocks an archive box over: cardboard crunch, the box thuds down,
+  // papers flutter, and a small reward ding.
+  archive: (v) => {
+    const t = v.now;
+    for (let i = 0; i < 4; i++)
+      click(v, t + i * 0.02 + rnd(0, 0.006), rnd(700, 1800), 0.2, 2, 0.03);
+    thump(v, t + 0.05, 130, 60, 0.18, 0.45);
+    v.noise({ t: t + 0.05, d: 0.18, f: 700, to: 200, v: 0.24 });
+    for (let i = 0; i < 5; i++) {
+      const at = t + 0.12 + i * 0.05 + rnd(0, 0.02);
+      v.noise({ t: at, d: 0.04, type: 'bandpass', f: rnd(2500, 4000), q: 3, v: 0.06 });
+    }
+    chime(v, t + 0.1, 1175, 0.22, 0.05);
+  },
+  // Head against the ceiling: hollow knock and a small dropping "tonk".
+  bonk: (v, f) => {
+    const t = v.now;
+    const { k } = gait(f);
+    click(v, t, 1200, 0.2, 3, 0.015);
+    thump(v, t, 240, 140, 0.06, 0.3);
+    v.tone({ f: 520 * k, to: 380 * k, t, d: 0.08, type: 'square', v: 0.07, lp: 1800 });
+  },
+  // A CR slaps against a director on guard: paper slap, then a muted "nuh-uh" (wait for
+  // PRIMO). Distinct from the wooden block of crates and vacuums.
+  guard: (v) => {
+    const t = v.now;
+    v.noise({ t, d: 0.04, type: 'bandpass', f: 2400, q: 1.2, v: 0.25, a: 0.001 });
+    thump(v, t, 200, 110, 0.06, 0.2);
+    for (const [at, f, d] of [
+      [0.06, 330, 0.11],
+      [0.2, 247, 0.22],
+    ]) {
+      brass(v, t + at, f, d, 0.05);
+      v.tone({ f: f * 2, to: f * 1.94, t: t + at, d, type: 'square', v: 0.03, lp: 1400 });
+    }
+  },
+  // A charging chair stopped (by a wall or a CR): caster skid, padded thud, casters settle.
+  chairBump: (v) => {
+    const t = v.now;
+    const sq = rnd(1500, 1800);
+    v.tone({ f: sq, to: sq * 0.6, t, d: 0.12, type: 'sawtooth', v: 0.02, lp: 2500, q: 6 });
+    v.noise({ t, d: 0.1, type: 'bandpass', f: 1800, to: 900, q: 3, v: 0.08 });
+    thump(v, t + 0.06, 140, 75, 0.12, 0.42);
+    v.noise({ t: t + 0.06, d: 0.06, f: 600, v: 0.22 });
+    click(v, t + 0.06, 900, 0.15, 3, 0.02);
+    for (let i = 0; i < 3; i++) {
+      click(v, t + 0.13 + i * rnd(0.035, 0.05), rnd(2200, 3000), 0.05 * (1 - i * 0.25), 4, 0.012);
+    }
+  },
+  // Céline Dion concert tickets: a harp sweep over a major seventh, a crowd's "aah", sparkle.
+  concert: (v) => {
+    const t = v.now;
+    for (const [i, f] of [523, 659, 784, 988, 1319].entries()) {
+      v.tone({ f, t: t + i * 0.05, d: 0.7, type: 'triangle', v: 0.09, a: 0.003 });
+      v.tone({ f: f * 2, t: t + i * 0.05, d: 0.3, v: 0.02, pan: i % 2 ? 0.4 : -0.4 });
+    }
+    v.noise({ t: t + 0.1, d: 0.85, type: 'bandpass', f: 700, to: 1100, q: 2, v: 0.08, a: 0.3 });
+    v.noise({ t: t + 0.1, d: 0.8, type: 'bandpass', f: 1800, to: 2400, q: 3, v: 0.04, a: 0.35 });
+    sizzle(v, t + 0.25, 0.6, 0.025);
+  },
+  // Water shut-off valve: the wheel squeaks round, the pipe clanks, the hiss dies down to a
+  // gurgle, and a ding says the sprinklers are off.
+  switch: (v) => {
+    const t = v.now;
+    for (let i = 0; i < 3; i++) {
+      const f = 600 + i * 80;
+      v.tone({
+        f,
+        to: f + 100,
+        t: t + i * 0.09,
+        d: 0.07,
+        type: 'sawtooth',
+        v: 0.035,
+        lp: 1800,
+        q: 7,
+        vib: [20, 40],
+      });
+    }
+    const at = t + 0.28;
+    thump(v, at, 160, 80, 0.12, 0.4);
+    click(v, at, 2200, 0.15, 3, 0.015);
+    ring(v, at, 640, 0.3, 0.04, [1, 2.7]);
+    v.noise({ t: at, d: 0.5, type: 'bandpass', f: 4500, to: 1500, q: 0.8, v: 0.08, a: 0.01 });
+    for (let i = 0; i < 4; i++) {
+      v.tone({ f: rnd(250, 450), to: rnd(600, 900), t: at + 0.08 + i * 0.07, d: 0.04, v: 0.05 });
+    }
+    chime(v, t + 0.55, 880, 0.35, 0.07);
+  },
+  // A colleague notices you: a rising "hm?" and a little "!" ping.
+  wake: (v) => {
+    const t = v.now;
+    const f = rnd(200, 240);
+    v.tone({ f, to: f * 1.5, t, d: 0.14, type: 'sawtooth', v: 0.06, lp: 900, lpTo: 1700, q: 4 });
+    v.tone({ f: f * 2, to: f * 3, t, d: 0.1, v: 0.02 });
+    chime(v, t + 0.13, 1568, 0.18, 0.06);
   },
 
   // --- office traps & props ---
@@ -552,6 +723,45 @@ export const SFX = {
     }
     sizzle(v, t, 0.4, 0.03);
   },
+  // Rodolphe's grand finale (third phase): a long riser, then an orchestral hit in D minor
+  // with a choir, a gong and two tolls of a bell.
+  finale: (v) => {
+    const t = v.now;
+    v.noise({ t, d: 1.0, type: 'bandpass', f: 200, to: 6000, v: 0.22, a: 0.9 });
+    for (const f of [110, 165]) {
+      v.tone({ f, to: f * 2, t, d: 1.0, type: 'sawtooth', v: 0.06, lp: 1600, a: 0.8, det: 8 });
+    }
+    const top = t + 1.0;
+    thump(v, top, 70, 32, 0.8, 0.75);
+    v.noise({ t: top, d: 0.5, f: 1000, to: 150, v: 0.33 });
+    click(v, top, 2000, 0.18, 1, 0.025);
+    for (const f of [147, 220, 294, 349, 440]) brass(v, top, f, 0.9, 0.045);
+    for (const f of [294, 349, 440]) {
+      v.tone({
+        f,
+        t: top,
+        d: 1.4,
+        type: 'sawtooth',
+        v: 0.035,
+        lp: 900,
+        ft: 'bandpass',
+        q: 3,
+        a: 0.08,
+        vib: [5, 12],
+      });
+    }
+    ring(v, top, 98, 2.0, 0.07, [1, 2.4, 4.1, 5.9]);
+    chime(v, top, 587, 1.2, 0.06);
+    chime(v, top + 0.45, 587, 1.0, 0.045);
+    sizzle(v, top, 1.2, 0.04);
+  },
+  // The PRIMO window closing: a bright clock tick (main.js raises the pitch per tick).
+  consultTick: (v) => {
+    const t = v.now;
+    click(v, t, 5000, 0.08, 6, 0.006);
+    v.tone({ f: 1976, t, d: 0.04, type: 'triangle', v: 0.16, a: 0.001 });
+    v.tone({ f: 3951, t, d: 0.02, v: 0.03, a: 0.001 });
+  },
   // Attack warning: a rising wood-block "tock-tick", clear but soft (it plays often).
   telegraph: (v) => {
     const t = v.now;
@@ -716,7 +926,54 @@ export const SFX = {
     v.tone({ f: 550, t: v.now, d: 0.03, type: 'triangle', v: 0.06 });
     click(v, v.now, 2500, 0.04, 2, 0.008);
   },
+  // Back / close: the confirm figure, falling.
+  back: (v) => {
+    const t = v.now;
+    click(v, t, 3000, 0.035, 2, 0.008);
+    v.tone({ f: 820, t, d: 0.06, type: 'triangle', v: 0.22 });
+    v.tone({ f: 560, t: t + 0.055, d: 0.1, type: 'triangle', v: 0.2 });
+  },
+  // Poster page turn: a paper swish and a soft tick.
+  page: (v) => {
+    const t = v.now;
+    v.noise({ t, d: 0.13, type: 'bandpass', f: 1500, to: 4200, q: 0.9, v: 0.15, a: 0.03 });
+    click(v, t + 0.1, 2200, 0.05, 2, 0.01);
+    v.tone({ f: 880, t: t + 0.1, d: 0.03, type: 'triangle', v: 0.05 });
+  },
+  // Trophy unlocked: a pop, a warm bell arpeggio and a shimmer (the 'secret' jingle is chip).
+  trophy: (v) => {
+    const t = v.now;
+    v.tone({ f: 300, to: 600, t, d: 0.06, type: 'triangle', v: 0.15 });
+    for (const [i, f] of [1047, 1319, 1568].entries()) chime(v, t + 0.06 + i * 0.07, f, 0.5, 0.1);
+    v.tone({ f: 523, t: t + 0.06, d: 0.6, type: 'triangle', v: 0.06, a: 0.03 });
+    v.noise({ t: t + 0.2, d: 0.5, type: 'bandpass', f: 6000, to: 9000, q: 2, v: 0.025, a: 0.1 });
+  },
+  // New best time on the results screen: rising brass triplet, held chord, bells, cymbal.
+  record: (v) => {
+    const t = v.now;
+    for (const [i, f] of [392, 523, 659].entries()) {
+      note(v, t + i * 0.09, f * 2, 0.08, 0.1);
+      brass(v, t + i * 0.09, f, 0.09, 0.05);
+    }
+    const top = t + 0.3;
+    for (const f of [523, 659, 784, 1047]) {
+      note(v, top, f, 0.9, 0.05);
+      brass(v, top, f / 2, 0.9, 0.03);
+    }
+    thump(v, top, 98, 50, 0.3, 0.35);
+    for (const [i, f] of [2093, 2637, 3136].entries()) chime(v, top + 0.05 + i * 0.1, f, 0.8, 0.04);
+    sizzle(v, top, 1.0, 0.04);
+  },
+  // Another gold line on the results (all secrets, no return to the badge): a golden ding.
+  gold: (v) => {
+    const t = v.now;
+    chime(v, t, 1568, 0.4, 0.12);
+    chime(v, t + 0.08, 2093, 0.55, 0.1);
+    v.noise({ t: t + 0.08, d: 0.4, type: 'bandpass', f: 7000, to: 9500, q: 2, v: 0.02, a: 0.08 });
+  },
 };
 
+/** Every speaking voice. */
+export const VOICE_IDS = Object.keys(VOICES);
 /** Every sound effect name. */
 export const SFX_TYPES = Object.keys(SFX);

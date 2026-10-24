@@ -1,5 +1,5 @@
 // Developer sound test: a full-page panel to audition every track and sound effect.
-import { AMBIENCES, SFX_TYPES, STAGES, TRACKS, trackInfo } from './audio.js';
+import { AMBIENCES, FLOORS, SFX_TYPES, STAGES, TRACKS, VOICE_IDS, trackInfo } from './audio.js';
 
 /** @typedef {import('./audio.js').Audio} Audio */
 
@@ -145,6 +145,53 @@ export function mountSoundTest(audio) {
       beds.pick(null);
     }),
   );
+
+  const foley = section('Foley (steps, landings and jumps follow the hero and the floor)');
+  const heroes = group();
+  const floors = group();
+  for (const hero of /** @type {const} */ (['kevin', 'charline'])) {
+    const b = button(hero, () => {
+      audio.hero = hero;
+      heroes.pick(hero);
+    });
+    foley.append(heroes.add(b, hero));
+  }
+  for (const floor of FLOORS) {
+    const b = button(floor, () => {
+      audio.floor = floor;
+      floors.pick(floor);
+    });
+    foley.append(floors.add(b, floor));
+  }
+  heroes.pick(audio.hero);
+  floors.pick(audio.floor);
+  foley.append(
+    button('▶ run', () => {
+      for (let i = 0; i < 8; i++) audio.sfx('step', { delay: i * 0.27 });
+    }),
+    button('▶ jump + land', () => {
+      audio.sfx('jump');
+      audio.sfx('land', { delay: 0.55 });
+    }),
+    button('▶ hop + touchdown', () => {
+      audio.sfx('jump');
+      audio.sfx('touchdown', { delay: 0.3 });
+    }),
+    button('▶ PRIMO countdown', () => {
+      for (let i = 0; i < 4; i++)
+        audio.sfx('consultTick', { delay: i * 0.25, pitch: 1 + i * 0.06 });
+    }),
+  );
+
+  const voices = section('Voices (dialogue blips, then a speech bubble)');
+  for (const who of VOICE_IDS) {
+    voices.append(
+      button(who, () => {
+        for (let i = 0; i < 8; i++) audio.sfx('talk', { who, delay: i * 0.055 });
+        audio.sfx('bubble', { who, delay: 0.7 });
+      }),
+    );
+  }
 
   const sfx = section(`Sound effects (${SFX_TYPES.length})`);
   for (const type of SFX_TYPES) sfx.append(button(type, () => audio.sfx(type)));

@@ -33,6 +33,24 @@
  * Each call returns its (main) source node, so callers can hook its end.
  * @typedef {{ now: number, tone: (o: ToneOpts) => AudioScheduledSourceNode, noise: (o: NoiseOpts) => AudioScheduledSourceNode }} Voice
  */
+/** @typedef {'carpet'|'concrete'|'metal'|'gravel'|'tile'|'wood'} Floor */
+/** @typedef {'kevin'|'charline'} Hero */
+/**
+ * Context handed to every effect recipe: who is walking, on what, and who is speaking.
+ * @typedef {object} Foley
+ * @property {Hero} hero
+ * @property {Floor} floor
+ * @property {string} who speaker (CAST id or dialogue role), '' when none
+ * @property {number} foot 0 / 1, alternates on each call (left / right foot)
+ */
+/**
+ * Optional per-call settings of `Audio.sfx`.
+ * @typedef {object} SfxOpts
+ * @property {number} [delay] seconds before the effect starts
+ * @property {number} [pitch] frequency multiplier
+ * @property {Floor} [floor] overrides the stage floor (e.g. a metal lift)
+ * @property {string} [who] speaker, for voiced effects ('talk', 'bubble')
+ */
 /**
  * Patterns are 8 chars (eighth notes) or 16 chars (sixteenth notes) per bar.
  * @typedef {object} Track

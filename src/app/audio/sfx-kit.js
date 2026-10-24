@@ -1,6 +1,8 @@
 // Building blocks for sound effects (transients, bodies, bells, chip notes).
 
 /** @typedef {import('./types.js').Voice} Voice */
+/** @typedef {import('./types.js').Foley} Foley */
+/** @typedef {import('./types.js').Floor} Floor */
 
 /** Uniform random number in [lo, hi), for per-play variation. */
 export const rnd = (/** @type {number} */ lo, /** @type {number} */ hi) =>
@@ -94,4 +96,98 @@ export const signature = (
     note(v, t + i * gap, root * r, i === 3 ? last : gap * 0.9, vol),
   );
   return t + 3 * gap;
+};
+
+/**
+ * How each hero lands on the floor: `w` scales the body (weight), `k` the pitch.
+ * Kévin is the heavier, lower footfall; Charline the lighter, crisper one.
+ */
+export const GAIT = {
+  kevin: { w: 1.25, k: 0.86 },
+  charline: { w: 0.88, k: 1.1 },
+};
+/** Weight and pitch of the walking hero, the pitch nudged per foot (left / right). */
+export const gait = (/** @type {Foley} */ f) => {
+  const g = GAIT[f.hero] ?? GAIT.kevin;
+  return { w: g.w, k: g.k * (f.foot ? 1.025 : 0.975) };
+};
+
+/** The same voice, every source `g` times louder. @returns {Voice} */
+export const louder = (/** @type {Voice} */ v, /** @type {number} */ g) =>
+  g === 1
+    ? v
+    : {
+        now: v.now,
+        tone: (o) => v.tone({ ...o, v: (o.v ?? 0.3) * g }),
+        noise: (o) => v.noise({ ...o, v: (o.v ?? 0.3) * g }),
+      };
+/** @type {Record<Floor, number>} */
+const FLOOR_GAIN = { carpet: 1, concrete: 1.06, metal: 1, gravel: 1.3, tile: 1.45, wood: 0.84 };
+
+/**
+ * One footfall on a floor material: heel body, then the surface's own texture.
+ * `w` scales the weight (body level and length), `k` the pitch.
+ */
+export const foot = (
+  /** @type {Voice} */ v,
+  /** @type {number} */ t,
+  /** @type {Floor} */ floor,
+  /** @type {number} */ w,
+  /** @type {number} */ k,
+) => {
+  const d = 0.05 * Math.sqrt(w);
+  // Level per material, so every floor sits at about the same loudness.
+  v = louder(v, FLOOR_GAIN[floor] ?? 1);
+  switch (floor) {
+    // Car park concrete: hard heel tap, grit, and a slap back off the low ceiling.
+    case 'concrete': {
+      const f = rnd(2300, 3000) * k;
+      thump(v, t, rnd(100, 120) * k, 60 * k, d, 0.11 * w);
+      click(v, t, f, 0.07, 2, 0.012);
+      v.noise({ t, d: 0.03, type: 'highpass', f: 4500, v: 0.03 * w, a: 0.002 });
+      click(v, t + 0.075, f * 0.85, 0.016, 2, 0.014);
+      v.noise({ t: t + 0.075, d: 0.05, f: 900, v: 0.02 * w });
+      break;
+    }
+    // Raised data-centre floor: a hollow metal panel that rings a little.
+    case 'metal':
+      thump(v, t, rnd(115, 130) * k, 70 * k, d, 0.11 * w);
+      ring(v, t, rnd(380, 440) * k, 0.12, 0.024 * w, [1, 2.32, 4.1]);
+      click(v, t, rnd(2800, 3400) * k, 0.045, 3, 0.01);
+      break;
+    // Rooftop gravel: a crunch made of tiny grains.
+    case 'gravel':
+      thump(v, t, rnd(78, 90) * k, 50 * k, d, 0.09 * w);
+      v.noise({ t, d: 0.07, f: 1200, to: 500, v: 0.05 * w });
+      for (let i = 0, at = t; i < 5; i++, at += rnd(0.006, 0.016)) {
+        v.noise({
+          t: at,
+          d: 0.012,
+          type: 'bandpass',
+          f: rnd(2500, 5500),
+          q: 2,
+          v: 0.06 * (1 - i * 0.15) * Math.sqrt(w),
+          a: 0.001,
+        });
+      }
+      break;
+    // Café tiles: crisp tap with a faint ceramic ping.
+    case 'tile':
+      thump(v, t, rnd(105, 120) * k, 65 * k, d * 0.8, 0.09 * w);
+      click(v, t, rnd(1800, 2400) * k, 0.08, 3, 0.01);
+      v.tone({ f: rnd(1900, 2300) * k, t, d: 0.03, v: 0.012 });
+      break;
+    // Seminar stage boards: hollow wooden knock.
+    case 'wood':
+      thump(v, t, rnd(150, 170) * k, 90 * k, d * 1.3, 0.11 * w);
+      v.noise({ t, d: 0.06, type: 'bandpass', f: 600 * k, q: 4, v: 0.07 * w });
+      click(v, t, rnd(2000, 2500) * k, 0.04, 2, 0.01);
+      break;
+    // Office carpet: soft heel thud and a muffled scuff.
+    default:
+      thump(v, t, rnd(85, 105) * k, 58 * k, d * 1.1, 0.12 * w);
+      v.noise({ t, d: 0.04, f: rnd(330, 450), v: 0.1 * Math.sqrt(w) });
+      v.noise({ t, d: 0.05, type: 'bandpass', f: 900, v: 0.025 });
+      click(v, t, rnd(1800, 2600) * k, 0.018, 2, 0.01);
+  }
 };

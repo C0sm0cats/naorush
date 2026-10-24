@@ -2,6 +2,7 @@
 
 export { AMBIENCES } from './ambience.js';
 export { Audio } from './engine.js';
-export { SFX_TYPES } from './sfx.js';
-export { STAGES, stageBed, stageTrack } from './stages.js';
+export { EVENT_SFX, eventSfx } from './events.js';
+export { SFX_TYPES, VOICE_IDS } from './sfx.js';
+export { FLOORS, STAGES, stageBed, stageFloor, stageTrack } from './stages.js';
 export { TRACKS, trackInfo } from './tracks/index.js';

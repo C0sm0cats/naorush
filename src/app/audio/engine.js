@@ -4,7 +4,7 @@ import { AMB_FADE, AMBIENCES, buildBed } from './ambience.js';
 import { MUTE_KEY, VOL_KEYS, load, loadVolume, save } from './prefs.js';
 import { startClock } from './scheduler.js';
 import { SFX } from './sfx.js';
-import { stageBed, stageTrack } from './stages.js';
+import { stageBed, stageFloor, stageTrack } from './stages.js';
 import { BARS, SONGS } from './tracks/index.js';
 import { SFX_TRIM_DB, TRACK_TRIM_DB } from './trim.js';
 import { clamp01, dbToGain } from './util.js';
@@ -13,6 +13,9 @@ import { makeVoice } from './voice.js';
 /** @typedef {import('./types.js').Voice} Voice */
 /** @typedef {import('./types.js').Run} Run */
 /** @typedef {import('./types.js').TrackName} TrackName */
+/** @typedef {import('./types.js').Floor} Floor */
+/** @typedef {import('./types.js').Hero} Hero */
+/** @typedef {import('./types.js').SfxOpts} SfxOpts */
 /** @typedef {import('./ambience.js').Bed} Bed */
 /** @typedef {import('./prefs.js').Bus} Bus */
 /** @typedef {import('./stages.js').StageRef} StageRef */
@@ -51,6 +54,11 @@ export class Audio {
     this._muted = load(MUTE_KEY) === '1';
     this._vol = { music: loadVolume('music'), sfx: loadVolume('sfx') };
     this._intensity = 0;
+    /** Who walks (footsteps, landings and jumps follow the hero's weight). @type {Hero} */
+    this.hero = 'kevin';
+    /** What the current stage's floor is made of. @type {Floor} */
+    this.floor = 'carpet';
+    this._foot = 0;
   }
 
   get muted() {
@@ -166,15 +174,19 @@ export class Audio {
     return [clamp01((x - 0.45) / 0.15), clamp01((x - 0.8) / 0.2)];
   }
 
-  /** @param {string} type */
-  sfx(type) {
+  /** @param {string} type @param {SfxOpts} [opts] */
+  sfx(type, opts = {}) {
     const play = Object.hasOwn(SFX, type) ? SFX[type] : undefined;
     if (!play || !this.ctx || !this.sfxBus || this._muted || this._vol.sfx === 0) return;
     // Per-sound loudness trim, so every effect lands at a comparable level.
     const trim = this.ctx.createGain();
     trim.gain.value = dbToGain(SFX_TRIM_DB[type] ?? 0);
     trim.connect(this.sfxBus);
-    const voice = this.#voice(trim, 1 + (Math.random() - 0.5) * 0.08);
+    const pitch = opts.pitch && opts.pitch > 0 ? opts.pitch : 1;
+    const voice = this.#voice(trim, pitch * (1 + (Math.random() - 0.5) * 0.08));
+    const delay = Math.min(5, Math.max(0, opts.delay || 0));
+    // Running footsteps alternate feet (a slight pitch shift between left and right).
+    if (type === 'step') this._foot ^= 1;
     // Release the whole effect graph once its last source has finished.
     /** @type {AudioScheduledSourceNode | null} */
     let last = null;
@@ -184,11 +196,14 @@ export class Audio {
       if (t + d >= end) [last, end] = [src, t + d];
       return src;
     };
-    play({
-      now: voice.now,
-      tone: (o) => track(voice.tone(o), o.t, o.d),
-      noise: (o) => track(voice.noise(o), o.t, o.d),
-    });
+    play(
+      {
+        now: voice.now + delay,
+        tone: (o) => track(voice.tone(o), o.t, o.d),
+        noise: (o) => track(voice.noise(o), o.t, o.d),
+      },
+      { hero: this.hero, floor: opts.floor ?? this.floor, who: opts.who ?? '', foot: this._foot },
+    );
     const lastSrc = /** @type {AudioScheduledSourceNode | null} */ (last);
     if (lastSrc) lastSrc.onended = () => trim.disconnect();
     else trim.disconnect();
@@ -284,10 +299,13 @@ export class Audio {
    * pause, seminar, intercontrat), else the level's `music` / `theme`. Idempotent:
    * calling it again with the same stage (e.g. after a boss) only restores the music.
    * @param {StageRef} level
+   * @param {Hero} [hero] who plays it (footsteps); unchanged when omitted
    */
-  stage(level) {
+  stage(level, hero) {
     this.music(stageTrack(level));
     this.ambience(stageBed(level));
+    this.floor = stageFloor(level);
+    if (hero === 'kevin' || hero === 'charline') this.hero = hero;
   }
 
   /**

@@ -1,14 +1,46 @@
+import { readFileSync, readdirSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AMBIENCES,
   Audio,
+  FLOORS,
   SFX_TYPES,
   STAGES,
   TRACKS,
+  VOICE_IDS,
+  eventSfx,
   stageBed,
+  stageFloor,
   stageTrack,
   trackInfo,
 } from '../src/app/audio.js';
+
+/**
+ * Every event type the game can emit: string literals in the first argument after `s`
+ * (not the ones it is compared with, as in `t.variant === 'cable' ? 'cableZap' : …`).
+ */
+function emittedEvents() {
+  const dir = new URL('../src/game/', import.meta.url);
+  /** @type {Set<string>} */
+  const types = new Set();
+  for (const file of readdirSync(dir).filter((f) => f.endsWith('.js'))) {
+    const src = readFileSync(new URL(file, dir), 'utf8');
+    for (const m of src.matchAll(/\bemit\(\s*s\s*,/g)) {
+      let depth = 0;
+      let i = /** @type {number} */ (m.index) + m[0].length;
+      const start = i;
+      for (; i < src.length; i++) {
+        const c = src[i];
+        if (c === '(' || c === '[' || c === '{') depth++;
+        else if (c === ')' || c === ']' || c === '}') depth--;
+        else if (c === ',' && depth === 0) break;
+      }
+      for (const lit of src.slice(start, i).matchAll(/(?<![=!]==\s*)'([a-zA-Z]+)'/g))
+        types.add(lit[1]);
+    }
+  }
+  return types;
+}
 
 /**
  * A tiny WebAudio stand-in: enough of the API for the audio engine to run, and strict
@@ -50,8 +82,8 @@ class Param {
   }
 }
 
-/** @type {{ nodes: number, oscillators: number[], ctx: any }} */
-const stats = { nodes: 0, oscillators: [], ctx: null };
+/** @type {{ nodes: number, oscillators: number[], starts: number[], ctx: any }} */
+const stats = { nodes: 0, oscillators: [], starts: [], ctx: null };
 
 class Node {
   constructor() {
@@ -88,6 +120,7 @@ class Osc extends Node {
   start(t = 0) {
     super.start(t);
     stats.oscillators.push(this.frequency.value);
+    stats.starts.push(t);
   }
 }
 
@@ -161,6 +194,7 @@ beforeEach(() => {
   });
   stats.nodes = 0;
   stats.oscillators = [];
+  stats.starts = [];
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -258,5 +292,60 @@ describe('audio engine', () => {
     const down = /** @type {any} */ (run.drive.gain).last;
     expect(down.v).toBe(0);
     expect(down.tc).toBeGreaterThan(up.tc);
+  });
+
+  it('gives every game event a sound', () => {
+    const events = emittedEvents();
+    // The parser must see the whole game, including events picked by a ternary.
+    for (const t of ['jump', 'hardland', 'zap', 'trapdoor', 'cableZap', 'bossPhase'])
+      expect(events).toContain(t);
+    for (const type of events) expect(SFX_TYPES, type).toContain(eventSfx({ type }));
+    expect(eventSfx({ type: 'block', cause: 'boss' })).toBe('guard');
+    expect(eventSfx({ type: 'block' })).toBe('block');
+    expect(eventSfx({ type: 'step' })).toBe('touchdown');
+    // Moments wired by main.js rather than by a game event.
+    for (const t of ['finale', 'consultTick', 'record', 'gold', 'trophy', 'back', 'page', 'bubble'])
+      expect(SFX_TYPES).toContain(t);
+  });
+
+  it('walks, jumps and lands on every floor for both heroes, and voices every speaker', () => {
+    const a = engine();
+    for (const id of STAGES) expect(FLOORS).toContain(stageFloor({ id }));
+    expect(stageFloor({ id: 'new-stage', theme: 'datacenter' })).toBe('metal');
+    a.stage({ id: 'parking' }, 'charline');
+    expect([a.floor, a.hero]).toEqual(['concrete', 'charline']);
+    // After a boss, the stage comes back without a hero: the hero stays.
+    a.stage({ id: 'ts' });
+    expect([a.floor, a.hero]).toEqual(['metal', 'charline']);
+    for (const hero of /** @type {const} */ (['kevin', 'charline'])) {
+      a.hero = hero;
+      for (const floor of FLOORS) {
+        for (const type of ['step', 'touchdown', 'land', 'hardland', 'jump', 'bonk']) {
+          const before = stats.nodes;
+          a.sfx(type, { floor });
+          expect(stats.nodes, `${type} ${floor} ${hero}`).toBeGreaterThan(before);
+        }
+      }
+    }
+    for (const who of [...VOICE_IDS, '', 'nobody']) {
+      for (const type of ['talk', 'bubble']) {
+        const before = stats.nodes;
+        a.sfx(type, { who });
+        expect(stats.nodes, `${type} ${who}`).toBeGreaterThan(before);
+      }
+    }
+  });
+
+  it('delays and pitches an effect on request, within bounds', () => {
+    const a = engine();
+    stats.starts = [];
+    stats.oscillators = [];
+    a.sfx('consultTick', { delay: 1.5, pitch: 1.2 });
+    expect(Math.min(...stats.starts)).toBeGreaterThanOrEqual(1.5);
+    // The tick's 1976 Hz partial, raised by the pitch (and the ±4 % per-play variation).
+    expect(Math.min(...stats.oscillators)).toBeGreaterThan(1976 * 1.2 * 0.95);
+    stats.starts = [];
+    a.sfx('record', { delay: -3, pitch: -1 });
+    expect(Math.min(...stats.starts)).toBeGreaterThanOrEqual(0);
   });
 });

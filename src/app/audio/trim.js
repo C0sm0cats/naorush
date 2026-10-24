@@ -7,7 +7,8 @@
 export const SFX_TRIM_DB = {
   jump: 7,
   airjump: 10,
-  land: 1,
+  land: 4,
+  touchdown: 8,
   hardland: 1,
   ticket: 10,
   ammo: 12,
@@ -73,6 +74,21 @@ export const SFX_TRIM_DB = {
   resume: 11,
   gameover: 12,
   menuMove: 15,
+  bubble: 13,
+  archive: 7,
+  bonk: 5,
+  guard: 15,
+  chairBump: 7,
+  concert: 13,
+  switch: 9,
+  wake: 16,
+  finale: 5,
+  consultTick: 15,
+  back: 10,
+  page: 19,
+  trophy: 12,
+  record: 11,
+  gold: 12,
 };
 /** Loudness trim per track (dB), measured so all tracks sit at a similar RMS. @type {Record<TrackName, number>} */
 export const TRACK_TRIM_DB = {
