@@ -144,3 +144,47 @@ describe('ledge forgiveness', () => {
     }
   });
 });
+
+describe('ceilings', () => {
+  it('a jump under a one-tile-thick shelf bonks the head and never comes up through it', () => {
+    for (const hero of /** @type {const} */ (['kevin', 'charline'])) {
+      // Shelf at y = 5 right above the hero: the head hits it on the way up.
+      const s = sim(room(16, [['S', 7, 3], ...fill('#', 5, 10, 5, 5)]), hero);
+      let top = 0;
+      const events = [];
+      for (let i = 0; i < 90; i++) {
+        events.push(...run(s, input({ jump: i % 30 < 20 }), 1));
+        top = Math.max(top, s.hero.y + 1.62);
+      }
+      expect(has(events, 'bonk'), hero).toBe(true);
+      expect(top, hero).toBeLessThanOrEqual(5);
+      expect(s.hero.y, hero).toBe(3);
+    }
+  });
+});
+
+describe('lifts', () => {
+  it('catch a hero landing on a rising deck, whatever the timing', () => {
+    let through = 0;
+    let tries = 0;
+    for (let wait = 0; wait < 240; wait++) {
+      // A quick lift (one way in a second) and the hero dropped just above it mid-stroke.
+      const s = sim(room(16, [['S', 2, 3]], { lifts: [{ x: 6, y: 3, top: 8, w: 2, period: 2 }] }));
+      const lift = s.things.find((t) => t.kind === 'lift');
+      if (!lift) throw new Error('no lift');
+      run(s, IDLE, wait);
+      if (lift.y > 5.5 || (lift.dy ?? 0) <= 0) continue;
+      tries++;
+      Object.assign(s.hero, { x: 6.7, y: lift.y + 0.6, vx: 0, vy: 0, state: 'air', invuln: 1e9 });
+      for (let i = 0; i < 60 && !s.onLift; i++) {
+        run(s, input({ down: true }), 1);
+        if (s.hero.y < lift.y - 0.3) {
+          through++;
+          break;
+        }
+      }
+    }
+    expect(tries).toBeGreaterThan(20);
+    expect(through).toBe(0);
+  });
+});

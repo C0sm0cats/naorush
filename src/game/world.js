@@ -137,8 +137,10 @@ export const HERO_STATS = {
 
 /** @param {World} s @param {number} c @param {number} r */
 export function tileAt(s, c, r) {
-  if (c < 0 || c >= s.w || r < 0) return TILE.SOLID;
-  if (r >= s.h) return s.open ? TILE.EMPTY : TILE.SOLID;
+  if (c < 0 || c >= s.w) return TILE.SOLID;
+  // Open stages (rooftops) have no ceiling and a gap in the floor is a drop into
+  // the void; elsewhere the building's structure closes the map all round.
+  if (r < 0 || r >= s.h) return s.open ? TILE.EMPTY : TILE.SOLID;
   return s.tiles[c + r * s.w];
 }
 

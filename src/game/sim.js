@@ -251,6 +251,8 @@ function respawn(s) {
   }
   s.gameOver = false;
   s.onLift = null;
+  // Never back without a single CR: a colleague in a call could block the way for good.
+  s.ammo = Math.max(s.ammo, 1);
   // A lost boss fight starts over from the top.
   if (s.bossActive && !s.bossDone) {
     s.bossActive = false;
@@ -430,7 +432,8 @@ export function step(s, input) {
       if (
         hero.x + HERO.w > l.x + 0.05 &&
         hero.x < l.x + (l.w ?? 2) - 0.05 &&
-        hero.y >= l.y - 0.02 &&
+        // The lift moves after the hero: a deck that rose past the feet this step still catches them.
+        hero.y >= l.y - Math.max(0, l.dy ?? 0) - 0.02 &&
         ny <= l.y
       ) {
         if (hero.state !== 'ground')
@@ -470,7 +473,8 @@ export function step(s, input) {
       hero.x += nudge;
       hero.y = ny;
     } else {
-      hero.y = Math.ceil(ny + HERO.h) - HERO.h - 1e-4;
+      // Head against the underside of the tile above, never inside it.
+      hero.y = Math.floor(ny + HERO.h - 1e-6) - HERO.h - 1e-4;
       hero.vy = 0;
       emit(s, 'bonk', hero.x + HERO.w / 2, hero.y + HERO.h);
     }
