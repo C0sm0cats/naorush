@@ -107,13 +107,13 @@ function sharedMeshes(gl) {
     v.set(0, 0, 0, 0xffffff, MAT.EMISSIVE);
     /**
      * A floor tile in disguise (hidden trapdoor): top at y = 0, spanning the full depth.
-     * @param {(x: number, z: number) => number} top
+     * @param {(x: number, z: number) => number} top @param {number} [body] @param {number} [nose]
      */
-    const floor = (top) => {
+    const floor = (top, body = 0xbdb4a6, nose = 0xc6f432) => {
       const f = new Volume(8, 8, 30, 1 / 8, [-0.5, -1, -2.4]);
-      f.box(0, 0, 0, 8, 6, 30, 0xbdb4a6);
+      f.box(0, 0, 0, 8, 6, 30, body);
       f.box(0, 6, 0, 8, 8, 30, (x, _y, z) => top(x, z));
-      f.box(0, 6, 29, 8, 7, 30, 0xc6f432);
+      f.box(0, 6, 29, 8, 7, 30, nose);
       return new Mesh(gl, meshVolume(f));
     };
     SHARED.set(gl, {
@@ -124,10 +124,12 @@ function sharedMeshes(gl) {
       hiddenFloor: {
         office: floor(() => 0x3e5170),
         dc: floor((x, z) => (((x >> 2) + (z >> 2)) % 2 ? 0xa3acb7 : 0x8d96a2)),
+        roof: floor((x, z) => ((x * 7 + z * 13) % 5 ? 0x7d7a75 : 0x6c6964), 0xb9b2a6, 0xd8d2c6),
+        parking: floor(() => 0x3b3f47, 0x7b818c, 0xc6f432),
       },
     });
   }
-  return /** @type {{things: ReturnType<typeof buildThings>, props: ReturnType<typeof buildProps>, cast: Record<string, ReturnType<typeof buildCharacter>>, cube: Mesh, hiddenFloor: {office: Mesh, dc: Mesh}}} */ (
+  return /** @type {{things: ReturnType<typeof buildThings>, props: ReturnType<typeof buildProps>, cast: Record<string, ReturnType<typeof buildCharacter>>, cube: Mesh, hiddenFloor: {office: Mesh, dc: Mesh, roof: Mesh, parking: Mesh}}} */ (
     SHARED.get(gl)
   );
 }

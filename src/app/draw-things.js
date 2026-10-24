@@ -51,7 +51,13 @@ export function drawThing(view, items, sim, th, t) {
       // Hidden trapdoors look exactly like the floor until they shake.
       if (th.hidden && th.state !== 'gone' && th.state !== 'falling')
         at(
-          view.theme === 'datacenter' ? view.hiddenFloor.dc : view.hiddenFloor.office,
+          view.theme === 'datacenter'
+            ? view.hiddenFloor.dc
+            : view.theme === 'rooftop'
+              ? view.hiddenFloor.roof
+              : view.theme === 'parking'
+                ? view.hiddenFloor.parking
+                : view.hiddenFloor.office,
           th.x + 0.5 + (th.state === 'shaking' ? Math.sin(t * 90) * 0.04 : 0),
           th.y + 1,
           0,

@@ -75,7 +75,7 @@ describe('rendering', () => {
     cast,
     keyMesh: things.key,
     theme: 'office',
-    hiddenFloor: { office: things.key, dc: things.key },
+    hiddenFloor: { office: things.key, dc: things.key, roof: things.key, parking: things.key },
     glow: () => ({ mesh: things.key, model: new Float32Array(16) }),
     drawBoss: () => {},
   });
