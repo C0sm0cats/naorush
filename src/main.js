@@ -5,6 +5,7 @@ import { Bubbles, Dialogue } from './app/dialogue.js';
 import { Particles } from './app/fx.js';
 import { Hud } from './app/hud.js';
 import { Input } from './app/input.js';
+import { clearFloor, renderBonus, renderCast, renderTrophies } from './app/menus.js';
 import { applyPrefs, prefs, setupOptions } from './app/options.js';
 import { load, store } from './app/storage.js';
 import { DynamicResolution, bossLights, fightFocus } from './app/staging.js';
@@ -224,15 +225,8 @@ function updateContinue() {
   // Bonus stages, unlocked once the envelope is signed.
   const bonusRow = $('bonusRow');
   bonusRow.hidden = !trophies.data.got.nao;
-  bonusRow.replaceChildren(
-    ...LEVELS.slice(CAMPAIGN).map((l, k) => {
-      const b = document.createElement('button');
-      b.className = 'ghost';
-      b.textContent = l.name;
-      b.onclick = () => startFrom(CAMPAIGN + k);
-      return b;
-    }),
-  );
+  renderBonus(bonusRow, LEVELS.slice(CAMPAIGN), (k) => startFrom(CAMPAIGN + k));
+
   const got = trophies.list().filter((t) => t.got).length;
   $('trophiesBtn').textContent = `Trophées ${got}/${trophies.list().length}`;
   const n = saved();
@@ -317,58 +311,16 @@ function openOptions() {
 }
 $('optionsBtn').onclick = $('pauseOptions').onclick = openOptions;
 $('trophiesBtn').onclick = () => {
-  $('trophyList').replaceChildren(
-    ...trophies.list().map((t) => {
-      const li = document.createElement('li');
-      li.className = t.got ? 'got' : '';
-      const name = document.createElement('b');
-      name.textContent = t.name;
-      const text = document.createElement('span');
-      text.textContent = t.text;
-      li.append(name, text);
-      return li;
-    }),
-  );
+  renderTrophies($('trophyList'), trophies.list());
   audio.sfx('select');
   show('trophies');
 };
 $('trophiesClose').onclick = () => show('title');
-/** Where the cast lines up: the first stretch of clear floor on the loaded stage. */
+/** Where the cast lines up on the loaded stage. */
 let castX = 8.6;
-function clearFloor() {
-  const open = (/** @type {number} */ c) =>
-    tileAt(sim, c, 2) === TILE.SOLID &&
-    tileAt(sim, c, 3) === TILE.EMPTY &&
-    tileAt(sim, c, 4) === TILE.EMPTY;
-  for (let c = 6; c < sim.w - 8; c++) {
-    let ok = true;
-    for (let k = 0; k < 6 && ok; k++) ok = open(c + k);
-    if (ok) return c + 0.6;
-  }
-  return 8.6;
-}
 $('castBtn').onclick = () => {
-  castX = clearFloor();
-  $('castList').replaceChildren(
-    ...[
-      'kevin',
-      'charline',
-      'techServicesDirector',
-      'regionalDirector',
-      'mathis',
-      'intern',
-      'visio',
-    ].map((id) => {
-      const c = CAST[id];
-      const li = document.createElement('li');
-      const name = document.createElement('b');
-      name.textContent = c.title ? `${c.name} · ${c.title}` : c.name;
-      const bio = document.createElement('span');
-      bio.textContent = c.bio ?? '';
-      li.append(name, bio);
-      return li;
-    }),
-  );
+  castX = clearFloor(sim, tileAt, TILE);
+  renderCast($('castList'));
   audio.sfx('select');
   show('cast');
 };
