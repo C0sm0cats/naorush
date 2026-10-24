@@ -24,6 +24,9 @@ export const prefs = {
   ...load(PREFS_KEY, {}),
 };
 
+// A damaged save must never freeze the game.
+if (![1, 0.8, 0.65].includes(prefs.speed)) prefs.speed = 1;
+
 /** Applies the preferences that live in the page (contrast, pad size). */
 export function applyPrefs() {
   document.body.classList.toggle('contrast', prefs.contrast);

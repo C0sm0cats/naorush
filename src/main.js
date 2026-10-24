@@ -115,6 +115,8 @@ function show(next) {
   if (next === 'won') $($('next').hidden ? 'menu' : 'next').focus();
   if (next === 'gameover') $('goResume').focus();
   if (next === 'pause') $('resume').focus();
+  if (next === 'posters') $('postersClose').focus();
+  if (next === 'cast') $('castClose').focus();
 }
 
 /** Little lines shown while a stage loads. */
@@ -884,10 +886,11 @@ function frame(now) {
   particles.update(dt);
   // The title shows the chosen hero up close; the credits drift along the stage.
   const drift = screen === 'loading';
-  view.gallery = gallery || screen === 'cast';
-  view.galleryX = screen === 'cast' ? castX : 1.4;
+  const castLike = screen === 'cast' || screen === 'posters';
+  view.gallery = gallery || castLike;
+  view.galleryX = castLike ? castX : 1.4;
   const focus = view.gallery
-    ? screen === 'cast'
+    ? castLike
       ? { x: castX + 0.7, y: 1.6, facing: 0.001, visH: 5.4 }
       : { x: 4.1, y: 1.6, facing: 0 }
     : screen === 'credits'

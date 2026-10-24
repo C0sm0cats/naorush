@@ -84,8 +84,9 @@ await shot('stage-ts');
 const fight = async (attack) => {
   await goto(86, 3);
   // Skip the boss's lines whenever they show up, until the wanted attack starts.
+  let state;
   for (let i = 0; i < 160; i++) {
-    const state = await page.evaluate(() => {
+    state = await page.evaluate(() => {
       const nao = /** @type {any} */ (globalThis).__nao;
       if (nao.screen === 'talk') document.getElementById('talk')?.click();
       nao.sim.assist = true;
@@ -95,6 +96,7 @@ const fight = async (attack) => {
     if (state === attack) break;
     await page.waitForTimeout(400);
   }
+  if (state !== attack) throw new Error(`boss never reached ${attack}`);
   // Wait for the hero to stop blinking after a hit.
   await page.waitForFunction(
     () => /** @type {any} */ (globalThis).__nao.sim.hero.invuln <= 0,
