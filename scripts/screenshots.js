@@ -83,19 +83,17 @@ await shot('stage-ts');
 /** Starts the boss fight and lets it run into a given attack. @param {string} attack */
 const fight = async (attack) => {
   await goto(86, 3);
-  await skipTalk();
-  await page.waitForFunction(
-    (a) =>
-      /** @type {any} */ (globalThis).__nao.sim.things.some(
-        (/** @type {any} */ t) => t.kind === 'boss' && t.state === a,
-      ),
-    attack,
-    { timeout: 60000 },
-  );
-  await page.evaluate(() => {
-    const h = /** @type {any} */ (globalThis).__nao.sim.hero;
-    Object.assign(h, { invuln: 99, hearts: 9 });
-  });
+  // Skip the boss's lines whenever they show up, until the wanted attack starts.
+  for (let i = 0; i < 160; i++) {
+    const state = await page.evaluate(() => {
+      const nao = /** @type {any} */ (globalThis).__nao;
+      if (nao.screen === 'talk') document.getElementById('talk')?.click();
+      Object.assign(nao.sim.hero, { invuln: 99, hearts: 9 });
+      return nao.sim.things.find((/** @type {any} */ t) => t.kind === 'boss')?.state;
+    });
+    if (state === attack) break;
+    await page.waitForTimeout(400);
+  }
   await page.waitForTimeout(700);
 };
 await fight('rackDrop');
