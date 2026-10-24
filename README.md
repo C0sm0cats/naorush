@@ -88,6 +88,7 @@ npm run dev          # http://localhost:5173
 npm run check        # lint, types, tests (dont le solveur), build
 npm run smoke        # test de bout en bout (Playwright, PC et mobile)
 npm run screenshots  # captures du README (avec npm run dev lancé)
+npm run sweep        # parcourt toutes les étapes et signale les erreurs (avec npm run dev lancé)
 ```
 
 Pages de vérification en développement : `?sounds` pour écouter chaque musique et chaque bruitage, `?gallery` pour voir tous les personnages de près.
