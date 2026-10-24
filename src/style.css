@@ -1158,3 +1158,37 @@ body[data-pad='l'] .touch .big {
 .bonus-row {
   grid-column: 1 / -1;
 }
+
+/* Poster gallery */
+.posters {
+  grid-template-rows: 1fr auto;
+  gap: 12px;
+}
+.posters figure {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  margin: 0;
+}
+.posters img {
+  max-width: 92vw;
+  max-height: 76vh;
+  border-radius: 10px;
+  box-shadow: 0 20px 60px #000a;
+}
+.posters figcaption {
+  font-weight: 800;
+}
+.poster-nav {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.poster-nav button {
+  width: auto;
+  padding: 12px 22px;
+}
+#posters .ghost {
+  color: #fff;
+  background: #ffffff1f;
+}

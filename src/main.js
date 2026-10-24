@@ -14,6 +14,7 @@ import { LevelView, boardUrl } from './app/scene.js';
 import { PROLOGUE } from './data/barks.js';
 import { CAST } from './data/cast.js';
 import { CAMPAIGN, LEVELS, ROOM_W } from './data/levels/index.js';
+import { POSTER_LIST, renderPoster } from './gfx/posters.js';
 import { Renderer } from './gfx/renderer.js';
 import { DT, HERO, TILE, createSim, step, tileAt } from './game/sim.js';
 
@@ -22,7 +23,7 @@ import { DT, HERO, TILE, createSim, step, tileAt } from './game/sim.js';
  * play ⇄ pause / options / reading / dialogue / game over → stage won → … → credits.
  * The level keeps rendering behind every screen.
  *
- * @typedef {'loading'|'title'|'play'|'pause'|'options'|'reading'|'talk'|'won'|'gameover'|'credits'|'trophies'|'cast'} Screen
+ * @typedef {'loading'|'title'|'play'|'pause'|'options'|'reading'|'talk'|'won'|'gameover'|'credits'|'trophies'|'cast'|'posters'} Screen
  * @typedef {import('./data/levels/index.js').Line} Line
  */
 
@@ -100,6 +101,7 @@ const OVERLAYS = /** @type {const} */ ([
   'credits',
   'trophies',
   'cast',
+  'posters',
 ]);
 /** @param {Screen} next */
 function show(next) {
@@ -325,6 +327,32 @@ $('castBtn').onclick = () => {
   show('cast');
 };
 $('castClose').onclick = () => show('title');
+
+// Poster gallery: every Inetum poster of the game, full screen.
+let posterIndex = 0;
+/** @type {Record<string, string>} */
+const posterUrls = {};
+/** @param {number} step */
+function showPoster(step) {
+  posterIndex = (posterIndex + step + POSTER_LIST.length) % POSTER_LIST.length;
+  const p = POSTER_LIST[posterIndex];
+  posterUrls[p.id] ??= /** @type {HTMLCanvasElement} */ (renderPoster(p.id)).toDataURL(
+    'image/webp',
+    0.9,
+  );
+  const img = /** @type {HTMLImageElement} */ ($('posterImg'));
+  img.src = posterUrls[p.id];
+  img.alt = p.title;
+  $('posterCaption').textContent = `${p.title} · ${posterIndex + 1} / ${POSTER_LIST.length}`;
+}
+$('postersBtn').onclick = () => {
+  showPoster(0);
+  audio.sfx('select');
+  show('posters');
+};
+$('posterPrev').onclick = () => showPoster(-1);
+$('posterNext').onclick = () => showPoster(1);
+$('postersClose').onclick = () => show('cast');
 function closeOptions() {
   input.capture = null;
   show(optionsFrom === 'pause' ? 'pause' : 'title');
@@ -712,6 +740,7 @@ function menuInput() {
   if (input.pressed('pause')) {
     if (screen === 'options') closeOptions();
     else if (screen === 'trophies' || screen === 'cast') show('title');
+    else if (screen === 'posters') show('cast');
     else if (screen === 'credits') toMenu();
     else return false;
     return true;
@@ -720,6 +749,10 @@ function menuInput() {
     ...overlay.querySelectorAll('button, input, select'),
   ]).filter((b) => b.offsetParent !== null);
   const at = buttons.indexOf(/** @type {HTMLElement} */ (document.activeElement));
+  if (screen === 'posters' && (input.pressed('left') || input.pressed('right'))) {
+    showPoster(input.pressed('right') ? 1 : -1);
+    return true;
+  }
   const step = input.pressed('down') ? 1 : input.pressed('up') ? -1 : 0;
   if (step && buttons.length) {
     buttons[(at + step + buttons.length) % buttons.length].focus();

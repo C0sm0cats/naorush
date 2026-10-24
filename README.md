@@ -60,7 +60,7 @@ Badge aux bornes Chronotime : en cas de pépin, tu repars de là. Les ramettes d
 - **Secrets** : deux par étape, un pour chaque héros.
 - **Trophées** : quatorze objectifs (étapes sans faute, boss convaincus sans être touché, tous les secrets…).
 - **Records** : meilleur temps par étape et par héros.
-- **Distribution** : tous les personnages en 3D, avec leur portrait en quelques mots.
+- **Distribution** : tous les personnages en 3D, avec leur portrait en quelques mots. Et la galerie des 27 affiches Inetum du jeu, en plein écran.
 - **Partager mon score** : partage natif sur mobile, texte prêt à coller dans Teams sur PC.
 
 ## Accessibilité et confort
