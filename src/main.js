@@ -7,6 +7,7 @@ import { Hud } from './app/hud.js';
 import { Input } from './app/input.js';
 import { applyPrefs, prefs, setupOptions } from './app/options.js';
 import { load, store } from './app/storage.js';
+import { DynamicResolution, bossLights, fightFocus } from './app/staging.js';
 import { Trophies } from './app/trophies.js';
 import { LevelView, boardUrl } from './app/scene.js';
 import { PROLOGUE } from './data/barks.js';
@@ -42,6 +43,7 @@ const hud = new Hud();
 const camera = new Camera();
 const particles = new Particles();
 const audio = new Audio();
+const resolution = new DynamicResolution();
 const trophies = new Trophies((t) => {
   hud.toast(`Trophée débloqué : ${t.name}`);
   audio.sfx('secret');
@@ -748,55 +750,6 @@ function flyoverFocus(dt) {
   return { x: f.from + (sim.hero.x - f.from) * e, y: 3, facing: 0.001 };
 }
 
-/** Rodolphe's show: coloured spotlights sweep the Espace VIP during the fight. @param {number} t */
-function stageLights(t) {
-  if (!level.boss || !sim.bossActive || sim.bossDone) return null;
-  const boss = sim.things.find((b) => b.kind === 'boss');
-  if (level.boss.id === 'techServicesDirector') {
-    // Julien's failover: a red alarm beacon pulses over the server room in phase 2.
-    if ((boss?.phase ?? 1) < 2) return null;
-    const pulse = 0.5 + 0.5 * Math.sin(t * 7);
-    const alarm = { pos: [boss?.x ?? 0, 8, 0], radius: 10, color: [2.2 * pulse, 0.2, 0.2] };
-    return { ...lighting, lights: [alarm, ...lighting.lights] };
-  }
-  const [x0, x1] = level.boss.arena;
-  const mid = (x0 + x1) / 2;
-  const half = (x1 - x0) / 2 - 1;
-  const spots = [
-    { pos: [mid + Math.sin(t * 0.9) * half, 7, 0.5], radius: 8, color: [2.4, 0.6, 1.5] },
-    { pos: [mid + Math.sin(t * 0.9 + 2.2) * half, 7, 0.5], radius: 8, color: [0.6, 1.2, 2.6] },
-    { pos: [mid + Math.sin(t * 0.9 + 4.4) * half, 7, 0.5], radius: 8, color: [1.6, 2.2, 0.6] },
-  ];
-  return { ...lighting, lights: [...spots, ...lighting.lights] };
-}
-
-/** During a boss fight the camera frames both fighters. */
-function fightFocus() {
-  if (!sim.bossActive || sim.bossDone || screen === 'title') return null;
-  const b = sim.things.find((t) => t.kind === 'boss');
-  if (!b) return null;
-  const hx = sim.hero.x + HERO.w / 2;
-  return { x: (hx * 2 + b.x) / 3, y: sim.hero.y - touchLift, facing: Math.sign(b.x - hx) * 0.4 };
-}
-
-/** Dynamic resolution: drop the render scale when frames run long, raise it back when there is headroom. */
-const perf = { avg: 1 / 60, slow: 0, fast: 0 };
-/** @param {number} dt */
-function adaptResolution(dt) {
-  // Automated captures run on a software renderer: keep full resolution there.
-  if (navigator.webdriver || dt <= 0 || dt >= 0.1) return;
-  perf.avg += (dt - perf.avg) * 0.05;
-  perf.slow = perf.avg > 1 / 50 ? perf.slow + dt : 0;
-  perf.fast = perf.avg < 1 / 58 ? perf.fast + dt : 0;
-  if (perf.slow > 2 && renderer.scale > 0.55) {
-    renderer.scale = Math.max(0.55, renderer.scale * 0.85);
-    perf.slow = 0;
-  } else if (perf.fast > 6 && renderer.scale < 1) {
-    renderer.scale = Math.min(1, renderer.scale * 1.08);
-    perf.fast = 0;
-  }
-}
-
 /**
  * Menus with keyboard and gamepad: up/down move between buttons, confirm presses the
  * focused one, Escape (or Start) backs out. Returns true when it handled the input.
@@ -834,7 +787,7 @@ function frame(now) {
   const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
   last = now;
   const t = now / 1000;
-  adaptResolution(dt);
+  resolution.update(dt, renderer);
   input.pollGamepad();
 
   if (screen === 'play') {
@@ -937,13 +890,16 @@ function frame(now) {
           ? { x: 10 + Math.sin(t * 0.07) * 8, y: 3, facing: 1 }
           : flyover && screen === 'talk'
             ? flyoverFocus(dt)
-            : (fightFocus() ?? { x: h.x + HERO.w / 2, y: h.y - touchLift, facing: h.facing });
+            : (fightFocus(sim, touchLift) ?? {
+                x: h.x + HERO.w / 2,
+                y: h.y - touchLift,
+                facing: h.facing,
+              });
   const cam = camera.update(dt, renderer.width / renderer.height, focus, { w: sim.w, h: sim.h });
   view.showcase = screen === 'title';
   // A soft key light on the hero posing behind the title card.
-  const lit = view.showcase
-    ? { ...lighting, lights: [SHOWCASE_LIGHT, ...lighting.lights] }
-    : (stageLights(t) ?? lighting);
+  const extra = view.showcase ? [SHOWCASE_LIGHT] : bossLights(level, sim, t);
+  const lit = extra.length ? { ...lighting, lights: [...extra, ...lighting.lights] } : lighting;
   renderer.render(cam, lit, view.items(sim, t, particles.list), view.sprites, { flash });
   if (screen === 'play' || screen === 'talk') {
     const poster = view.posterAt(sim);
