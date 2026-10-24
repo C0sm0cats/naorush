@@ -35,9 +35,9 @@ export const INTERCONTRAT = {
   decor: [
     { type: 'poster', id: 'learning-academy', x: 3, y: 4 },
     { type: 'poster', id: 'gofluent', x: 9.6, y: 4.6 },
-    { type: 'poster', id: 'my-way', x: 16.8, y: 9 },
+    { type: 'poster', id: 'my-way', x: 16.8, y: 7.9 },
     { type: 'poster', id: 'spark', x: 29.6, y: 7.2 },
-    { type: 'poster', id: 'ordre-mission', x: 49.6, y: 4 },
+    { type: 'poster', id: 'ordre-mission', x: 48.9, y: 4 },
     { type: 'poster', id: 'cooptation', x: 66.6, y: 8 },
     { type: 'poster', id: 'your-digital-hub', x: 77, y: 4 },
     { type: 'plant', x: 7.2, y: 3 },

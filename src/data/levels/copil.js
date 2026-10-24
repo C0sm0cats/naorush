@@ -23,10 +23,10 @@ export const COPIL = {
     '#                                              $h$                                                 #',
     '#                                              ###                    #                            #',
     '#                                                                     #                            #',
-    '#                                                               $  a  #                            #',
-    '#                                #                              #######                            #',
-    '#        $ $ $                   #          $    i      $             A*                           #',
-    '# S  C   YYYYY  v  P           a #d   z  C YYYYYYYYYYYYYYJ    c   k   A$$       C       K   z    E #',
+    '#                                                               $  a  #                       z  E #',
+    '#                                #                              ##########                 #########',
+    '#        $ $ $                   #          $    i      $             A* #                ##########',
+    '# S  C   YYYYY  v  P           a #d   z  C YYYYYYYYYYYYYYJ    c   k   A$$#      C   K    ###########',
     '##########################################################LL########################################',
     '##########################################################^^########################################',
     '####################################################################################################',
@@ -52,7 +52,7 @@ export const COPIL = {
     { type: 'coffee', x: 74.5, y: 3 },
     { type: 'plant', x: 78.6, y: 3 },
     { type: 'printer', x: 86.5, y: 3 },
-    { type: 'plantSmall', x: 90.4, y: 3, z: -2 },
+    { type: 'plantSmall', x: 95.4, y: 6, z: -2 },
   ],
   lighting: {
     sunDir: [-0.6, -0.4, 0.7],
@@ -77,6 +77,10 @@ export const COPIL = {
     {
       who: 'hero',
       text: 'Visios qui sonnent, sprinklers capricieux, imprimantes en rafale… un COPIL classique.',
+    },
+    {
+      who: 'partner',
+      text: 'Astuce : la vanne de la Régie coupe tous les sprinklers. Et le CR validé attend pile sous l’un d’eux.',
     },
   ],
   outro: [

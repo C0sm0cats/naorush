@@ -22,7 +22,7 @@ export const PARKING = {
     '#              #############                                    #########      #',
     '#        $$    ######    *AA              $                    ##########      #',
     '# S  C  QQQQ   ######$$$h$AA     n       QQQQ    QQQQ   C v   ###########   E   ',
-    '#####################################  #######   ###############################',
+    '#####################################  #######   ########################---####',
     '#####################################^^#######^^^###############################',
     '################################################################################',
   ],
@@ -56,6 +56,13 @@ export const PARKING = {
       x1: 57,
       keys: 'Le robot aspirateur fait tremplin : saute dessus !',
       touch: 'Le robot aspirateur fait tremplin : saute dessus !',
+    },
+    {
+      x0: 71.5,
+      x1: 75.5,
+      keys: 'Dalle fragile : elle tremble, puis cède. Ici le trou est peu profond… à l’étage, beaucoup moins !',
+      touch:
+        'Dalle fragile : elle tremble, puis cède. Ici le trou est peu profond… à l’étage, beaucoup moins !',
     },
   ],
   decor: [

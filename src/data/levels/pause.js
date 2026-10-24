@@ -21,10 +21,18 @@ export const PAUSE = {
     '#         $$$$                $ $ $                                $$$ K       #',
     '#         ####                #####                               #######      #',
     '#         A  #                                                                 #',
-    '# E   S C A*h#          n  a        $ $ $ $ v     C       a c              R  R#',
+    '# E   S C A*h#          n  a        $ $ $ $ i     C       a c              R  R#',
     '##################  ############################################################',
     '##################^^############################################################',
     '################################################################################',
+  ],
+  tips: [
+    {
+      x0: 68.5,
+      x1: 73.5,
+      keys: 'Dès que tu prends le badge, les bonbonnes dévalent : file vers la porte, à gauche !',
+      touch: 'Dès que tu prends le badge, les bonbonnes dévalent : file vers la porte, à gauche !',
+    },
   ],
   decor: [
     { type: 'poster', id: 'summer-party', x: 3.4, y: 4 },
@@ -39,7 +47,7 @@ export const PAUSE = {
     { type: 'coffee', x: 63.6, y: 3, z: -2 },
     { type: 'poster', id: 'gcomp', x: 67.6, y: 7.2 },
     { type: 'plantSmall', x: 72.4, y: 6, z: -1.6 },
-    { type: 'cooler', x: 76.6, y: 6.2, z: -2.1 },
+    { type: 'cooler', x: 76.6, y: 3, z: -2.1 },
   ],
   lighting: {
     sunDir: [-0.3, -0.6, 0.75],
