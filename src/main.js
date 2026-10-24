@@ -1103,6 +1103,7 @@ if (import.meta.env.DEV)
         return screen;
       },
       input,
+      camera,
       /** @param {number} i */
       stage: (i) => startFrom(i),
       credits: () => credits(),

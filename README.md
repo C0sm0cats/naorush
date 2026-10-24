@@ -18,16 +18,22 @@ Les NAO commencent jeudi et l’enveloppe des augmentations a disparu. Avec Kév
 | ![Comité de pilotage](docs/stage-copil.jpg)   | **4. Comité de pilotage.** Tables de réunion à arpenter, invitations qui volent bas, imprimantes en rafale. Il faut faire valider le compte rendu.                                     |
 | ![Power UP Tour](docs/stage-rooftop.jpg)      | **5. Power UP Tour.** Le toit au coucher du soleil, des trous dans la toiture et la nacelle du laveur de vitres. Rodolphe attend à l’Espace VIP.                                       |
 
-![Dialogue](docs/dialogue.jpg)
-
 ## Les boss
 
-|                                     |                                                                                                                                                                                                                                                                                         |
-| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ![Julien](docs/boss-julien.jpg)     | **Julien, Directeur Technologies & Services Pays de la Loire.** Calme, précis, redoutable. Il enchaîne des salves de slides KPI et fait descendre des baies serveurs (une ombre au sol prévient). En deuxième phase, il bascule sur son site de secours et met des câbles sous tension. |
-| ![Rodolphe](docs/boss-rodolphe.jpg) | **Rodolphe, Directeur Région Ouest.** Le grand show du Power UP Tour : slides lancées en éventail, sauts qui font trembler la scène et ondes de choc. En deuxième phase, une tournée régionale à toute allure (suis les flèches au sol) et des projecteurs qui balaient la scène.       |
+|                                     |                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ![Julien](docs/boss-julien.jpg)     | **Julien, Directeur Technologies & Services Pays de la Loire.** Calme, précis, redoutable. Son écran de supervision s’allume à son entrée. Il enchaîne des salves de slides KPI et fait descendre des baies serveurs (des cibles au sol préviennent). En deuxième phase, il bascule sur son site de secours et met des câbles sous tension.               |
+| ![Rodolphe](docs/boss-rodolphe.jpg) | **Rodolphe, Directeur Région Ouest.** Le grand show du Power UP Tour, son nom en lettres lumineuses : slides lancées en éventail, sauts qui font trembler la scène et ondes de choc. En deuxième phase, une tournée régionale à toute allure (suis les flèches au sol) et des projecteurs qui balaient la scène. Puis le grand final, sous le projecteur. |
 
-Quand un directeur consulte PRIMO, sa garde tombe : c’est le moment de lui envoyer un compte rendu. Une fois convaincu, il signe l’enveloppe : tout le monde gagne.
+Chaque attaque est annoncée au sol. Quand un directeur consulte PRIMO, sa garde tombe (un compte à rebours s’affiche) : c’est le moment de lui envoyer un compte rendu. Une fois convaincu, il signe l’enveloppe : tout le monde gagne.
+
+## Les étapes bonus
+
+|                                               |                                                                                                                          |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| ![Intercontrat](docs/stage-intercontrat.jpg)  | **Intercontrat.** Un jeudi matin calme sur le plateau, des nacelles et des fosses à câbles, un ordre de mission au bout. |
+| ![Salle de pause](docs/stage-pause.jpg)       | **Salle de pause.** Parquet, canapés et une course-poursuite avec les bonbonnes d’eau.                                   |
+| ![Séminaire annuel](docs/stage-seminaire.jpg) | **Séminaire annuel.** Gradins, buffet et vidéoprojecteur en rafale, en soirée.                                           |
 
 ## Deux héros, deux façons de jouer
 
@@ -61,14 +67,15 @@ Badge aux bornes Chronotime : en cas de pépin, tu repars de là. Les ramettes d
 - **Secrets** : deux par étape, un pour chaque héros.
 - **Trophées** : seize objectifs (étapes sans faute, boss convaincus sans être touché, tous les secrets…).
 - **Records** : meilleur temps par étape et par héros.
-- **Distribution** : tous les personnages en 3D, avec leur portrait en quelques mots. Et la galerie des 31 affiches Inetum du jeu, en plein écran.
+- **Distribution** : tous les personnages en 3D, avec leur portrait en quelques mots. Et la galerie des 32 affiches Inetum du jeu, en plein écran.
 - **Partager mon score** : partage natif sur mobile, texte prêt à coller dans Teams sur PC.
 
 ## Accessibilité et confort
 
-- **Mode détente** : les obstacles repoussent mais ne coûtent pas de cœur.
+- **Mode détente** : aucun cœur perdu, jamais de fin de partie ; une chute ramène simplement au dernier badge.
 - **Vitesse du jeu** : normale, réduite (80 %) ou très réduite (65 %), hors défi du jour.
-- **Options** : volumes, secousses de l’écran, flashs, contraste élevé, vibrations, taille des boutons tactiles, touches personnalisables.
+- **Options** : volumes, secousses de l’écran, flashs, contraste élevé, vibrations, taille des boutons tactiles, touches personnalisables. Les réglages « réduire les animations » et « contraste élevé » du système sont repris par défaut.
+- **Lecteurs d’écran** : dialogues et cœurs annoncés, menus étiquetés.
 - **Menus** : utilisables entièrement au clavier, à la manette ou au doigt. Sur mobile, on peut glisser d’un bouton à l’autre sans lever le doigt.
 - **Installation** : le jeu s’installe comme une application (PWA) et reste jouable hors ligne une fois chargé.
 
@@ -77,7 +84,7 @@ Badge aux bornes Chronotime : en cas de pépin, tu repars de là. Les ramettes d
 - **Rendu** : moteur WebGL2 écrit pour le jeu (ombres du soleil, lumières ponctuelles, occlusion ambiante, tonemapping ACES).
 - **Géométrie** : décors en voxels (maillage glouton), personnages et accessoires en géométrie lisse procédurale.
 - **Images** : les affiches, les tableaux blancs des boss et les plaques sont dessinés en code (Canvas 2D).
-- **Son** : musique (un thème par étape et par boss, avec des couches qui montent pendant l’action), ambiances de fond (serveurs, vent, parking…) et bruitages, tout synthétisé en direct avec WebAudio. Aucun fichier son.
+- **Son** : musique (un thème principal qui revient dans chaque étape et chaque boss, avec des couches qui montent pendant l’action), ambiances de fond (serveurs, vent, parking…) et bruitages, tout synthétisé en direct avec WebAudio. Aucun fichier son.
 - **Simulation** : déterministe à 60 Hz. Un solveur rejoue chaque étape avec les deux héros dans les tests, et chaque niveau est prouvé finissable.
 
 ### Prérequis
