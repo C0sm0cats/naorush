@@ -22,7 +22,7 @@ export const SEMINAIRE = {
   ],
   map: [
     '####################################################################################################',
-    '#                                               w O   w                    w                 w     #',
+    '#                                               w F   w                    w                 w     #',
     '#                                                                                                  #',
     '#                                                                 *$                               #',
     '#              $$$$                                               ##                   $$$ K       #',
@@ -50,7 +50,7 @@ export const SEMINAIRE = {
     { type: 'projector', x: 51.5, y: 5.6, z: -2.2 },
     { type: 'monitor', x: 49, y: 4, z: -1 },
     { type: 'cup', x: 53.6, y: 4, z: -0.9 },
-    { type: 'speaker', x: 60.5, y: 3, z: -1.8 },
+    { type: 'speaker', x: 67, y: 3, z: -1.8 },
     { type: 'poster', id: 'cooptation', x: 63, y: 4.4 },
     { type: 'poster', id: 'spark', x: 69.4, y: 7.9 },
     { type: 'plantSmall', x: 81.4, y: 3, z: -2 },
