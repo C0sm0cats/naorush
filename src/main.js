@@ -726,7 +726,10 @@ const touch = matchMedia('(pointer: coarse)').matches;
 /** Tutorial tip for where the hero stands, worded for keyboard or touch. */
 function tipAt() {
   const x = sim.hero.x;
-  const tip = level.tips?.find((t) => x >= t.x0 && x <= t.x1);
+  const y = sim.hero.y;
+  const tip = level.tips?.find(
+    (t) => x >= t.x0 && x <= t.x1 && y >= (t.y0 ?? -Infinity) && y <= (t.y1 ?? Infinity),
+  );
   return tip ? (touch ? tip.touch : tip.keys) : undefined;
 }
 

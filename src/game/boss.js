@@ -112,9 +112,11 @@ export function stepBoss(s, b) {
         // others once the first batch has landed. Step aside, then step back.
         const batch = at(b, DT) ? 0 : at(b, 1.55) ? 1 : -1;
         if (batch >= 0) {
+          // Racks every 3 tiles, the second batch offset by half a step: standing
+          // still is never safe, stepping into the first batch's slots is.
           const flip = (Math.floor((b.hp ?? 0) + s.deaths) + batch) % 2;
-          for (let x = x0 + 1, i = 0; x <= x1 - 1; x += 2, i++)
-            if (i % 2 === flip && Math.abs(x - b.x) > 1.2)
+          for (let x = x0 + 1 + flip * 1.5; x <= x1 - 1; x += 3)
+            if (Math.abs(x - b.x) > 1.2)
               s.things.push(make('rack', x, floor, { state: 'warn', y0: floor }));
           if (batch) emit(s, 'telegraph', b.x, b.y + 2.3);
         }
@@ -134,8 +136,10 @@ export function stepBoss(s, b) {
       if (at(b, 0.55)) {
         // Fails over to the other side of the room, never onto the hero.
         const x = b.x > (x0 + x1) / 2 ? x0 + 2.5 : x1 - 2.5;
-        if (Math.abs(hx - x) > 2) b.x = x;
-        emit(s, 'teleport', b.x, b.y + 1);
+        if (Math.abs(hx - x) > 2) {
+          b.x = x;
+          emit(s, 'teleport', b.x, b.y + 1);
+        }
       }
       if (b.t > 1) nextAttack(s, b);
       break;

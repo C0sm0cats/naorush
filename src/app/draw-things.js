@@ -405,4 +405,7 @@ export function drawThing(view, items, sim, th, t) {
     default:
       break;
   }
+  // Don't keep the last level's lists alive between frames.
+  out = [];
+  pool = FRESH;
 }
