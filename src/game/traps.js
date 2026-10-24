@@ -118,7 +118,8 @@ export function stepChair(s, t) {
       t.vx = 0;
       emit(s, 'chairBump', t.x, t.y + 0.6);
     } else t.x = nx;
-    if (overlaps(s, t.x - 0.3, t.y, t.x + 0.3, t.y + 0.95)) hurt(s, hero, 'chair');
+    // Only the seat and the base hurt: a jump that clears the seat clears the chair.
+    if (overlaps(s, t.x - 0.3, t.y, t.x + 0.3, t.y + 0.7)) hurt(s, hero, 'chair');
   }
 }
 

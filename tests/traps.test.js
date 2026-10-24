@@ -87,6 +87,45 @@ describe('office chair', () => {
   });
 });
 
+describe('office chair consistency', () => {
+  /** A chair charging a hero standing at column 11. @param {'kevin'|'charline'} hero */
+  function charging(hero) {
+    const s = sim(
+      room(24, [
+        ['S', 11, 3],
+        ['c', 6, 3],
+      ]),
+      hero,
+    );
+    const chair = find(s, 'chair');
+    runUntil(s, IDLE, () => chair.state === 'rolling', 400);
+    return { s, chair };
+  }
+
+  for (const hero of /** @type {const} */ (['kevin', 'charline']))
+    it(`can be jumped over by ${hero} with a comfortable timing window`, () => {
+      let safe = 0;
+      for (let wait = 0; wait < 45; wait++) {
+        const { s } = charging(hero);
+        run(s, IDLE, wait);
+        const hearts = s.hero.hearts;
+        for (let i = 0; i < 90; i++) run(s, input({ jump: i < 12 }), 1);
+        if (s.hero.hearts === hearts) safe++;
+      }
+      expect(safe).toBeGreaterThanOrEqual(12);
+    });
+
+  it('is stopped by a CR', () => {
+    const { s, chair } = charging('kevin');
+    s.hero.facing = -1;
+    run(s, input({ fire: true }), 1);
+    runUntil(s, IDLE, () => chair.state !== 'rolling', 60);
+    expect(chair.state).toBe('idle');
+    expect(chair.x).toBeLessThan(s.hero.x - 0.5);
+    expect(s.hero.hearts).toBe(4);
+  });
+});
+
 describe('filing-cabinet drawer', () => {
   it('only hurts while it is out of the wall', () => {
     const s = sim(

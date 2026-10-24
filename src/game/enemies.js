@@ -252,6 +252,20 @@ export function stepCr(s, t) {
       emit(s, 'visioMute', k.x, k.y + 1.6);
       return;
     }
+    // A CR in the way stops a charging chair and bursts a rolling bottle.
+    if (k.kind === 'chair' && t.y < k.y + 1.2) {
+      t.alive = false;
+      if (k.state === 'rolling' || k.state === 'wobble')
+        Object.assign(k, { state: 'idle', t: 0, vx: 0 });
+      emit(s, 'chairBump', k.x, k.y + 0.6);
+      return;
+    }
+    if (k.kind === 'bottle' && k.state === 'rolling' && t.y < k.y + 1.2) {
+      t.alive = false;
+      k.state = 'burst';
+      emit(s, 'splash', k.x, k.y + 0.4);
+      return;
+    }
     if (k.kind === 'vacuum' && t.y < k.y + 0.5) {
       t.alive = false;
       emit(s, 'block', k.x, k.y + 0.3);
