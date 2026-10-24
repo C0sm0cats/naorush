@@ -1,0 +1,878 @@
+/* Title screen: the logo floats over the office, the menu card sits beside (or below)
+   it, and the 3D heroes are framed in the space left free (see src/app/title.js). */
+
+.title {
+  --col: min(468px, 40vw);
+  place-items: initial;
+  grid-template-columns: var(--col);
+  align-content: safe center;
+  justify-content: start;
+  gap: clamp(12px, 2.4vh, 24px);
+  padding-left: max(24px, 5.5vw, env(safe-area-inset-left));
+  background: none;
+}
+body:not([data-screen='title']) .title {
+  display: none;
+}
+.title > :not(.title-fx) {
+  position: relative;
+}
+
+/* ---- Atmosphere: scrims for legibility, a light beam, drifting dust ---------- */
+.title-fx {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, #0e1424f0 0%, #0e1424c4 30%, #0e142440 50%, transparent 62%),
+    radial-gradient(ellipse 70% 90% at 70% 52%, transparent 50%, #0e142499 100%),
+    linear-gradient(180deg, #0e142466, transparent 22% 80%, #0e142480);
+  animation: fx-in 1.2s ease-out both;
+}
+.title-beam {
+  position: absolute;
+  top: -20%;
+  right: 4%;
+  width: 46%;
+  height: 140%;
+  background: linear-gradient(
+    100deg,
+    transparent 28%,
+    #fff3d60d 40%,
+    #fff3d626 50%,
+    #fff3d60d 60%,
+    transparent 72%
+  );
+  transform: rotate(14deg);
+  transform-origin: 50% 0;
+  animation: beam 14s ease-in-out infinite alternate;
+}
+.mote {
+  position: absolute;
+  bottom: -10px;
+  left: var(--x);
+  width: var(--s, 5px);
+  height: var(--s, 5px);
+  border-radius: 50%;
+  background: radial-gradient(circle, #fffbe8, #fffbe800 70%);
+  opacity: 0;
+  animation: mote var(--d, 11s) linear var(--w, 0s) infinite;
+}
+.mote:nth-child(2) {
+  --x: 58%;
+  --d: 13s;
+  --w: -2s;
+}
+.mote:nth-child(3) {
+  --x: 66%;
+  --s: 7px;
+  --d: 10s;
+  --w: -6s;
+}
+.mote:nth-child(4) {
+  --x: 72%;
+  --d: 15s;
+  --w: -9s;
+}
+.mote:nth-child(5) {
+  --x: 79%;
+  --s: 4px;
+  --d: 12s;
+  --w: -4s;
+}
+.mote:nth-child(6) {
+  --x: 85%;
+  --s: 6px;
+  --d: 14s;
+  --w: -11s;
+}
+.mote:nth-child(7) {
+  --x: 91%;
+  --d: 11s;
+  --w: -7s;
+}
+.mote:nth-child(8) {
+  --x: 63%;
+  --s: 3px;
+  --d: 9s;
+  --w: -1s;
+}
+.mote:nth-child(9) {
+  --x: 76%;
+  --s: 8px;
+  --d: 17s;
+  --w: -13s;
+}
+
+/* ---- Brand: kicker, logo lockup, tagline ------------------------------------ */
+.title-brand {
+  display: grid;
+  justify-items: start;
+  animation: rise-in 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
+}
+/* A soft shadow pool behind the lockup keeps it clear of whatever hangs on the wall. */
+.title-brand::before {
+  content: '';
+  position: absolute;
+  inset: -40px -60px -30px -80px;
+  z-index: -1;
+  background: radial-gradient(closest-side, #0e1424d9, #0e142480 60%, transparent);
+  pointer-events: none;
+}
+.title .kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 10px;
+  border-radius: 999px;
+  background: #0e1424c4;
+  color: var(--lime);
+  font-size: 11.5px;
+  letter-spacing: 1.8px;
+  box-shadow:
+    inset 0 0 0 1px #c6f43247,
+    0 6px 18px #0006;
+}
+.title .kicker::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--pink);
+  box-shadow:
+    10px 0 0 var(--sky),
+    20px 0 0 var(--lime);
+  margin-right: 20px;
+}
+
+/* The logo: chunky sticker letters. NAO stands tall, Rush dashes in under it. */
+.logo {
+  display: grid;
+  justify-items: start;
+  margin: 12px 0 0;
+  font-size: clamp(64px, 8.2vw, 118px);
+  font-weight: 900;
+  line-height: 0.84;
+  letter-spacing: -0.05em;
+  color: var(--paper);
+  animation: float 6s ease-in-out 0.8s infinite;
+}
+.logo-nao,
+.logo-rush {
+  position: relative;
+  display: inline-block;
+  -webkit-text-stroke: 0.06em var(--ink);
+  paint-order: stroke fill;
+}
+.logo-nao {
+  color: #fffaf0;
+  text-shadow:
+    0 0.025em 0 #d8e0f4,
+    0 0.05em 0 #aab8de,
+    0 0.075em 0 #6f84bf,
+    0 0.1em 0 var(--blue),
+    0 0.125em 0 #1b2d66,
+    0 0.15em 0 var(--ink),
+    0 0.32em 0.3em #0009;
+  animation: drop-in 0.65s cubic-bezier(0.3, 1.5, 0.5, 1) both;
+}
+.logo-rush {
+  margin: -0.06em 0 0 0.62em;
+  padding: 0 0.08em 0.06em;
+  color: var(--pink);
+  background: linear-gradient(-4deg, transparent 18%, var(--lime) 18% 34%, transparent 34%);
+  border-radius: 0.1em;
+  transform: rotate(-5deg);
+  text-shadow:
+    0 0.025em 0 #ff86ba,
+    0 0.05em 0 #e2367f,
+    0 0.075em 0 var(--pink-edge),
+    0 0.1em 0 #8f1a4a,
+    0 0.125em 0 var(--ink),
+    0 0.3em 0.3em #0009;
+  animation: dash-in 0.7s cubic-bezier(0.2, 1.3, 0.4, 1) 0.18s both;
+}
+/* Speed lines: Rush is in a hurry. */
+.logo-rush::before {
+  content: '';
+  position: absolute;
+  right: calc(100% + 0.06em);
+  top: 0.2em;
+  width: 0.56em;
+  height: 0.44em;
+  background:
+    linear-gradient(90deg, transparent, var(--lime)) 100% 0 / 100% 0.075em no-repeat,
+    linear-gradient(90deg, transparent, #fff) 100% 50% / 62% 0.075em no-repeat,
+    linear-gradient(90deg, transparent, var(--sky)) 100% 100% / 82% 0.075em no-repeat;
+  border-radius: 0.04em;
+  animation: lines 1.4s ease-in-out infinite;
+}
+/* A glint sweeps across Rush now and then. */
+.logo-rush::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  padding: inherit;
+  background: linear-gradient(105deg, transparent 38%, #fffc 48%, transparent 58%) 160% 0 / 260%
+    100% no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+  animation: glint 7s ease-in-out 1.4s infinite;
+}
+.title .lead {
+  max-width: 34em;
+  margin: 18px 0 0;
+  color: #e6ebf7;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-shadow: 0 1px 2px #0e1424;
+}
+
+/* ---- Menu card ---------------------------------------------------------------- */
+.screen.title .title-panel {
+  width: 100%;
+  padding: 18px 18px 14px;
+  border-radius: 24px;
+  animation: panel-in 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.1) 0.12s both;
+}
+.title-panel::before {
+  left: 24px;
+  right: 24px;
+}
+/* Each part of the menu arrives a beat after the last. */
+.title-panel > * {
+  animation: rise-in 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
+}
+.title-panel > :nth-child(1) {
+  animation-delay: 0.2s;
+}
+.title-panel > :nth-child(2) {
+  animation-delay: 0.26s;
+}
+.title-panel > :nth-child(3) {
+  animation-delay: 0.31s;
+}
+.title-panel > :nth-child(4) {
+  animation-delay: 0.36s;
+}
+.title-panel > :nth-child(n + 5) {
+  animation-delay: 0.4s;
+}
+
+/* Hero picker: two character tiles; the 3D heroes swap places to match. */
+.heroes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.hero-card {
+  --accent: var(--lime);
+  --deep: #1b2d66;
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  min-height: 44px;
+  padding: 12px 14px 11px 18px;
+  border: 0;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 100% 0, #ffffff26, transparent 55%),
+    linear-gradient(160deg, #3656b0, var(--blue) 55%, var(--deep));
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 0 1px #ffffff26,
+    0 4px 0 var(--deep);
+}
+.hero-card.pink {
+  --accent: #fff;
+  --deep: #8f1a4a;
+  background:
+    radial-gradient(circle at 100% 0, #ffffff2e, transparent 55%),
+    linear-gradient(160deg, #c42a66, #b0235a 55%, var(--deep));
+}
+.hero-card::before {
+  content: '';
+  position: absolute;
+  inset: 10px auto 10px 0;
+  width: 5px;
+  border-radius: 0 4px 4px 0;
+  background: var(--accent);
+}
+.hero-card[aria-checked='true'] {
+  box-shadow:
+    inset 0 0 0 1px #ffffff40,
+    0 4px 0 var(--deep),
+    0 0 0 3px var(--paper),
+    0 0 0 6px var(--lime),
+    0 12px 24px #0003;
+}
+.hero-card[aria-checked='true']::after {
+  content: '✓';
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--lime);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+  box-shadow: 0 2px 0 var(--lime-edge);
+  animation: tick 0.35s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+/* The ring and tick mark the chosen hero; the other stays readable. */
+.hero-card[aria-checked='false'] {
+  filter: saturate(0.7) brightness(0.96);
+}
+.hero-card b {
+  font-size: 21px;
+  font-weight: 900;
+  letter-spacing: -0.4px;
+}
+.hero-card small {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.hero-card em {
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: #0e142440;
+  box-shadow: inset 0 0 0 1px #ffffff1a;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  opacity: 0.95;
+}
+
+/* Play: the big lime button, with a play mark and a slow glow that invites a press. */
+.title .go {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 56px;
+  font-size: 21px;
+  letter-spacing: 0.4px;
+  animation: rise-in 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.1) 0.26s both;
+}
+/* The glow lives on its own layer: only its opacity changes. */
+.title .go::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 8px 30px #c6f432a6;
+  opacity: 0;
+  pointer-events: none;
+  animation: glow 2.6s ease-in-out 1.2s infinite;
+}
+.title .go::before {
+  content: '';
+  width: 14px;
+  height: 16px;
+  background: currentColor;
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+}
+.title .card > button + button,
+.title .card > button + .btn-row,
+.title .card > .btn-row + button {
+  margin-top: 9px;
+}
+
+.controls {
+  margin-top: 10px;
+  color: #3a4560;
+}
+.controls summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 4px;
+  cursor: pointer;
+  font-weight: 800;
+  font-size: 14px;
+  border-radius: 8px;
+}
+.controls summary:focus-visible {
+  outline: 3px solid var(--pink);
+  outline-offset: 2px;
+}
+.controls ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #141a2c0a;
+  list-style: none;
+  font-size: 14px;
+}
+
+.title .btn-row .ghost {
+  padding-left: 6px;
+  padding-right: 6px;
+  white-space: nowrap;
+}
+
+/* ---- Leaving for the game: the menu steps aside before the stage starts ------- */
+body.title-out .title-brand {
+  animation: out-up 0.32s ease-in both;
+}
+body.title-out .title-panel {
+  animation: out-left 0.32s ease-in both;
+}
+/* A dark veil closes in; the stage then fades up from it (#fade). */
+body.title-out .title-fx::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--ink);
+  animation: veil 0.3s ease-in both;
+}
+
+/* ---- Keyframes ---------------------------------------------------------------- */
+@keyframes fx-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(26px) scale(0.97);
+  }
+}
+@keyframes drop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5em) scale(1.08);
+  }
+}
+@keyframes dash-in {
+  from {
+    opacity: 0;
+    transform: translateX(-0.9em) rotate(-5deg) skewX(-14deg);
+  }
+}
+@keyframes float {
+  50% {
+    transform: translateY(-5px);
+  }
+}
+@keyframes lines {
+  50% {
+    transform: translateX(-0.08em);
+    opacity: 0.7;
+  }
+}
+@keyframes glint {
+  0%,
+  70% {
+    background-position: 160% 0;
+  }
+  100% {
+    background-position: -60% 0;
+  }
+}
+@keyframes beam {
+  to {
+    transform: rotate(9deg) translateX(-3%);
+    opacity: 0.75;
+  }
+}
+@keyframes mote {
+  10% {
+    opacity: 0.8;
+  }
+  80% {
+    opacity: 0.5;
+  }
+  to {
+    opacity: 0;
+    transform: translate(28px, -78vh);
+  }
+}
+@keyframes glow {
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes tick {
+  from {
+    transform: scale(0);
+  }
+}
+@keyframes out-up {
+  to {
+    opacity: 0;
+    transform: translateY(-24px) scale(0.98);
+  }
+}
+@keyframes out-left {
+  to {
+    opacity: 0;
+    transform: translateX(-36px);
+  }
+}
+@keyframes veil {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.85;
+  }
+}
+
+/* ---- Shorter desktop windows: a tighter lockup -------------------------------- */
+@media (max-height: 760px) and (min-height: 501px) and (min-aspect-ratio: 1/1) {
+  .title {
+    gap: 14px;
+  }
+  .logo {
+    margin-top: 8px;
+    font-size: clamp(56px, 6.4vw, 84px);
+  }
+  .title .lead {
+    margin-top: 12px;
+    font-size: 14px;
+  }
+  .title .title-panel {
+    padding-top: 16px;
+  }
+  .hero-card em {
+    font-size: 11.5px;
+  }
+}
+@media (max-height: 640px) and (min-height: 501px) and (min-aspect-ratio: 1/1) {
+  .title .lead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}
+
+/* ---- Tall screens: logo on top, heroes in the middle, menu at the bottom ------- */
+@media (max-aspect-ratio: 1/1) {
+  .title {
+    --col: min(520px, 100%);
+    grid-template-columns: var(--col);
+    grid-template-rows: auto minmax(min(30vh, 260px), 1fr) auto;
+    align-content: stretch;
+    justify-content: center;
+    gap: 0;
+    padding: max(14px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+      max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
+  .title-fx {
+    background:
+      linear-gradient(180deg, #0e1424d9 0%, #0e142466 20%, transparent 32% 52%, #0e1424cc 70%),
+      radial-gradient(ellipse 90% 60% at 50% 42%, transparent 50%, #0e142499 100%);
+  }
+  .title-beam {
+    right: 10%;
+    width: 80%;
+    height: 60%;
+  }
+  .mote {
+    left: calc(var(--x) - 45%);
+  }
+  .title-brand {
+    grid-row: 1;
+    justify-items: center;
+    text-align: center;
+  }
+  .logo {
+    justify-items: center;
+    margin-top: 10px;
+    font-size: clamp(54px, 17vw, 96px);
+  }
+  .logo-rush {
+    margin-left: 0.9em;
+  }
+  .title .lead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .title .title-panel {
+    grid-row: 3;
+    align-self: end;
+    padding: 16px 14px 10px;
+  }
+  .title-panel::before {
+    left: 20px;
+    right: 20px;
+  }
+}
+
+/* Narrow phones: tighter tiles and buttons so the whole menu fits under the heroes. */
+@media (max-aspect-ratio: 1/1) and (max-width: 480px) {
+  .heroes {
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .hero-card {
+    padding: 10px 10px 9px 15px;
+  }
+  .hero-card b {
+    font-size: 18px;
+  }
+  .hero-card small {
+    font-size: 10.5px;
+    letter-spacing: 0.4px;
+  }
+  .hero-card em {
+    margin-top: 4px;
+    padding: 5px 7px;
+    font-size: 11px;
+  }
+  .hero-card[aria-checked='true']::after {
+    top: 8px;
+    right: 8px;
+    width: 18px;
+    height: 18px;
+    font-size: 11px;
+  }
+  .title .go {
+    min-height: 52px;
+    padding: 12px;
+    font-size: 19px;
+  }
+  .title .ghost {
+    padding: 11px 8px;
+    font-size: 14px;
+  }
+  .title .ghost.daily {
+    font-size: 13px;
+  }
+  .title .card > button + button,
+  .title .card > button + .btn-row,
+  .title .card > .btn-row + button {
+    margin-top: 8px;
+  }
+}
+@media (orientation: portrait) and (pointer: coarse) {
+  .title .card::after {
+    content: 'Astuce : tourne ton téléphone pour un champ de vision plus large.';
+    display: block;
+    margin-top: 4px;
+    padding: 6px 10px;
+    border-radius: 10px;
+    background: #58d5ff1f;
+    color: #3a5a7a;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+  }
+  /* Keyboard commands mean little on a touch screen held upright. */
+  .title .controls {
+    display: none;
+  }
+  .title .title-panel {
+    padding-bottom: 12px;
+  }
+}
+
+/* ---- Landscape phones: one compact column on the left ------------------------- */
+@media (max-height: 500px) and (min-aspect-ratio: 1/1) {
+  .title {
+    --col: min(440px, 54vw);
+    gap: 8px;
+    padding-top: max(8px, env(safe-area-inset-top));
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    padding-left: max(14px, 3vw, env(safe-area-inset-left));
+  }
+  .title-brand {
+    grid-template-columns: auto auto;
+    align-items: center;
+    justify-content: start;
+    gap: 14px;
+  }
+  .title .kicker {
+    grid-column: 2;
+    grid-row: 1;
+    padding: 4px 9px;
+    font-size: 9.5px;
+    letter-spacing: 0.6px;
+    white-space: nowrap;
+  }
+  .title .kicker::before {
+    display: none;
+  }
+  .logo {
+    grid-column: 1;
+    grid-row: 1;
+    display: flex;
+    align-items: baseline;
+    gap: 0.5em;
+    margin: 0;
+    font-size: clamp(34px, 11vh, 46px);
+  }
+  .logo-rush {
+    margin: 0;
+  }
+  .logo-rush::before {
+    width: 0.4em;
+  }
+  .title .lead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .title .title-panel {
+    padding: 12px 14px 10px;
+    border-radius: 20px;
+  }
+  .heroes {
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .hero-card {
+    padding: 7px 12px 7px 16px;
+    border-radius: 14px;
+  }
+  .hero-card em {
+    display: none;
+  }
+  .hero-card b {
+    font-size: 16px;
+  }
+  .hero-card small {
+    font-size: 10.5px;
+  }
+  .hero-card[aria-checked='true']::after {
+    top: 50%;
+    margin-top: -9px;
+    width: 18px;
+    height: 18px;
+    font-size: 11px;
+  }
+  .title .go {
+    min-height: 44px;
+    padding: 8px;
+    font-size: 16px;
+  }
+  .title .go::before {
+    width: 11px;
+    height: 13px;
+  }
+  .title .ghost {
+    padding: 8px;
+    font-size: 14px;
+  }
+  .title .ghost.daily {
+    font-size: 13px;
+  }
+  .title .card > button + button,
+  .title .card > button + .btn-row,
+  .title .card > .btn-row + button {
+    margin-top: 7px;
+  }
+  /* With a save to resume, Jouer and Continuer share a row. */
+  .title-panel:has(#continue:not([hidden])) {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 8px;
+  }
+  .title-panel:has(#continue:not([hidden])) > :not(#play, #continue) {
+    grid-column: 1 / -1;
+  }
+  .title-panel:has(#continue:not([hidden])) > #continue {
+    margin-top: 0;
+  }
+  .title .controls {
+    display: none;
+  }
+}
+
+/* ---- Accessibility ------------------------------------------------------------ */
+/* Less motion: nothing drifts, glints or bounces (pseudo-elements included). */
+@media (prefers-reduced-motion: reduce) {
+  .title *,
+  .title *::before,
+  .title *::after {
+    animation: none !important;
+  }
+  .mote,
+  .title-beam {
+    display: none;
+  }
+}
+body.contrast .title-fx {
+  background: #000a;
+}
+body.contrast .title-beam,
+body.contrast .mote,
+body.contrast .title .go::after {
+  display: none;
+}
+body.contrast .title-brand {
+  padding: 12px 16px;
+  border-radius: 16px;
+  background: #000;
+  box-shadow: 0 0 0 2px #fff;
+}
+body.contrast .title .lead {
+  color: #fff;
+  text-shadow: none;
+}
+body.contrast .logo-rush {
+  background: none;
+}
+body.contrast .logo-rush::after,
+body.contrast .logo-rush::before {
+  display: none;
+}
+body.contrast .hero-card {
+  background: #000;
+  color: #fff;
+  opacity: 1;
+  filter: none;
+}
+body.contrast .hero-card small {
+  color: #fff;
+}
+@media (forced-colors: active) {
+  .logo-nao,
+  .logo-rush {
+    -webkit-text-stroke: 0;
+    text-shadow: none;
+    background: none;
+  }
+  .logo-rush::after,
+  .logo-rush::before,
+  .title-fx {
+    display: none;
+  }
+}

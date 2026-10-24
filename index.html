@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#0e1424" />
     <title>NAO Rush</title>
     <link rel="stylesheet" href="./src/style.css" />
+    <link rel="stylesheet" href="./src/title.css" />
     <link rel="icon" href="./icons/icon-32.png" />
     <link rel="apple-touch-icon" href="./icons/icon-180.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
@@ -70,14 +71,23 @@
     <div class="hint" id="hint"></div>
     <div class="toast" id="toast" role="status"></div>
 
-    <section class="screen title" id="title">
-      <div class="card">
+    <section class="screen title" id="title" aria-labelledby="titleLogo">
+      <div class="title-fx" aria-hidden="true">
+        <i class="title-beam"></i>
+        <i class="mote"></i><i class="mote"></i><i class="mote"></i><i class="mote"></i
+        ><i class="mote"></i><i class="mote"></i><i class="mote"></i><i class="mote"></i>
+      </div>
+      <header class="title-brand">
         <p class="kicker">Un jeu de plateforme chez Inetum</p>
-        <h1>NAO <span>Rush</span></h1>
+        <h1 class="logo" id="titleLogo">
+          <span class="logo-nao">NAO</span> <span class="logo-rush" data-text="Rush">Rush</span>
+        </h1>
         <p class="lead">
           Les NAO commencent jeudi et l’enveloppe des augmentations a disparu. Cinq étapes, deux
           directeurs à convaincre, une seule signature.
         </p>
+      </header>
+      <div class="card title-panel">
         <div class="heroes" role="radiogroup" aria-label="Choisis ton héros">
           <button class="hero-card" data-hero="kevin" role="radio" aria-checked="true">
             <b>Kévin</b><small>Directeur de Projets</small
