@@ -601,6 +601,7 @@ const HITSTOP = {
 };
 let hitstop = 0;
 let dustTimer = 0;
+let stepTimer = 0;
 /** Lines to say once the current frame's events are handled. @type {{lines: Line[], then: () => void} | null} */
 let pending = null;
 const QUIPS = new Set([
@@ -869,6 +870,11 @@ function frame(now) {
   const h = sim.hero;
   if (screen === 'play' && hitstop <= 0) {
     // Running dust and paper trails behind thrown CRs.
+    // Soft footsteps while running.
+    if (h.state === 'ground' && Math.abs(h.vx) > 2.5 && (stepTimer -= dt) <= 0) {
+      stepTimer = 0.27 * (sim.stats.run / Math.max(2.5, Math.abs(h.vx)));
+      audio.sfx('step');
+    }
     if (h.state === 'ground' && Math.abs(h.vx) > 4 && (dustTimer -= dt) <= 0) {
       dustTimer = 0.09;
       particles.emit('dust', h.x + HERO.w / 2 - h.facing * 0.25, h.y + 0.05);
