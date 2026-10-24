@@ -114,7 +114,7 @@ export function stepChair(s, t) {
       t.state = 'idle';
       t.t = 0;
       t.vx = 0;
-      emit(s, 'bump', t.x, t.y + 0.6);
+      emit(s, 'chairBump', t.x, t.y + 0.6);
     } else t.x = nx;
     if (overlaps(s, t.x - 0.3, t.y, t.x + 0.3, t.y + 0.95)) hurt(s, hero, 'chair');
   }

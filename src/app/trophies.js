@@ -14,7 +14,7 @@ export const TROPHIES = [
   { id: 'charline', name: 'Deal conclu', text: 'Finir le jeu avec Charline.' },
   { id: 'clean', name: 'Zéro incident', text: 'Finir une étape sans retour au badge.' },
   { id: 'secrets', name: 'Fouineur', text: 'Trouver les deux secrets d’une même étape.' },
-  { id: 'allSecrets', name: 'Rien ne m’échappe', text: 'Trouver les 10 secrets du jeu.' },
+  { id: 'allSecrets', name: 'Rien ne m’échappe', text: 'Trouver 10 secrets au total.' },
   { id: 'julien', name: 'Haute disponibilité', text: 'Convaincre Julien sans être touché.' },
   { id: 'rodolphe', name: 'Tête d’affiche', text: 'Convaincre Rodolphe sans être touché.' },
   { id: 'parry', name: 'Contre-argument', text: 'Intercepter 15 projectiles avec des CR.' },

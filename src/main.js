@@ -13,7 +13,7 @@ import { PROLOGUE } from './data/barks.js';
 import { CAST } from './data/cast.js';
 import { CAMPAIGN, LEVELS, ROOM_W } from './data/levels/index.js';
 import { Renderer } from './gfx/renderer.js';
-import { DT, HERO, createSim, step } from './game/sim.js';
+import { DT, HERO, TILE, createSim, step, tileAt } from './game/sim.js';
 
 /**
  * NAO Rush entry point: loading → title (hero choice) → stage intro (dialogue) →
@@ -331,7 +331,22 @@ $('trophiesBtn').onclick = () => {
   show('trophies');
 };
 $('trophiesClose').onclick = () => show('title');
+/** Where the cast lines up: the first stretch of clear floor on the loaded stage. */
+let castX = 8.6;
+function clearFloor() {
+  const open = (/** @type {number} */ c) =>
+    tileAt(sim, c, 2) === TILE.SOLID &&
+    tileAt(sim, c, 3) === TILE.EMPTY &&
+    tileAt(sim, c, 4) === TILE.EMPTY;
+  for (let c = 6; c < sim.w - 8; c++) {
+    let ok = true;
+    for (let k = 0; k < 6 && ok; k++) ok = open(c + k);
+    if (ok) return c + 0.6;
+  }
+  return 8.6;
+}
 $('castBtn').onclick = () => {
+  castX = clearFloor();
   $('castList').replaceChildren(
     ...[
       'kevin',
@@ -556,9 +571,18 @@ const AMBIENT = new Set([
   'poof',
   'invite',
   'bossThrow',
+  'wake',
+  'chairBump',
 ]);
 /** Events that reuse another event's sound. @type {Record<string, string>} */
-const SFX_ALIAS = { throw: 'fire', archive: 'crack', switch: 'door', bonk: 'block', wake: 'talk' };
+const SFX_ALIAS = {
+  throw: 'fire',
+  archive: 'crack',
+  switch: 'door',
+  bonk: 'block',
+  wake: 'talk',
+  chairBump: 'bump',
+};
 /** Freeze time per event, in seconds. @type {Record<string, number>} */
 const HITSTOP = {
   hurt: 0.12,
@@ -847,7 +871,12 @@ function frame(now) {
       }
       // The partner waiting at the exit reacts when you arrive.
       const exit = sim.things.find((t) => t.kind === 'exit');
-      if (exit && Math.abs(sim.hero.x - exit.x) < 4 && Math.abs(sim.hero.y - exit.y) < 2)
+      if (
+        exit &&
+        sim.time > 4 &&
+        Math.abs(sim.hero.x - exit.x) < 4 &&
+        Math.abs(sim.hero.y - exit.y) < 2
+      )
         say('partner', sim.hasKey ? 'welcome' : 'waiting');
       // Standing still for a while earns a quip.
       const h = sim.hero;
@@ -895,10 +924,10 @@ function frame(now) {
   // The title shows the chosen hero up close; the credits drift along the stage.
   const drift = screen === 'loading';
   view.gallery = gallery || screen === 'cast';
-  view.galleryX = screen === 'cast' ? 8.6 : 1.4;
+  view.galleryX = screen === 'cast' ? castX : 1.4;
   const focus = view.gallery
     ? screen === 'cast'
-      ? { x: 9.3, y: 1.6, facing: 0.001, visH: 5.4 }
+      ? { x: castX + 0.7, y: 1.6, facing: 0.001, visH: 5.4 }
       : { x: 4.1, y: 1.6, facing: 0 }
     : screen === 'credits'
       ? { x: view.party - 3.2, y: 3, facing: 0.001 }

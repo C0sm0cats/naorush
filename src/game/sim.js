@@ -109,7 +109,8 @@ export function createSim(def, heroId) {
       else if (c === 'E') thing('exit', col + 0.5, y);
       else if (c === 'F') thing('panel', col, y, { state: 'armed' });
       else if (c === 'O') thing('panel', col, y, { state: 'armed', variant: 'binders' });
-      else if (c === 'R') thing('bottle', col + 0.5, y, { state: 'waiting' });
+      else if (c === 'R')
+        thing('bottle', col + 0.5, y, { state: 'waiting', home: col + 0.5, y0: y });
       else if (c === 'a') thing('ammo', col + 0.5, y + 0.45);
       else if (c === 'h') thing('cup', col + 0.5, y + 0.3);
       else if (c === 'n')
@@ -230,8 +231,15 @@ function respawn(s) {
       s.tiles[t.x + Math.round(t.y) * s.w] = TILE.LOOSE;
     }
     if (t.kind === 'chair') Object.assign(t, { x: t.home ?? t.x, state: 'idle', t: 0, vx: 0 });
-    if (t.kind === 'bottle' && t.state !== 'waiting' && !s.hasKey)
-      Object.assign(t, { state: 'waiting', vx: 0 });
+    // Bottles go back on their shelf; with the key in hand, the chase starts over.
+    if (t.kind === 'bottle')
+      Object.assign(t, {
+        x: t.home ?? t.x,
+        y: t.y0 ?? t.y,
+        vx: 0,
+        vy: 0,
+        state: s.hasKey ? 'rolling' : 'waiting',
+      });
   }
   s.gameOver = false;
   s.onLift = null;

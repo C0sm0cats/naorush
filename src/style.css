@@ -1154,3 +1154,7 @@ body[data-pad='l'] .touch .big {
 .hero-card:active {
   transform: translateY(1px) scale(0.99);
 }
+
+.bonus-row {
+  grid-column: 1 / -1;
+}
