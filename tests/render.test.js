@@ -167,6 +167,19 @@ describe('rendering', () => {
         Object.assign(h, { state, vx: 0, vy: 0, invuln: 0, airJumps: sim.stats.airJumps }, set);
         expect(finite(heroPose(sim, 1.7, still))).toBe(true);
       }
+      // Idles, hurt and death keep the arms at or below the shoulders: nothing that could
+      // read as a salute, a hand at the forehead or a wave.
+      for (const [state, set] of /** @type {[string, Partial<typeof h>][]} */ ([
+        ['ground', {}],
+        ['air', { vy: 3, invuln: 1.3 }],
+        ['dead', { stateTime: 0.2 }],
+        ['dead', { stateTime: 0.3 }],
+      ]))
+        for (let still = 0; still < 13; still += 0.25) {
+          Object.assign(h, { state, vx: 0, vy: 0, invuln: 0, stateTime: 0 }, set);
+          const p = heroPose(sim, still * 1.7, still);
+          expect(Math.max(p.armL, p.armR)).toBeLessThan(1.75);
+        }
       h.state = 'ground';
       sim.won = true;
       // Victory: both arms up (no wave, no salute).

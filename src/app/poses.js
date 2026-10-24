@@ -173,9 +173,9 @@ export function bossPose(b, hx, t, id) {
         pose = {
           legL: 0.2,
           legR: -0.2,
-          armL: mix(-1.4, 2.4, o),
-          armR: mix(-1.4, 2.4, o),
-          armSpread: mix(0.6, 1, k) + settle(bt - 0.55) * 0.1,
+          armL: mix(-1.4, 1.4, o),
+          armR: mix(-1.4, 1.4, o),
+          armSpread: mix(0.6, 1.1, k) + settle(bt - 0.55) * 0.1,
           lean: 0.2 * (1 - k * 0.5),
           squash: -0.05 * (1 - k),
           bob: breath * 0.3,
@@ -185,16 +185,17 @@ export function bossPose(b, hx, t, id) {
       }
       break;
     case 'rackDrop': {
-      // Precise: tablet held out, the other hand lowers the racks one notch at a time.
+      // Precise: tablet held out, the other hand points at the racks and lowers them one
+      // notch at a time (kept below the head: no raised hand).
       const w = smooth(clamp(bt / 0.3));
       const step = bt * 4;
       const notch = (Math.floor(step) % 4) + smooth(clamp((step % 1) / 0.3));
       pose = {
         legL: 0.15 * w,
         legR: -0.15 * w,
-        armL: (2.75 - notch * 0.14) * w,
+        armL: (1.85 - notch * 0.1) * w,
         armR: 1.05 * w,
-        armSpread: 0.22 * w,
+        armSpread: 0.05 * w,
         head: -0.28 * w + Math.max(0, Math.sin(step * TAU)) * 0.02,
         bob: breath * 0.15,
         lean: -0.05 * w,
@@ -224,9 +225,9 @@ export function bossPose(b, hx, t, id) {
       pose = {
         legL: 0,
         legR: 0,
-        armL: 1.6 + k * 0.6,
-        armR: 1.6 + k * 0.6,
-        armSpread: 1.2,
+        armL: 1.45,
+        armR: 1.45,
+        armSpread: 0.9 + k * 0.35,
         head: -0.2,
         squash: bt < 0.55 ? -0.1 * k : 0.12 * Math.max(0, 1 - (bt - 0.55) / 0.2),
         bob: bt < 0.55 ? k * 1.5 : 0,
@@ -258,7 +259,7 @@ export function bossPose(b, hx, t, id) {
           legR: 0.2 + tuck * 0.6,
           armL: mix(1.8, 2.8, tuck),
           armR: mix(1.8, 2.8, tuck),
-          armSpread: 0.3 * tuck,
+          armSpread: -0.35 * tuck,
           squash: k > 0.95 ? 0.18 : k < 0.15 ? -0.1 : -0.04,
           lean: 0.1 - tuck * 0.15,
           hem: k < 0.5 ? 0.2 : 0.7 * k,
@@ -350,8 +351,8 @@ export function bossPose(b, hx, t, id) {
         ? {
             legL: -0.3,
             legR: 0.4,
-            armL: 2.0 + w * 0.3,
-            armR: 1.6 - w * 0.3,
+            armL: 1.5 + w * 0.25,
+            armR: 1.25 - w * 0.25,
             armSpread: 0.45,
             lean: -0.35 + w * 0.1,
             squash: 0.08 + w * 0.05,
@@ -501,7 +502,7 @@ function airPose(vy, jump, t, kev) {
       legL: mix(0.55, kev ? 1.2 : 1.1, rise),
       legR: mix(-0.1, kev ? -0.35 : -0.55, rise),
       armL: mix(0.6, kev ? -0.8 : -1.0, rise) + flail,
-      armR: mix(1.2, kev ? 1.9 : 2.3, rise) - flail,
+      armR: mix(1.2, kev ? 1.6 : 1.7, rise) - flail,
       armSpread: (kev ? 0.28 : 0.15) + apex * 0.3,
       lean: 0.18 * rise + 0.06,
       head: -0.12 * rise,
@@ -513,9 +514,9 @@ function airPose(vy, jump, t, kev) {
   return {
     legL: mix(0.55, 0.25, fall),
     legR: mix(-0.1, 0.05, fall),
-    armL: mix(0.6, kev ? 1.8 : 2.1, fall) + flail,
-    armR: mix(1.2, kev ? 2.1 : 2.4, fall) - flail,
-    armSpread: (kev ? 0.3 : 0.15) + apex * 0.3 + fall * (kev ? 0.55 : 0.35),
+    armL: mix(0.6, 1.35, fall) + flail,
+    armR: mix(1.2, 1.5, fall) - flail,
+    armSpread: (kev ? 0.3 : 0.15) + apex * 0.3 + fall * (kev ? 0.8 : 0.65),
     lean: mix(0.06, -0.08, fall),
     head: mix(0, 0.15, fall),
     squash: -0.04 * fall,
@@ -584,7 +585,7 @@ export function heroPose(sim, t, still) {
   }
   if (h.state === 'dead') {
     const st = h.stateTime;
-    // Surprise: a flinch first (anticipation), then the arms fly up.
+    // Surprise: a flinch first (anticipation), then the arms fly out to the sides.
     if (st < 0.35) {
       const flinch = clamp(1 - st / 0.08);
       const k = clamp((st - 0.06) / 0.29);
@@ -592,9 +593,9 @@ export function heroPose(sim, t, still) {
       return {
         legL: 0.4 * k + 0.25 * flinch,
         legR: -0.4 * k + 0.25 * flinch,
-        armL: mix(0.5, 2.9, up) + Math.sin(t * 40) * 0.06 * k,
-        armR: mix(0.5, 2.9, up) - Math.sin(t * 40) * 0.06 * k,
-        armSpread: -0.45 * k,
+        armL: mix(0.5, 1.45, up) + Math.sin(t * 40) * 0.06 * k,
+        armR: mix(0.5, 1.45, up) - Math.sin(t * 40) * 0.06 * k,
+        armSpread: 1.0 * k,
         squash: mix(0.1, -0.12, k),
         head: mix(0.2, -0.3, k),
         bob: Math.sin(Math.PI * k) * (kev ? 1.6 : 2.4),
@@ -670,8 +671,8 @@ export function heroPose(sim, t, still) {
       return {
         legL: 0.7 * k + 0.2 + w * 0.15,
         legR: 0.35 * k - w * 0.1,
-        armL: 1.9 + Math.sin(t * 30) * flail,
-        armR: 1.5 - Math.sin(t * 30) * flail,
+        armL: 1.55 + Math.sin(t * 30) * flail,
+        armR: 1.3 - Math.sin(t * 30) * flail,
         armSpread: kev ? 0.7 : 0.55,
         lean: -0.5 * k - w * 0.12,
         head: -0.35 * k + w * 0.15,
@@ -768,7 +769,7 @@ export function heroPose(sim, t, still) {
   }
   // Waiting around, each in character: Kévin checks his watch (the planning!),
   // straightens his jacket and taps his foot; Charline checks her phone (a client!),
-  // looks up thinking, and stretches.
+  // looks up thinking, and stretches her back (arms low: no gesture near the face).
   if (still > 4 && !(sim.bossActive && !sim.bossDone)) {
     const k = (still - 4) % 7;
     if (kev) {
@@ -817,13 +818,14 @@ export function heroPose(sim, t, still) {
         p.armSpread = mix(p.armSpread ?? 0, 0.12, g);
       } else {
         const st = smooth(clamp((k - 4.5) / 0.6)) * (1 - smooth(clamp((k - 6.4) / 0.6)));
-        p.armL = mix(0, 2.9, st);
-        p.armR = mix(0, 2.9, st);
-        p.armSpread = 0.2 * st;
-        p.lean = -0.15 * st;
+        // Back stretch with the arms low: hands behind her back, chest out, up on her toes.
+        p.armL = mix(p.armL, -0.45, st);
+        p.armR = mix(p.armR, -0.45, st);
+        p.armSpread = mix(p.armSpread ?? 0, -0.12, st);
+        p.lean = -0.12 * st;
         p.head = -0.2 * st;
-        p.squash = -0.05 * st;
-        p.bob = (p.bob ?? 0) + st * 0.4;
+        p.squash = -0.04 * st;
+        p.bob = (p.bob ?? 0) + st * 0.8;
         if (st > 0.8) p.blink = 1;
       }
     }
