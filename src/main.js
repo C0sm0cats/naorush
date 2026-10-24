@@ -659,6 +659,21 @@ function flyoverFocus(dt) {
   return { x: f.from + (sim.hero.x - f.from) * e, y: 3, facing: 0.001 };
 }
 
+/** Rodolphe's show: coloured spotlights sweep the Espace VIP during the fight. @param {number} t */
+function stageLights(t) {
+  if (!level.boss || level.boss.id !== 'regionalDirector' || !sim.bossActive || sim.bossDone)
+    return null;
+  const [x0, x1] = level.boss.arena;
+  const mid = (x0 + x1) / 2;
+  const half = (x1 - x0) / 2 - 1;
+  const spots = [
+    { pos: [mid + Math.sin(t * 0.9) * half, 7, 0.5], radius: 8, color: [2.4, 0.6, 1.5] },
+    { pos: [mid + Math.sin(t * 0.9 + 2.2) * half, 7, 0.5], radius: 8, color: [0.6, 1.2, 2.6] },
+    { pos: [mid + Math.sin(t * 0.9 + 4.4) * half, 7, 0.5], radius: 8, color: [1.6, 2.2, 0.6] },
+  ];
+  return { ...lighting, lights: [...spots, ...lighting.lights] };
+}
+
 /** During a boss fight the camera frames both fighters. */
 function fightFocus() {
   if (!sim.bossActive || sim.bossDone || screen === 'title') return null;
@@ -823,7 +838,7 @@ function frame(now) {
   // A soft key light on the hero posing behind the title card.
   const lit = view.showcase
     ? { ...lighting, lights: [SHOWCASE_LIGHT, ...lighting.lights] }
-    : lighting;
+    : (stageLights(t) ?? lighting);
   renderer.render(cam, lit, view.items(sim, t, particles.list), view.sprites, { flash });
   if (screen === 'play' || screen === 'talk') {
     const poster = view.posterAt(sim);
