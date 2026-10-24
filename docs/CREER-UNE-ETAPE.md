@@ -33,6 +33,11 @@ Une étape est un fichier de `src/data/levels/`, enregistré dans `LEVELS` de `s
 - Le saut simple monte d’environ 1,7 case et porte à environ 3,5 cases. Kévin attrape un rebord jusqu’à environ 4,5 cases au-dessus de ses pieds, Charline encore plus haut grâce au double saut.
 - Deux secrets `*` par étape : un pour Charline (un rebord à 5 cases au-dessus du sol), un pour Kévin (une niche fermée par des cartons `A`, toute la pile tombe d’un seul CR). Un test vérifie que chaque héros en atteint au moins un.
 - Chaque piège doit se voir venir. Les pièges périodiques (tiroir, sprinkler, imprimante) se décalent selon leur colonne.
+- **Apprendre, puis tester** : un piège apparaît d’abord sans conséquence grave, puis combiné ou mortel plus loin. Exemple : la trappe cachée de LCP7 tombe dans un trou d’une case, celle de Technologies & Services au-dessus des câbles.
+- **Bornes Chronotime** : une avant chaque passage mortel (câbles, vide) : une chute ne doit pas renvoyer avant une longue section déjà réussie. Jamais dans la ronde d’un ennemi : on réapparaît dessus.
+- **Secrets** : ils récompensent (tickets, café avant un boss), jamais un objet indispensable.
+- **Souplesse des commandes** (`src/game/sim.js`) : saut accepté 0,1 s après avoir quitté un bord, saut appuyé 0,13 s avant d’atterrir conservé, pieds qui accrochent un rebord à moins d’un quart de case montent dessus, saut rappuyé au moment de s’accrocher fait grimper. Une trappe cachée cède en 0,55 s, une dalle visible en 0,45 s.
+- **Stagiaire** : il repère un héros à moins de 4,5 cases devant lui sur son étage, s’arrête net 0,4 s, puis fonce sans quitter un rayon de 4,5 cases autour de sa place. Une borne posée hors de ce rayon permet de voir la charge sans risque.
 
 ## 2. La définition
 

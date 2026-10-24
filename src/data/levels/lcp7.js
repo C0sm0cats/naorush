@@ -25,10 +25,19 @@ export const LCP7 = {
     '#             $$$ a                                                    $$$ aT            R n K  #  #',
     '#             #####            #                                      ####### #####     ####### #  #',
     '#                              #                                              A  *#             D  #',
-    '# S      B           C    c    #d        $  i  $            C  p  P      c    A$h$#             DE #',
+    '# S      B           C    c    #d     C  $  i  $            C  p  P      c    A$h$#             DE #',
     '###########  ######################LL################-----##########################################',
-    '###########^^######################^^################^^^^^##########################################',
+    '###########^^########################################^^^^^##########################################',
     '####################################################################################################',
+  ],
+  tips: [
+    {
+      x0: 37,
+      x1: 39.5,
+      keys: 'Le stagiaire s’arrête net quand il te repère… puis il fonce. Saute par-dessus, ou X : un CR et c’est la pause café.',
+      touch:
+        'Le stagiaire s’arrête net quand il te repère… puis il fonce. Saute par-dessus, ou CR : c’est la pause café.',
+    },
   ],
   decor: [
     { type: 'poster', id: 'inetum-lcp7', x: 1.2, y: 6.6 },

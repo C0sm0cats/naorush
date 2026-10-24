@@ -61,18 +61,48 @@ export function stepColleague(s, t) {
   }
 }
 
-/** Intern rushing with a pile of files: hurts on contact; a CR earns them a coffee break. @param {Sim} s @param {Thing} t */
+/** Intern pace: strolling, then rushing once they spot you ahead. */
+const INTERN_WALK = 2.2;
+const INTERN_RUSH = 4.4;
+
+/**
+ * Intern rushing with a pile of files: hurts on contact; a CR earns them a coffee break.
+ * Spotting you ahead on their floor, they stop dead (0.4 s, a telegraph), then rush.
+ * @param {Sim} s @param {Thing} t
+ */
 export function stepIntern(s, t) {
+  const hero = s.hero;
   if (t.state === 'stunned') {
     if (t.t > 4) {
-      t.state = 'walk';
-      t.t = 0;
+      Object.assign(t, { state: 'walk', t: 0, vx: Math.sign(t.vx || 1) * INTERN_WALK });
       emit(s, 'wake', t.x, t.y + 1.6);
     }
     return;
   }
-  patrol(s, t, 3);
-  if (touches(s.hero, t, 0.3, 0.8)) knock(s, s.hero, t.x, 'intern');
+  const dir = Math.sign(t.vx) || 1;
+  if (t.state === 'walk') {
+    patrol(s, t, 3);
+    const dx = hero.x + HERO.w / 2 - t.x;
+    if (
+      t.t > 1.5 &&
+      hero.state === 'ground' &&
+      Math.abs(hero.y - t.y) < 0.6 &&
+      Math.sign(dx) === Math.sign(t.vx) &&
+      Math.abs(dx) < 4.5
+    ) {
+      Object.assign(t, { state: 'notice', t: 0 });
+      emit(s, 'telegraph', t.x, t.y + 1.6);
+    }
+  } else if (t.state === 'notice') {
+    if (t.t > 0.4) Object.assign(t, { state: 'rush', t: 0, vx: dir * INTERN_RUSH });
+  } else if (t.state === 'rush') {
+    const before = t.vx;
+    patrol(s, t, 4.5);
+    // The rush ends at a wall, an edge, the end of their beat or out of breath.
+    if (t.vx !== before || t.t > 0.9)
+      Object.assign(t, { state: 'walk', t: 0, vx: Math.sign(t.vx) * INTERN_WALK });
+  }
+  if (touches(hero, t, 0.3, 0.8)) knock(s, hero, t.x, 'intern');
 }
 
 /** Robot vacuum: fast, unstoppable, but its lid is a springboard. @param {Sim} s @param {Thing} t */
@@ -206,7 +236,7 @@ export function stepCr(s, t) {
       emit(s, 'meeting', k.x, k.y + 1.6);
       return;
     }
-    if (k.kind === 'intern' && k.state === 'walk') {
+    if (k.kind === 'intern' && k.state !== 'stunned') {
       t.alive = false;
       Object.assign(k, { state: 'stunned', t: 0 });
       emit(s, 'internStun', k.x, k.y + 1.4);

@@ -9,6 +9,8 @@ import { DT, GRAVITY, HERO, TILE, emit, hurt, make, solid } from './world.js';
  */
 
 const LOOSE_DELAY = 0.45;
+/** A hidden trapdoor gives only a crack as warning: a little more time to react. */
+const HIDDEN_DELAY = 0.55;
 
 /** Periodic traps: cycle length in seconds, offset by position so neighbours differ. */
 export const PERIOD = { drawer: 2.8, sprinkler: 3.2, printer: 2.6, beamer: 3.4 };
@@ -24,7 +26,7 @@ const overlaps = (s, x0, y0, x1, y1) => {
 
 /** @param {Sim} s @param {Thing} t */
 export function stepLoose(s, t) {
-  if (t.state === 'shaking' && t.t > LOOSE_DELAY) {
+  if (t.state === 'shaking' && t.t > (t.hidden ? HIDDEN_DELAY : LOOSE_DELAY)) {
     t.state = 'falling';
     s.tiles[t.x + Math.round(t.y) * s.w] = TILE.EMPTY;
     emit(s, t.hidden ? 'trapdoor' : 'collapse', t.x + 0.5, t.y + 1);

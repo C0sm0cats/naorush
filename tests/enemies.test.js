@@ -46,6 +46,43 @@ describe('intern', () => {
     expect(r.ok).toBe(true);
     expect(has(r.events, 'hurt')).toBe(true);
   });
+  it('stops dead when spotting the hero ahead, then rushes and calms down', () => {
+    const s = sim(
+      room(20, [
+        ['S', 5, 3],
+        ['i', 11, 3],
+      ]),
+    );
+    const intern = find(s, 'intern');
+    const spot = runUntil(s, IDLE, () => intern.state === 'notice', 600);
+    expect(spot.ok).toBe(true);
+    expect(has(spot.events, 'telegraph')).toBe(true);
+    // The telegraph: frozen on the spot for a moment.
+    const x = intern.x;
+    run(s, IDLE, 20);
+    expect(intern.x).toBe(x);
+    expect(runUntil(s, IDLE, () => intern.state === 'rush', 30).ok).toBe(true);
+    expect(Math.abs(intern.vx)).toBeGreaterThan(4);
+    expect(runUntil(s, IDLE, () => intern.state === 'walk', 120).ok).toBe(true);
+    expect(Math.abs(intern.vx)).toBeCloseTo(2.2, 5);
+    // The rush stays on the intern's beat: a hero standing back is never reached.
+    expect(s.hero.hearts).toBe(HERO_STATS.kevin.hearts);
+  });
+
+  it('can be stunned mid-telegraph', () => {
+    const s = sim(
+      room(20, [
+        ['S', 5, 3],
+        ['i', 11, 3],
+      ]),
+    );
+    const intern = find(s, 'intern');
+    expect(runUntil(s, IDLE, () => intern.state === 'notice', 600).ok).toBe(true);
+    s.hero.facing = 1;
+    run(s, input({ fire: true }), 1);
+    untilCrGone(s);
+    expect(intern.state).toBe('stunned');
+  });
 });
 
 describe('robot vacuum', () => {

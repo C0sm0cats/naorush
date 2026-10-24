@@ -52,8 +52,14 @@ export { DT, HERO, HERO_STATS, TILE, tileAt };
  */
 
 const MAX_FALL = 22;
-const COYOTE = 0.09;
-const BUFFER = 0.12;
+/** Grace after running off an edge during which a jump still counts. */
+const COYOTE = 0.1;
+/** A jump pressed this early before landing (or grabbing) is kept. */
+const BUFFER = 0.13;
+/** Clipping a ledge by less than this with the feet steps onto it. */
+const LIP = 0.25;
+/** Turning around on the ground bites harder than speeding up. */
+const SKID = 1.6;
 const HURT_FALL = 6.5;
 
 /** Map characters drawn as solid blocks (with their own look). */
@@ -306,7 +312,9 @@ export function step(s, input) {
       hero.state = 'air';
       hero.fallFrom = hero.y;
       hero.x -= hero.facing * 0.08;
-    } else if ((pressed || input.up) && hero.stateTime > 0.12) {
+    } else if ((hero.buffer > 0 || input.up) && hero.stateTime > 0.12) {
+      // A jump pressed just as the hands close is remembered: it climbs.
+      hero.buffer = 0;
       hero.state = 'climb';
       hero.stateTime = 0;
       emit(s, 'climb', hero.ledge.x, hero.ledge.y);
@@ -350,7 +358,9 @@ export function step(s, input) {
   const dir = (input.right ? 1 : 0) - (input.left ? 1 : 0);
   if (dir) hero.facing = dir;
   const target = dir * st.run;
-  const accel = hero.state === 'ground' ? st.accel : st.accel * 0.6;
+  const turning = dir !== 0 && hero.vx * dir < 0;
+  const accel =
+    hero.state === 'ground' ? st.accel * (turning ? SKID : 1) : st.accel * (turning ? 0.8 : 0.6);
   if (hero.vx < target) hero.vx = Math.min(target, hero.vx + accel * DT);
   else if (hero.vx > target) hero.vx = Math.max(target, hero.vx - accel * DT);
 
@@ -381,9 +391,21 @@ export function step(s, input) {
 
   // Move X.
   const nx = hero.x + hero.vx * DT;
+  const lip = Math.ceil(hero.y) - hero.y;
   if (!blocked(s, nx, hero.y, HERO.w, HERO.h)) {
     hero.x = nx;
     if (hero.state === 'ground') hero.run += Math.abs(hero.vx) * DT;
+  } else if (
+    // Ledge forgiveness: feet a hair under a ledge top, past the apex, step up onto it.
+    hero.state === 'air' &&
+    hero.vy <= 0 &&
+    lip > 0 &&
+    lip < LIP &&
+    !blocked(s, nx, hero.y + lip, HERO.w, HERO.h)
+  ) {
+    hero.x = nx;
+    hero.y += lip;
+    hero.vy = 0;
   } else hero.vx = 0;
 
   // Move Y. Lifts are one-way platforms: you land on their top and ride them.

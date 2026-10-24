@@ -103,11 +103,44 @@ describe('ledge grabs', () => {
     expect(jumpAt('charline', 6, true).grabbed).toBe(false);
   });
 
+  it('climbs when jump is pressed again just as the hands close', () => {
+    const { s } = jumpAt('kevin', 4);
+    run(s, IDLE, 1);
+    run(s, input({ jump: true }), 1);
+    const r = runUntil(s, IDLE, (x) => x.hero.state === 'ground', 120);
+    expect(r.ok).toBe(true);
+    expect(has(r.events, 'climb')).toBe(true);
+  });
+
   it('climbs onto the ledge after a grab', () => {
     const { s } = jumpAt('kevin', 4);
     const r = runUntil(s, input({ up: true }), (x) => x.hero.state === 'ground', 120);
     expect(r.ok).toBe(true);
     expect(s.hero.y).toBe(7);
     expect(has(r.events, 'climb')).toBe(true);
+  });
+});
+
+describe('ledge forgiveness', () => {
+  // A block whose top is at y = 5, two tiles above the floor.
+  const def = room(16, [['S', 3, 3], ...fill('#', 7, 14, 3, 4)]);
+
+  it('steps up onto a ledge clipped by a hair with the feet', () => {
+    const s = sim(def, 'kevin');
+    Object.assign(s.hero, { x: 6.3, y: 4.82, vx: 3, vy: -0.5, state: 'air', fallFrom: 5 });
+    const r = runUntil(s, input({ right: true }), (x) => x.hero.state === 'ground', 30);
+    expect(r.ok).toBe(true);
+    expect(s.hero.y).toBe(5);
+  });
+
+  it('does not lift anyone over a two-tile wall', () => {
+    for (const hero of /** @type {const} */ (['kevin', 'charline'])) {
+      const s = sim(def, hero);
+      s.hero.x = 7 - 0.63;
+      // A single held jump against the wall.
+      run(s, input({ right: true, jump: true }), 40);
+      run(s, input({ right: true }), 40);
+      expect(s.hero.y, hero).toBe(3);
+    }
   });
 });
