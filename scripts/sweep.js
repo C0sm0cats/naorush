@@ -1,6 +1,7 @@
 // Walks the hero through every stage of a running dev server and reports page errors:
 //   npm run dev -- --port 5210 & npm run sweep -- http://localhost:5210/
 import { chromium } from 'playwright';
+import { LEVELS } from '../src/data/levels/index.js';
 
 const url = process.argv[2] ?? 'http://localhost:5173/';
 const browser = await chromium.launch({
@@ -19,7 +20,7 @@ await page.goto(url);
 await page.waitForFunction(() => document.body.dataset.screen === 'title', null, {
   timeout: 60000,
 });
-for (let s = 0; s < 7; s++) {
+for (let s = 0; s < LEVELS.length; s++) {
   await page.evaluate(`(${nao})().stage(${s})`);
   await page.waitForFunction(`(${nao})().screen === 'talk'`, null, { timeout: 120000 });
   const w = await page.evaluate(`(${nao})().sim.w`);
