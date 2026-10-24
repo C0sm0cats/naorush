@@ -7,7 +7,10 @@ const VOL_DEFAULT = { music: 0.7, sfx: 0.8 };
 const BUS_GAIN = { music: 0.22 / 0.7, sfx: 0.5 / 0.8 };
 const MASTER = 0.8;
 const FADE = 0.6;
-const LAYER_TC = 0.13; // setTargetAtTime constant: ~95 % after 0.4 s
+// Layer ramps (setTargetAtTime constants): layers come in on the next beat, quickly,
+// and leave gently.
+const LAYER_IN_TC = 0.06;
+const LAYER_OUT_TC = 0.5;
 const LOOKAHEAD = 0.14;
 const TICK_MS = 25;
 
@@ -22,6 +25,7 @@ const TICK_MS = 25;
  * @property {number} [a] attack (s)
  * @property {number} [lp] lowpass cutoff (Hz)
  * @property {number} [lpTo] lowpass cutoff at the end (filter envelope)
+ * @property {BiquadFilterType} [ft] filter type for `lp` (default lowpass; bandpass = formant)
  * @property {number} [q] lowpass resonance
  * @property {number} [det] adds a second oscillator detuned by this many cents
  * @property {number} [pan] stereo position -1..1
@@ -56,12 +60,13 @@ const TICK_MS = 25;
  * @property {number} cutoff
  * @property {string} bass 1 root, 2 octave, 3 third, 4 fourth, 5 fifth, b flat seventh,
  *   w chromatic approach to the next bar's root
- * @property {'triangle'|'saw'|'slap'} [bassWave]
+ * @property {'triangle'|'saw'|'slap'|'pluck'} [bassWave] pluck: short pizzicato notes
  * @property {string} kick
  * @property {string} snare
  * @property {string} hat '1' closed, 'o' open
  * @property {string} [clap]
  * @property {string} [stab] chord stabs
+ * @property {string} [rim] rimshot / clave
  * @property {number} [arp] base arpeggio resolution: 8 or 16
  * @property {boolean} [pad]
  * @property {OscillatorType} [padWave]
@@ -73,6 +78,14 @@ const TICK_MS = 25;
  * @property {number} [echo] melody echo send 0..1
  * @property {OscillatorType} [leadWave] intensity-1 arpeggio wave
  * @property {boolean} [once] plays once instead of looping
+ * @property {number} [swing] off-beat eighths late by this fraction of a sixteenth
+ * @property {boolean} [sev] seventh chords in the comp, pad and stabs
+ * @property {boolean} [rhodes] electric-piano stabs (sine tines) instead of saw stabs
+ * @property {boolean} [shaker] softer, duller hats
+ * @property {boolean} [mallet] marimba-like melody (struck, short decay)
+ * @property {boolean} [pulse] sixteenth-note resonant bass sequence, filter swept over 4 bars
+ * @property {boolean} [choir] vowel-formant choir pad instead of the plain pad
+ * @property {boolean} [horns] long melody notes doubled by a brass section an octave below
  * @property {Section[]} [form] song form; each section lasts as long as its melody (default: once)
  */
 /**
@@ -87,6 +100,7 @@ const TICK_MS = 25;
  * @property {string} [hat]
  * @property {string} [clap]
  * @property {string} [stab]
+ * @property {string} [rim]
  * @property {boolean} [thin] breakdown: the drive layer drops its kicks and claps
  */
 /**
@@ -101,6 +115,7 @@ const TICK_MS = 25;
  * @property {string} hat
  * @property {string} clap
  * @property {string} stab
+ * @property {string} rim
  * @property {boolean} thin
  * @property {number} sec section index in the form
  * @property {boolean} start first bar of its section
@@ -108,7 +123,7 @@ const TICK_MS = 25;
  * @property {number} next chord offset of the following bar (wraps at the loop point)
  */
 /**
- * @typedef {'title'|'parking'|'office'|'datacenter'|'copil'|'rooftop'|'bossJulien'|'bossRodolphe'|'win'|'gameover'|'credits'} TrackName
+ * @typedef {'title'|'parking'|'office'|'datacenter'|'copil'|'rooftop'|'intercontrat'|'cafe'|'seminar'|'bossJulien'|'bossRodolphe'|'win'|'gameover'|'credits'} TrackName
  */
 /**
  * @typedef {object} Run
@@ -120,6 +135,7 @@ const TICK_MS = 25;
  * @property {GainNode} drive
  * @property {GainNode} lead
  * @property {GainNode} wet melody send (to base + echo)
+ * @property {{ base: Voice, wet: Voice, drive: Voice, lead: Voice }} voices one per layer, reused
  * @property {AudioNode[]} nodes everything to disconnect on stop
  * @property {ReturnType<typeof setInterval> | null} timer
  * @property {number} step sixteenth index
@@ -130,6 +146,7 @@ const MAJOR = [0, 2, 4, 5, 7, 9, 11];
 const MINOR = [0, 2, 3, 5, 7, 8, 10];
 const DORIAN = [0, 2, 3, 5, 7, 9, 10];
 const HARMONIC = [0, 2, 3, 5, 7, 8, 11];
+const MIXOLYDIAN = [0, 2, 4, 5, 7, 9, 10];
 
 /** @param {number} m */
 const mtof = (m) => 440 * 2 ** ((m - 69) / 12);
@@ -404,6 +421,136 @@ const SONGS = {
       },
     ],
   },
+  // Bonus: the inter-contract floor on a Friday afternoon. Bouncy marimba, pizzicato bass
+  // and a little shuffle: consultants between two missions keep busy, cheerfully.
+  intercontrat: {
+    bpm: 112,
+    root: 43,
+    lead: 24,
+    scale: MIXOLYDIAN,
+    wave: 'triangle',
+    cutoff: 3200,
+    mallet: true,
+    swing: 0.28,
+    chords: chords('0 10 5 0 0 10 5 7'),
+    melody: bars('7.4.2.4. 6.5.3.1. 3.5.7.5. 4-2-0--- 7.9.b.9. 8.6.5.3. 5.3.5.7. 8.4.1.4.'),
+    bass: '1.5.1.5.',
+    bassWave: 'pluck',
+    kick: '1..1..1.',
+    snare: '..1...1.',
+    hat: '.1.1.1.1',
+    comp: true,
+    echo: 0.15,
+    form: [
+      {},
+      {
+        chords: chords('5 5 0 0 5 5 10 7'),
+        melody: bars('7-5-3-5- 7.8.7.5. 4-2-4-7- 9------- a-9-7-5- 3.5.7.a. 8-6-3-1- 8---b---'),
+        bass: '1.3.5.3w',
+        hat: '.1.1.111',
+      },
+      {
+        counter: bars('2---4--- 1---3--- 3---5--- 2---4--- 4---2--- 3---1--- 5---3--- 4---1---'),
+        bass: '1.5.1.5w',
+      },
+      {
+        chords: chords('9m 5 10 7'),
+        melody: bars('5------- 3---7--- 6---3--- 4---8---'),
+        bass: '1...5...',
+        kick: '1.......',
+        snare: '........',
+        thin: true,
+      },
+    ],
+  },
+  // Bonus: the break room, Friday 10:30. Laid-back bossa: Rhodes chords, clave, shaker.
+  cafe: {
+    bpm: 100,
+    root: 41,
+    lead: 24,
+    scale: MAJOR,
+    wave: 'triangle',
+    cutoff: 2400,
+    sev: true,
+    rhodes: true,
+    shaker: true,
+    chords: chords('0 9m 2m 7 4m 9m 2m 7'),
+    melody: bars('6--4-2-- 5-4-2-0- 1--3-5-- 4---3-2- 2--4-6-- 5-7-5-4- 3--1-5-- 4-------'),
+    bass: '1..51..5',
+    kick: '1..11..1',
+    snare: '........',
+    hat: '11111111',
+    rim: '1..1..1...1..1..',
+    stab: '1..1...1..1..1..',
+    echo: 0.2,
+    form: [
+      {},
+      {
+        chords: chords('5 4m 2m 0 5 4m 2m 7'),
+        melody: bars('7-5-3-2- 2-4-6-8- 7--5-3-- 2------- 9-7-5-3- 8-6-4-2- 5-3-1-3- 4---6-8-'),
+        bass: '1..51.3w',
+      },
+      {
+        counter: bars('2------- 0------- 1---3--- 6---3--- 4------- 5---7--- 3---1--- 4---6---'),
+        bass: '1..51..w',
+      },
+      {
+        chords: chords('5 5m 0 7'),
+        melody: bars('9------- 7---3--- 6---4--- 3---1---'),
+        bass: '1---5---',
+        kick: '1.......',
+        rim: '1.....1.....1...',
+        thin: true,
+      },
+    ],
+  },
+  // Bonus: the annual seminar, evening at the congress centre. Disco-funk gala: four on
+  // the floor, slap octaves, string pad and seventh-chord stabs.
+  seminar: {
+    bpm: 118,
+    root: 45,
+    lead: 24,
+    scale: DORIAN,
+    wave: 'sawtooth',
+    det: 6,
+    cutoff: 2200,
+    sev: true,
+    chords: chords('0m 5 0m 5 3 10 7m 5'),
+    melody: bars('7..6..4. 5.3.0... 2.4.6.7. 8-7-5--- 9..6..4. 8.6.3.1. 4.6.8.6. 5---3---'),
+    bass: '12121212',
+    bassWave: 'slap',
+    kick: '1.1.1.1.',
+    snare: '........',
+    hat: '.o.o.o.o',
+    clap: '....1.......1...',
+    stab: '..1...1.',
+    pad: true,
+    echo: 0.3,
+    leadWave: 'triangle',
+    form: [
+      {},
+      {
+        chords: chords('3 10 5 0m 3 10 5 5'),
+        melody: bars('9-9-7-6- 6-8-a--- a-9-7-5- 7------- 9.9.b.9. a.8.6.8. 7.5.3.5. 7---a---'),
+        bass: '12151215',
+        stab: '..1..11.',
+      },
+      {
+        counter: bars('4---2--- 3---5--- 6---4--- 5---3--- 2---6--- 1---3--- 4---1--- 3---0---'),
+        bass: '1212121w',
+      },
+      {
+        chords: chords('3 10 5 5'),
+        melody: bars('6------- 8---6--- 5---7--- a---7---'),
+        bass: '1-------',
+        kick: '1.......',
+        clap: '................',
+        hat: '.1.1.1.1',
+        stab: '1.......',
+        thin: true,
+      },
+    ],
+  },
   bossJulien: {
     bpm: 140,
     root: 35,
@@ -414,8 +561,8 @@ const SONGS = {
     cutoff: 2000,
     chords: chords('0m 0m 8 8 5m 5m 7 7'),
     melody: bars('4...7.6. 7.4.2.0. 5...9.8. 7.5.4.2. 3...7.5. 3.4.5.6. 6...4... 6.8.6.4.'),
-    bass: '11111112',
-    bassWave: 'saw',
+    bass: '1.1.1.12',
+    pulse: true,
     kick: '1.1.1.1.',
     snare: '..1...1.',
     hat: '.1.1.1.1',
@@ -432,26 +579,27 @@ const SONGS = {
           '7.5.3.5.7...3... 6.4.1.4.6...8... 7.4.2.4.7.9.7.4. 5.2.0.2.5...9... ' +
             '3.5.7.9.a.9.7.5. 4.6.8.6.4...1... 5.7.9.7.5.4.2.0. 1...4...6...8...',
         ),
-        bass: '12151215',
+        bass: '1.1.5.12',
         kick: '1.1.1.11',
         hat: '11111111',
       },
       {
         counter: bars('4---2--- 0---2--- 2---0--- 5---2--- 3---5--- 7---5--- 6---4--- 4---1---'),
-        bass: '1111111w',
+        bass: '1.1.1.1w',
       },
       {
         chords: chords('8 8 7 7'),
         melody: bars('5------- 7---9--- 6------- 4---8---'),
-        bass: '11111111',
+        bass: '1.......',
         snare: '........',
         hat: '11111111',
         thin: true,
       },
     ],
   },
+  // The final boss: stately tempo, a choir, a brass section and timpani. Grand, never mocking.
   bossRodolphe: {
-    bpm: 138,
+    bpm: 128,
     root: 36,
     lead: 24,
     scale: MINOR,
@@ -466,7 +614,8 @@ const SONGS = {
     snare: '....1...',
     hat: '1.1.1.1.',
     stab: '1..1..1.',
-    pad: true,
+    choir: true,
+    horns: true,
     big: true,
     echo: 0.3,
     form: [
@@ -502,7 +651,7 @@ const SONGS = {
     wave: 'square',
     cutoff: 3200,
     chords: chords('0 5 7 0'),
-    melody: bars('0.24.79. 7.5.7.a. 8.6.8.b. 9.7.9.e.'),
+    melody: bars('4.24.7-. 7.5.7.a. 8.6.8.b. 9.7.9.e.'),
     bass: '1.5.1.5.',
     kick: '1.1.1.1.',
     snare: '..1...1.',
@@ -591,6 +740,7 @@ function compile(def) {
         hat: sec.hat ?? def.hat,
         clap: sec.clap ?? def.clap ?? '',
         stab: sec.stab ?? def.stab ?? '',
+        rim: sec.rim ?? def.rim ?? '',
         thin: !!sec.thin,
         sec: si,
         start: k === 0,
@@ -609,6 +759,12 @@ const BARS = /** @type {Record<TrackName, Bar[]>} */ (
   Object.fromEntries(TRACKS.map((n) => [n, compile(SONGS[n])]))
 );
 
+/** Tempo, length in bars and loop length in seconds of a track (sound test, tests). */
+export const trackInfo = (/** @type {TrackName} */ name) => {
+  const { bpm, once } = SONGS[name];
+  const n = BARS[name].length;
+  return { bpm, bars: n, seconds: (n * 4 * 60) / bpm, loops: !once };
+};
 /** Uniform random number in [lo, hi), for per-play variation. */
 const rnd = (/** @type {number} */ lo, /** @type {number} */ hi) => lo + Math.random() * (hi - lo);
 /** @template T @param {T[]} list @returns {T} */
@@ -682,6 +838,24 @@ const sizzle = (
 ) => {
   v.noise({ t, d, type: 'highpass', f: 6500, v: vol, a: 0.002 });
   v.noise({ t, d: d * 0.6, type: 'bandpass', f: 9000, q: 1.5, v: vol * 0.6, a: 0.002 });
+};
+
+/**
+ * The game's signature: the title-theme hook (sol mi sol do) played as chip notes from
+ * `root` (Hz of the top "do"), spaced by `gap` seconds; returns when the last note starts.
+ */
+const signature = (
+  /** @type {Voice} */ v,
+  /** @type {number} */ t,
+  /** @type {number} */ root,
+  /** @type {number} */ gap,
+  /** @type {number} */ vol,
+  last = 0.3,
+) => {
+  [0.75, 0.63, 0.75, 1].forEach((r, i) =>
+    note(v, t + i * gap, root * r, i === 3 ? last : gap * 0.9, vol),
+  );
+  return t + 3 * gap;
 };
 
 /** @type {Record<string, (v: Voice) => void>} */
@@ -847,7 +1021,7 @@ const SFX = {
       vib: [47, 220],
     });
     v.tone({ f: 190, t, d: 0.2, type: 'square', v: 0.05, lp: 2500, vib: [53, 260] });
-    v.noise({ t, d: 0.22, type: 'highpass', f: 2500, v: 0.15 });
+    v.noise({ t, d: 0.22, type: 'bandpass', f: 2400, q: 0.7, v: 0.15 });
     for (let i = 0; i < 6; i++) {
       const at = t + i * 0.035 + rnd(0, 0.01);
       v.tone({ f: rnd(300, 1800), t: at, d: 0.025, type: 'square', v: 0.06, lp: 3000 });
@@ -973,14 +1147,16 @@ const SFX = {
     v.noise({ t, d: 0.14, f: 1600, to: 300, v: 0.22, a: 0.004 });
     v.noise({ t: t + 0.02, d: 0.16, type: 'bandpass', f: 2500, to: 900, q: 0.8, v: 0.06, a: 0.03 });
   },
+  // Stage clear: the signature hook, then it lifts to a bright chord with a cymbal.
   win: (v) => {
     const t = v.now;
-    for (const [i, f] of [523, 659, 784, 1047, 784, 1047, 1319].entries()) {
-      note(v, t + i * 0.1, f, i === 6 ? 0.7 : 0.14, 0.12);
-    }
-    thump(v, t + 0.6, 130, 65, 0.18, 0.25);
-    for (const f of [1568, 2093, 2637]) v.tone({ f, t: t + 0.6, d: 0.7, v: 0.025, a: 0.04 });
-    sizzle(v, t + 0.6, 0.6, 0.035);
+    const top = signature(v, t, 523, 0.11, 0.12, 0.2) + 0.15;
+    note(v, top, 659, 0.7, 0.11);
+    note(v, top, 784, 0.7, 0.07);
+    note(v, top, 1047, 0.7, 0.07);
+    thump(v, top, 130, 65, 0.18, 0.25);
+    for (const f of [1568, 2093, 2637]) v.tone({ f, t: top, d: 0.7, v: 0.025, a: 0.04 });
+    sizzle(v, top, 0.6, 0.035);
   },
   // Dialogue blip: a tiny two-formant "voice" with a random vowel.
   talk: (v) => {
@@ -1093,8 +1269,8 @@ const SFX = {
   sprayOn: (v) => {
     const t = v.now;
     click(v, t, 2200, 0.12, 3);
-    v.noise({ t: t + 0.01, d: 0.45, type: 'highpass', f: 4000, v: 0.19, a: 0.04 });
-    v.noise({ t: t + 0.01, d: 0.4, type: 'bandpass', f: rnd(6000, 7000), q: 2, v: 0.11, a: 0.06 });
+    v.noise({ t: t + 0.01, d: 0.45, type: 'bandpass', f: 4200, q: 0.6, v: 0.19, a: 0.04 });
+    v.noise({ t: t + 0.01, d: 0.4, type: 'bandpass', f: rnd(5500, 6500), q: 2, v: 0.06, a: 0.06 });
     v.noise({ t: t + 0.01, d: 0.12, type: 'bandpass', f: 2500, q: 1, v: 0.06, a: 0.01 });
   },
   // Paper shot: rubber-band twang, swish, then the wad flutters down.
@@ -1230,11 +1406,15 @@ const SFX = {
     }
     sizzle(v, t, 0.4, 0.03);
   },
+  // Attack warning: a rising wood-block "tock-tick", clear but soft (it plays often).
   telegraph: (v) => {
     const t = v.now;
-    note(v, t, 1760, 0.06, 0.09);
-    note(v, t + 0.07, 2349, 0.09, 0.09);
-    v.tone({ f: 4698, t: t + 0.07, d: 0.08, v: 0.015 });
+    for (const [k, f] of [880, 1320].entries()) {
+      const at = t + k * 0.08;
+      v.tone({ f, t: at, d: 0.16, type: 'triangle', v: 0.2, a: 0.002 });
+      v.tone({ f: f * 2.01, t: at, d: 0.06, v: 0.05, a: 0.002 });
+      click(v, at, f * 2.5, 0.05, 4, 0.01);
+    }
   },
   // Server rack falling: descending whistle with a rattle.
   rackDrop: (v) => {
@@ -1282,7 +1462,14 @@ const SFX = {
     v.tone({ f: 120, t, d: 0.2, type: 'sawtooth', v: 0.13, lp: 2000, lpTo: 700 });
     v.tone({ f: 240, t, d: 0.15, type: 'square', v: 0.03, lp: 1500 });
     for (let i = 0; i < 8; i++) {
-      v.noise({ t: t + rnd(0, 0.22), d: 0.02, type: 'highpass', f: 3000, v: 0.2 });
+      v.noise({
+        t: t + rnd(0, 0.22),
+        d: 0.02,
+        type: 'bandpass',
+        f: rnd(2000, 3200),
+        q: 0.9,
+        v: 0.2,
+      });
     }
   },
   fan: (v) => {
@@ -1334,12 +1521,13 @@ const SFX = {
   },
   fireworks: (v) => {
     const t = v.now;
-    thump(v, t, 300, 80, 0.08, 0.38);
-    v.noise({ t, d: 0.1, f: 1200, v: 0.28 });
+    thump(v, t, 300, 80, 0.08, 0.2);
+    v.noise({ t, d: 0.1, f: 1200, v: 0.16 });
     v.tone({ f: 600, to: 1800, t: t + 0.05, d: 0.2, v: 0.03, a: 0.1 });
     for (let i = 0; i < 12; i++) {
       const at = t + 0.25 + rnd(0, 0.6);
-      v.noise({ t: at, d: 0.02, type: 'highpass', f: 4000, v: 0.14, pan: rnd(-0.5, 0.5) });
+      const f = rnd(2600, 4000);
+      v.noise({ t: at, d: 0.02, type: 'bandpass', f, q: 1, v: 0.14, pan: rnd(-0.5, 0.5) });
     }
   },
   // Signature: pen scribble, rubber stamp, little success jingle.
@@ -1350,12 +1538,12 @@ const SFX = {
       const at = t + i * 0.045 + rnd(0, 0.01);
       v.noise({ t: at, d: 0.035, type: 'bandpass', f: rnd(3000, 4500), q: 3, v: 0.14 });
     }
-    thump(v, t + 0.35, 140, 60, 0.15, 0.48);
-    v.noise({ t: t + 0.35, d: 0.06, f: 600, v: 0.28 });
-    click(v, t + 0.35, 900, 0.12, 4, 0.02);
-    for (const [i, f] of [523, 659, 784, 1047].entries()) {
-      note(v, t + 0.55 + i * 0.09, f, i === 3 ? 0.35 : 0.1, 0.09);
-    }
+    thump(v, t + 0.35, 140, 60, 0.15, 0.3);
+    v.noise({ t: t + 0.35, d: 0.06, f: 600, v: 0.18 });
+    click(v, t + 0.35, 900, 0.1, 4, 0.02);
+    // The signature hook, in G to lead into the credits theme.
+    const top = signature(v, t + 0.55, 784, 0.085, 0.11, 0.4);
+    chime(v, top, 1568, 0.5, 0.04);
   },
 
   // --- UI ---
@@ -1376,44 +1564,45 @@ const SFX = {
     v.tone({ f: 440, t: t + 0.48, d: 0.5, v: 0.09 });
     v.tone({ f: 175, t: t + 0.48, d: 0.55, type: 'triangle', v: 0.1 });
   },
+  // Menu tick: short and rounded, it repeats a lot.
   menuMove: (v) => {
-    v.tone({ f: 1200, t: v.now, d: 0.02, type: 'square', v: 0.065, lp: 4000 });
-    v.tone({ f: 600, t: v.now, d: 0.025, type: 'triangle', v: 0.05 });
-    v.noise({ t: v.now, d: 0.01, type: 'highpass', f: 5000, v: 0.08 });
+    v.tone({ f: 1100, t: v.now, d: 0.025, type: 'square', v: 0.06, lp: 2400 });
+    v.tone({ f: 550, t: v.now, d: 0.03, type: 'triangle', v: 0.06 });
+    click(v, v.now, 2500, 0.04, 2, 0.008);
   },
 };
 
 /* AUDIT-TRIM-START */
 /** Loudness trim per effect (dB), measured so all effects sit at a similar RMS. @type {Record<string, number>} */
 const SFX_TRIM_DB = {
-  jump: 8,
-  airjump: 12,
+  jump: 7,
+  airjump: 10,
   land: 1,
-  hardland: 4,
-  ticket: 11,
-  ammo: 13,
+  hardland: 1,
+  ticket: 10,
+  ammo: 12,
   checkpoint: 13,
   door: 11,
-  key: 9,
-  collapse: 7,
-  smash: 11,
+  key: 11,
+  collapse: 6,
+  smash: 9,
   splash: 16,
   hurt: 6,
   zap: 11,
   bump: 5,
   meeting: 10,
-  empty: 15,
+  empty: 17,
   fire: 18,
-  parry: 8,
+  parry: 6,
   block: 2,
-  bossStart: 6,
+  bossStart: 4,
   bossThrow: 16,
   bossHit: 2,
   bossDone: 10,
   consult: 6,
-  slam: 2,
-  poof: 11,
-  win: 16,
+  slam: 0,
+  poof: 14,
+  win: 15,
   talk: 13,
   select: 8,
   confirm: 8,
@@ -1421,10 +1610,10 @@ const SFX_TRIM_DB = {
   grab: 8,
   climb: 13,
   death: 11,
-  respawn: 17,
+  respawn: 15,
   chairRoll: 23,
   drawerOut: 8,
-  sprayOn: 10,
+  sprayOn: 11,
   paperShot: 19,
   trapdoor: 7,
   binderFall: 6,
@@ -1436,20 +1625,20 @@ const SFX_TRIM_DB = {
   crack: 15,
   secret: 14,
   bossPhase: 5,
-  telegraph: 11,
-  rackDrop: 12,
-  rackLand: 5,
+  telegraph: 9,
+  rackDrop: 11,
+  rackLand: 4,
   teleport: 15,
   cableWarn: 17,
-  cableZap: 12,
+  cableZap: 14,
   fan: 21,
   dash: 15,
   zoneWarn: 13,
-  zoneHit: 5,
+  zoneHit: 2,
   spot: 6,
   curtain: 18,
-  fireworks: 10,
-  sign: 9,
+  fireworks: 15,
+  sign: 12,
   pause: 11,
   resume: 11,
   gameover: 12,
@@ -1463,8 +1652,11 @@ const TRACK_TRIM_DB = {
   datacenter: 4,
   copil: 2,
   rooftop: 1,
+  intercontrat: 2,
+  cafe: 2,
+  seminar: 0,
   bossJulien: 2,
-  bossRodolphe: 1,
+  bossRodolphe: 2,
   win: 2,
   gameover: 8,
   credits: 4,
@@ -1500,9 +1692,55 @@ function loadVolume(bus) {
 }
 
 const AMB_FADE = 1;
-const AMBIENCE_NAMES = ['office', 'datacenter', 'parking', 'rooftop', 'copil'];
+/** @typedef {'office' | 'datacenter' | 'parking' | 'rooftop' | 'copil' | 'cafe' | 'seminar'} Bed */
+/** @type {Bed[]} */
+export const AMBIENCES = ['office', 'datacenter', 'parking', 'rooftop', 'copil', 'cafe', 'seminar'];
 // Per-bed output trim (dB), tuned so each bed sits around -40 dBFS RMS at default volumes.
-const AMB_TRIM_DB = { office: -12, datacenter: -26, parking: -19, rooftop: -22, copil: -16 };
+const AMB_TRIM_DB = {
+  office: -12,
+  datacenter: -26,
+  parking: -19,
+  rooftop: -22,
+  copil: -16,
+  cafe: -12,
+  seminar: -17,
+};
+
+/** Music of each stage, by level id (falls back to the level's own `music`). @type {Record<string, TrackName>} */
+const STAGE_MUSIC = {
+  parking: 'parking',
+  lcp7: 'office',
+  ts: 'datacenter',
+  copil: 'copil',
+  rooftop: 'rooftop',
+  intercontrat: 'intercontrat',
+  pause: 'cafe',
+  seminaire: 'seminar',
+};
+/** Ambient bed of each stage, by level id (falls back to the level's `theme`). @type {Record<string, Bed>} */
+const STAGE_BED = {
+  parking: 'parking',
+  lcp7: 'office',
+  ts: 'datacenter',
+  copil: 'copil',
+  rooftop: 'rooftop',
+  intercontrat: 'office',
+  pause: 'cafe',
+  seminaire: 'seminar',
+};
+/** Every stage id known to the audio, in play order. */
+export const STAGES = Object.keys(STAGE_MUSIC);
+/** @typedef {{ id: string, music?: string, theme?: string }} StageRef */
+/** @param {StageRef} level @returns {TrackName | null} */
+export const stageTrack = (level) =>
+  STAGE_MUSIC[level.id] ??
+  (level.music && Object.hasOwn(SONGS, level.music)
+    ? /** @type {TrackName} */ (level.music)
+    : null);
+/** @param {StageRef} level @returns {Bed | null} */
+export const stageBed = (level) =>
+  STAGE_BED[level.id] ??
+  (AMBIENCES.includes(/** @type {Bed} */ (level.theme)) ? /** @type {Bed} */ (level.theme) : null);
 
 /**
  * Builds one ambient bed into `dest`. Random events use their own timeouts, all cleared by `stop`.
@@ -1605,8 +1843,13 @@ function buildBed(ctx, buf, dest, name) {
     };
   };
   /** Short filtered noise tick (keyboard click). */
-  const tick = (/** @type {number} */ f, /** @type {number} */ peak, /** @type {number} */ dur) => {
-    const t = ctx.currentTime;
+  const tick = (
+    /** @type {number} */ f,
+    /** @type {number} */ peak,
+    /** @type {number} */ dur,
+    delay = 0,
+  ) => {
+    const t = ctx.currentTime + delay;
     const src = ctx.createBufferSource();
     src.buffer = buf;
     const bp = ctx.createBiquadFilter();
@@ -1654,6 +1897,74 @@ function buildBed(ctx, buf, dest, name) {
         blip('sine', 1000, 0.012, 0.09, lp, k * 0.12 + 0.06);
       }
       setTimeout(() => lp.disconnect(), 900);
+    });
+  } else if (name === 'cafe') {
+    // Break room: room tone, a light murmur, spoons on cups, the espresso machine now and then.
+    noise([filt('lowpass', 500, 0.5), filt('lowpass', 900, 0.4)], 0.4);
+    [
+      [420, 0.27],
+      [760, 0.37],
+    ].forEach(([f, hz]) => {
+      const am = gain(0.4);
+      lfo(am.gain, hz, 0.35);
+      lfo(am.gain, hz * 2.3, 0.12);
+      noise([filt('bandpass', f, 3)], 0.8, am);
+      am.connect(out);
+    });
+    every(2500, 7000, () => {
+      const f = 2400 + Math.random() * 1200;
+      const n = 1 + Math.floor(Math.random() * 3);
+      for (let k = 0; k < n; k++) {
+        blip('sine', f, 0.02, 0.18, out, k * 0.09);
+        blip('sine', f * 2.71, 0.006, 0.08, out, k * 0.09);
+      }
+    });
+    every(20000, 40000, () => {
+      // Espresso: a pump buzz under a steamy hiss that swells and fades.
+      const t = ctx.currentTime;
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 3200;
+      bp.Q.value = 0.8;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.05, t + 0.6);
+      g.gain.setValueAtTime(0.05, t + 2);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 3);
+      src.connect(bp).connect(g).connect(out);
+      src.start(t, Math.random());
+      src.stop(t + 3.1);
+      blip('sawtooth', 100, 0.004, 2.6, out);
+      src.onended = () => {
+        src.disconnect();
+        bp.disconnect();
+        g.disconnect();
+      };
+    });
+  } else if (name === 'seminar') {
+    // Congress hall: low room rumble, a big crowd murmur, and polite applause now and then.
+    noise([filt('lowpass', 180, 0.7)], 1.2);
+    [
+      [300, 0.21],
+      [480, 0.33],
+      [650, 0.17],
+      [880, 0.29],
+    ].forEach(([f, hz], i) => {
+      const am = gain(0.5);
+      lfo(am.gain, hz, 0.35);
+      lfo(am.gain, hz * 3.1, 0.12);
+      noise([filt('bandpass', f, 2 + i * 0.5)], 0.9, am);
+      am.connect(out);
+    });
+    every(25000, 50000, () => {
+      for (let k = 0; k < 45; k++) {
+        const at = (k / 45) * 2.4 + Math.random() * 0.05;
+        const swell = Math.sin((Math.PI * k) / 45);
+        tick(1500 + Math.random() * 2000, 0.01 + swell * 0.03, 0.025, at);
+      }
     });
   } else if (name === 'datacenter') {
     const hum = gain(0.6);
@@ -1751,7 +2062,7 @@ export class Audio {
     this.ambBus = null;
     /** @type {ReturnType<typeof buildBed> | null} */
     this.bed = null;
-    /** @type {'office' | 'datacenter' | 'parking' | 'rooftop' | 'copil' | null} */
+    /** @type {Bed | null} */
     this.ambWanted = null;
     this._muted = load(MUTE_KEY) === '1';
     this._vol = { music: loadVolume('music'), sfx: loadVolume('sfx') };
@@ -1850,8 +2161,19 @@ export class Audio {
   /** @param {Run} run @param {number} now */
   #applyLayers(run, now) {
     const [drive, lead] = this.#layerTargets();
-    run.drive.gain.setTargetAtTime(drive, now, LAYER_TC);
-    run.lead.gain.setTargetAtTime(lead, now, LAYER_TC);
+    // Next beat at or after the next unscheduled step, so a new layer enters on the beat.
+    const s16 = 60 / run.def.bpm / 4;
+    const beat = Math.max(now, run.next + ((4 - (run.step % 4)) % 4) * s16);
+    for (const [node, target] of /** @type {[GainNode, number][]} */ ([
+      [run.drive, drive],
+      [run.lead, lead],
+    ])) {
+      const g = node.gain;
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(g.value, now);
+      if (target > g.value) g.setTargetAtTime(target, beat, LAYER_IN_TC);
+      else g.setTargetAtTime(target, now, LAYER_OUT_TC);
+    }
   }
 
   #layerTargets() {
@@ -1862,7 +2184,7 @@ export class Audio {
   /** @param {string} type */
   sfx(type) {
     const play = Object.hasOwn(SFX, type) ? SFX[type] : undefined;
-    if (!play || !this.ctx || !this.sfxBus) return;
+    if (!play || !this.ctx || !this.sfxBus || this._muted || this._vol.sfx === 0) return;
     // Per-sound loudness trim, so every effect lands at a comparable level.
     const trim = this.ctx.createGain();
     trim.gain.value = dbToGain(SFX_TRIM_DB[type] ?? 0);
@@ -1922,6 +2244,12 @@ export class Audio {
     wet.connect(base);
     /** @type {AudioNode[]} */
     const nodes = [bus, trim, base, drive, lead, wet];
+    const voices = {
+      base: this.#voice(base),
+      wet: this.#voice(wet),
+      drive: this.#voice(drive),
+      lead: this.#voice(lead),
+    };
     if (def.echo) {
       const delay = ctx.createDelay(1);
       delay.delayTime.value = (60 / def.bpm) * 0.75;
@@ -1948,6 +2276,7 @@ export class Audio {
       drive,
       lead,
       wet,
+      voices,
       nodes,
       timer: null,
       step: 0,
@@ -1964,13 +2293,15 @@ export class Audio {
         run.step += skip;
         run.next += skip * s16;
       }
+      // Muted or music at zero: keep time, but schedule nothing (saves the whole graph).
+      const silent = this._muted || this._vol.music === 0;
       while (run.next < ctx.currentTime + LOOKAHEAD) {
         if (def.once && run.step >= total) {
           if (run.timer) clearInterval(run.timer);
           run.timer = null;
           return;
         }
-        this.#step(run, total);
+        if (!silent) this.#step(run, total);
         run.next += 60 / def.bpm / 4;
         run.step++;
       }
@@ -1979,11 +2310,22 @@ export class Audio {
   }
 
   /**
+   * Music and ambient bed of a stage. Uses the stage's own theme when it has one (café
+   * pause, seminar, intercontrat), else the level's `music` / `theme`. Idempotent:
+   * calling it again with the same stage (e.g. after a boss) only restores the music.
+   * @param {StageRef} level
+   */
+  stage(level) {
+    this.music(stageTrack(level));
+    this.ambience(stageBed(level));
+  }
+
+  /**
    * Quiet synthesised ambient bed under music and SFX (routed through the sfx bus).
-   * @param {'office' | 'datacenter' | 'parking' | 'rooftop' | 'copil' | null} name
+   * @param {Bed | null} name
    */
   ambience(name) {
-    if (name !== null && !AMBIENCE_NAMES.includes(name)) return;
+    if (name !== null && !AMBIENCES.includes(name)) return;
     this.ambWanted = name;
     const ctx = this.ctx;
     if (!ctx || !this.ambBus || !this.buf) return;
@@ -2044,7 +2386,22 @@ export class Audio {
     };
     return {
       now: ctx.currentTime,
-      tone: ({ f, t, d, type = 'sine', v = 0.3, to, a = 0.005, lp, lpTo, q, det, pan, vib }) => {
+      tone: ({
+        f,
+        t,
+        d,
+        type = 'sine',
+        v = 0.3,
+        to,
+        a = 0.005,
+        lp,
+        lpTo,
+        ft,
+        q,
+        det,
+        pan,
+        vib,
+      }) => {
         const g = ctx.createGain();
         g.gain.setValueAtTime(0.0001, t);
         g.gain.exponentialRampToValueAtTime(v, t + Math.min(a, d / 2));
@@ -2072,6 +2429,7 @@ export class Audio {
         }
         if (lp) {
           const filter = ctx.createBiquadFilter();
+          if (ft) filter.type = ft;
           filter.frequency.setValueAtTime(lp, t);
           if (lpTo) filter.frequency.exponentialRampToValueAtTime(lpTo, t + d);
           if (q) filter.Q.value = q;
@@ -2107,13 +2465,16 @@ export class Audio {
    */
   #step(run, total) {
     const { def } = run;
-    const t = run.next;
     const s16 = 60 / def.bpm / 4;
     const s = run.step % total;
     const bar = run.bars[Math.floor(s / 16)];
     const i = s % 16;
+    // Swing: off-beat eighths land a little late.
+    const t = run.next + (def.swing && i % 4 === 2 ? def.swing * s16 : 0);
     const [off, minor] = bar.chord;
     const third = minor ? 3 : 4;
+    // Seventh: flat on minor chords and on the dominant, major elsewhere.
+    const seventh = minor || (off + 12) % 12 === 7 ? 10 : 11;
     const base = def.root + off;
     const loop = !def.once;
     /** char of an 8- or 16-step pattern at this sixteenth, '.' between eighths */
@@ -2138,10 +2499,7 @@ export class Audio {
     const driveOn = driveT > 0 || run.drive.gain.value > 0.001;
     const leadOn = leadT > 0 || run.lead.gain.value > 0.001;
 
-    const v = this.#voice(run.base);
-    const wet = this.#voice(run.wet);
-    const drive = this.#voice(run.drive);
-    const lead = this.#voice(run.lead);
+    const { base: v, wet, drive, lead } = run.voices;
 
     // Melody
     const m = onset(bar.mel);
@@ -2151,17 +2509,41 @@ export class Audio {
       const note = degree(c, def.lead);
       const d = unit(bar.mel) * len;
       const level = def.det ? 0.08 : 0.12;
-      wet.tone({
-        f: mtof(note),
-        t,
-        d,
-        type: def.wave,
-        v: level,
-        lp: def.cutoff,
-        a: 0.01,
-        det: def.det,
-      });
+      if (def.mallet) {
+        // Struck bar: sine body, a quick octave partial and a woody inharmonic click.
+        const f = mtof(note);
+        const md = Math.min(d + 0.15, 0.6);
+        wet.tone({ f, t, d: md, v: level * 1.25, a: 0.002 });
+        wet.tone({ f: f * 2, t, d: md * 0.35, v: level * 0.3, a: 0.002 });
+        wet.tone({ f: f * 3.9, t, d: 0.05, v: level * 0.18, a: 0.001 });
+      } else {
+        wet.tone({
+          f: mtof(note),
+          t,
+          d,
+          type: def.wave,
+          v: level,
+          lp: def.cutoff,
+          a: 0.01,
+          det: def.det,
+        });
+      }
       if (def.bells) wet.tone({ f: mtof(note + 12), t, d: d * 0.8, v: 0.035, a: 0.005 });
+      // Brass section on the long notes, an octave below, kept dry for weight.
+      if (def.horns && holds >= 1) {
+        const f = mtof(note - 12);
+        v.tone({ f, t, d, type: 'sawtooth', v: 0.045, lp: 2600, lpTo: 1100, a: 0.05, det: 11 });
+        v.tone({
+          f: f * 1.5,
+          t,
+          d: d * 0.9,
+          type: 'sawtooth',
+          v: 0.025,
+          lp: 2200,
+          lpTo: 900,
+          a: 0.07,
+        });
+      }
     }
 
     // Countermelody: soft triangle line under the melody
@@ -2181,7 +2563,10 @@ export class Audio {
       const shifts = { 1: 0, 2: 12, 3: third, 4: 5, 5: 7, b: 10 };
       const d = unit(bar.bass) * (holds ? holds + 0.9 : 0.9);
       const f = mtof(c === 'w' ? def.root + bar.next - 1 : base + (shifts[c] ?? 0));
-      if (def.bassWave === 'saw') {
+      if (def.bassWave === 'pluck') {
+        v.tone({ f, t, d: Math.min(d, s16 * 1.6), type: 'triangle', v: 0.55, a: 0.003 });
+        v.tone({ f: f * 2, t, d: 0.06, v: 0.08, a: 0.002 });
+      } else if (def.bassWave === 'saw') {
         v.tone({ f, t, d, type: 'sawtooth', v: 0.3, lp: 900, lpTo: 300, q: 3, a: 0.005 });
       } else if (def.bassWave === 'slap') {
         v.tone({ f, t, d, type: 'sawtooth', v: 0.32, lp: 2600, lpTo: 260, q: 4, a: 0.002 });
@@ -2192,6 +2577,24 @@ export class Audio {
       if (driveOn) {
         drive.tone({ f: f * 2, t, d: d * 0.8, type: 'sawtooth', v: 0.1, lp: 1300, lpTo: 400 });
       }
+    }
+    // Pulse: a resonant sixteenth sequence whose filter opens and closes every 4 bars
+    // (a fixed cutoff per note: automating hundreds of filters a bar is costly).
+    if (def.pulse && !(bar.thin && i % 2)) {
+      const k = [0, 0, 12, 0, 0, 12, 0, 7, 0, 0, 12, 0, 0, 12, 7, 12][i];
+      const sweep = 0.5 - 0.5 * Math.cos((2 * Math.PI * (s % 64)) / 64);
+      const lp = 450 + 2300 * sweep;
+      v.tone({
+        f: mtof(base + 12 + k),
+        t,
+        d: s16 * 0.7,
+        type: 'sawtooth',
+        v: i % 4 ? 0.06 : 0.09,
+        lp,
+        q: 7,
+        a: 0.002,
+        pan: i % 2 ? 0.15 : -0.15,
+      });
     }
 
     // Harmony
@@ -2212,11 +2615,30 @@ export class Audio {
         pan: i % 4 < 2 ? -0.3 : 0.3,
       });
     }
-    if ((def.pad || def.hum) && i === 0) {
+    const chord = def.sev ? [0, third, 7, seventh] : triad;
+    if ((def.pad || def.hum || def.choir) && i === 0) {
       const d = s16 * 16 + 0.05;
+      if (def.choir) {
+        // "Aah" choir: detuned saws through a vowel formant (no LFO vibrato: a-rate detune
+        // on bar-long voices is costly; the detuned pair already gives the ensemble motion).
+        for (const k of [0, third, 7, 12]) {
+          v.tone({
+            f: mtof(base + 12 + k),
+            t,
+            d,
+            type: 'sawtooth',
+            v: 0.06,
+            a: 0.45,
+            lp: 820,
+            ft: 'bandpass',
+            q: 1.4,
+            det: 9,
+          });
+        }
+      }
       if (def.pad) {
         const saw = def.padWave === 'sawtooth';
-        for (const k of triad) {
+        for (const k of chord) {
           v.tone({
             f: mtof(base + 24 + k),
             t,
@@ -2235,14 +2657,23 @@ export class Audio {
       }
     }
     if (def.comp && (i === 4 || i === 12 || (def.bassWave === 'slap' && i === 10))) {
-      for (const k of triad) {
+      for (const k of chord) {
         v.tone({ f: mtof(base + 24 + k), t, d: s16 * 3, type: 'triangle', v: 0.05, a: 0.01 });
       }
     }
     if (at(bar.stab) === '1') {
-      for (const k of [0, third, 7, 12]) {
-        const f = mtof(base + 24 + k);
-        v.tone({ f, t, d: 0.22, type: 'sawtooth', v: 0.04, lp: 2600, lpTo: 700, det: 12 });
+      if (def.rhodes) {
+        // Electric piano: sine tine plus a bell-ish second partial that dies fast.
+        for (const k of chord) {
+          const f = mtof(base + 24 + k);
+          v.tone({ f, t, d: s16 * 5, v: 0.05, a: 0.004, pan: k === third ? -0.2 : 0.2 });
+          v.tone({ f: f * 2, t, d: s16 * 1.5, v: 0.012, a: 0.002 });
+        }
+      } else {
+        for (const k of def.sev ? chord : [0, third, 7, 12]) {
+          const f = mtof(base + 24 + k);
+          v.tone({ f, t, d: 0.22, type: 'sawtooth', v: 0.04, lp: 2600, lpTo: 700, det: 12 });
+        }
       }
     }
 
@@ -2260,8 +2691,15 @@ export class Audio {
     if (loop && bar.fill && i >= 12) {
       // Section-end fill: four rising snare/tom hits on the last beat
       const g = 0.13 + (i - 12) * 0.05;
-      v.noise({ t, d: def.big ? 0.16 : 0.09, type: 'highpass', f: 1500, v: g });
-      v.tone({ f: 260 - (i - 12) * 30, to: 110, t, d: 0.1, type: 'triangle', v: g, a: 0.003 });
+      if (def.big) {
+        // Timpani: tuned to the chord root and fifth, a soft mallet noise on top.
+        const f = mtof(base - 12 + (i % 2 ? 7 : 0));
+        v.tone({ f, to: f * 0.97, t, d: 0.45, v: g * 1.8, a: 0.004 });
+        v.noise({ t, d: 0.06, type: 'bandpass', f: 400, q: 1, v: g * 0.6 });
+      } else {
+        v.noise({ t, d: 0.09, type: 'highpass', f: 1500, v: g });
+        v.tone({ f: 260 - (i - 12) * 30, to: 110, t, d: 0.1, type: 'triangle', v: g, a: 0.003 });
+      }
     } else if (at(bar.snare) === '1') {
       if (def.big) {
         v.noise({ t, d: 0.35, type: 'bandpass', f: 1800, q: 0.6, v: 0.35 });
@@ -2273,10 +2711,24 @@ export class Audio {
       }
     }
     if (at(bar.clap) === '1') this.#clap(v, t, 0.14);
+    if (at(bar.rim) === '1') {
+      v.noise({ t, d: 0.03, type: 'bandpass', f: 1800, q: 3, v: 0.2 });
+      v.tone({ f: 830, t, d: 0.035, type: 'triangle', v: 0.1, a: 0.001 });
+    }
     const h = at(bar.hat);
     if (h === '1' || h === 'o') {
       const d = h === 'o' ? 0.16 : 0.04;
-      v.noise({ t, d, type: 'highpass', f: 7000, v: i % 4 ? 0.1 : 0.14 });
+      if (def.shaker) {
+        v.noise({
+          t,
+          d: 0.06,
+          type: 'bandpass',
+          f: 5200,
+          q: 1.2,
+          v: i % 4 === 2 ? 0.1 : 0.06,
+          a: 0.012,
+        });
+      } else v.noise({ t, d, type: 'highpass', f: 7000, v: i % 4 ? 0.1 : 0.14 });
     }
 
     // Drive layer: sixteenth hats, extra kicks, claps, a fill at each section end

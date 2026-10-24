@@ -1,0 +1,262 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  AMBIENCES,
+  Audio,
+  SFX_TYPES,
+  STAGES,
+  TRACKS,
+  stageBed,
+  stageTrack,
+  trackInfo,
+} from '../src/app/audio.js';
+
+/**
+ * A tiny WebAudio stand-in: enough of the API for the audio engine to run, and strict
+ * where real browsers throw (non-finite values, exponential ramps to zero).
+ */
+class Param {
+  /** @param {number} v */
+  constructor(v = 0) {
+    this.value = v;
+  }
+  /** @param {number} v @param {number} t */
+  check(v, t) {
+    if (!Number.isFinite(v) || !Number.isFinite(t) || t < 0) throw new RangeError(`bad ${v}@${t}`);
+    return this;
+  }
+  /** @param {number} v @param {number} t */
+  setValueAtTime(v, t) {
+    this.value = v;
+    return this.check(v, t);
+  }
+  /** @param {number} v @param {number} t */
+  linearRampToValueAtTime(v, t) {
+    this.value = v;
+    return this.check(v, t);
+  }
+  /** @param {number} v @param {number} t */
+  exponentialRampToValueAtTime(v, t) {
+    if (!(v > 0)) throw new RangeError('exponential ramp to a non-positive value');
+    this.value = v;
+    return this.check(v, t);
+  }
+  /** @param {number} v @param {number} t @param {number} tc */
+  setTargetAtTime(v, t, tc) {
+    this.last = { v, t, tc };
+    return this.check(v, t);
+  }
+  cancelScheduledValues() {
+    return this;
+  }
+}
+
+/** @type {{ nodes: number, oscillators: number[], ctx: any }} */
+const stats = { nodes: 0, oscillators: [], ctx: null };
+
+class Node {
+  constructor() {
+    stats.nodes++;
+    this.gain = new Param(1);
+    this.frequency = new Param(440);
+    this.detune = new Param(0);
+    this.Q = new Param(1);
+    this.pan = new Param(0);
+    this.delayTime = new Param(0);
+    this.threshold = new Param(0);
+    this.knee = new Param(0);
+    this.ratio = new Param(1);
+    this.attack = new Param(0);
+    this.release = new Param(0);
+    this.type = '';
+    /** @type {(() => void) | null} */
+    this.onended = null;
+  }
+  /** @param {any} n */
+  connect(n) {
+    return n;
+  }
+  disconnect() {}
+  start(t = 0) {
+    if (!Number.isFinite(t)) throw new RangeError('bad start');
+  }
+  stop(t = 0) {
+    if (!Number.isFinite(t)) throw new RangeError('bad stop');
+  }
+}
+class Osc extends Node {
+  /** @override @param {number} t */
+  start(t = 0) {
+    super.start(t);
+    stats.oscillators.push(this.frequency.value);
+  }
+}
+
+class FakeContext {
+  constructor() {
+    this.currentTime = 0;
+    this.sampleRate = 8000;
+    this.state = 'running';
+    this.destination = new Node();
+    stats.ctx = this;
+  }
+  createGain() {
+    return new Node();
+  }
+  createOscillator() {
+    return new Osc();
+  }
+  createBiquadFilter() {
+    return new Node();
+  }
+  createBufferSource() {
+    return new Node();
+  }
+  createStereoPanner() {
+    return new Node();
+  }
+  createDynamicsCompressor() {
+    return new Node();
+  }
+  createDelay() {
+    return new Node();
+  }
+  /** @param {number} _c @param {number} len @param {number} sr */
+  createBuffer(_c, len, sr) {
+    const data = new Float32Array(len);
+    return { duration: len / sr, getChannelData: () => data };
+  }
+  resume() {
+    return Promise.resolve();
+  }
+  suspend() {
+    return Promise.resolve();
+  }
+}
+
+/** Advances the fake clock and timers by `secs`, in scheduler ticks. */
+const advance = (/** @type {number} */ secs) => {
+  for (let t = 0; t < secs; t += 0.025) {
+    stats.ctx.currentTime += 0.025;
+    vi.advanceTimersByTime(25);
+  }
+};
+
+/** @returns {Audio} an unlocked engine on the fake context */
+const engine = () => {
+  const a = new Audio();
+  a.unlock();
+  return a;
+};
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  /** @type {Record<string, string>} */
+  const store = {};
+  Object.assign(globalThis, {
+    AudioContext: FakeContext,
+    localStorage: {
+      getItem: (/** @type {string} */ k) => store[k] ?? null,
+      setItem: (/** @type {string} */ k, /** @type {string} */ v) => (store[k] = v),
+    },
+  });
+  stats.nodes = 0;
+  stats.oscillators = [];
+});
+afterEach(() => {
+  vi.useRealTimers();
+  delete (/** @type {any} */ (globalThis).AudioContext);
+});
+
+describe('audio engine', () => {
+  it('has a track for every stage, with distinct themes for the bonus stages', () => {
+    for (const id of STAGES) expect(TRACKS).toContain(stageTrack({ id }));
+    expect(stageTrack({ id: 'pause', music: 'copil' })).toBe('cafe');
+    expect(stageTrack({ id: 'seminaire', music: 'copil' })).toBe('seminar');
+    expect(stageTrack({ id: 'intercontrat', music: 'office' })).toBe('intercontrat');
+    // Unknown stages fall back to their own data, or to silence.
+    expect(stageTrack({ id: 'new-stage', music: 'rooftop' })).toBe('rooftop');
+    expect(stageTrack({ id: 'new-stage', music: 'nope' })).toBeNull();
+    expect(stageBed({ id: 'pause', theme: 'office' })).toBe('cafe');
+    expect(stageBed({ id: 'new-stage', theme: 'datacenter' })).toBe('datacenter');
+    for (const id of STAGES) expect(AMBIENCES).toContain(stageBed({ id }));
+  });
+
+  it('plays every track through a full loop at full intensity with sane notes', () => {
+    for (const name of TRACKS) {
+      const a = engine();
+      a.intensity(1);
+      stats.oscillators = [];
+      a.music(name);
+      const { seconds, bpm } = trackInfo(name);
+      expect(bpm).toBeGreaterThan(60);
+      advance(seconds + 0.5);
+      expect(stats.oscillators.length, name).toBeGreaterThan(10);
+      for (const f of stats.oscillators) {
+        expect(f, name).toBeGreaterThan(20);
+        expect(f, name).toBeLessThan(12000);
+      }
+      a.music(null);
+    }
+  });
+
+  it('plays every sound effect without errors', () => {
+    const a = engine();
+    for (const type of SFX_TYPES) {
+      const before = stats.nodes;
+      a.sfx(type);
+      expect(stats.nodes, type).toBeGreaterThan(before);
+    }
+    // Unknown names and prototype keys are ignored.
+    const before = stats.nodes;
+    a.sfx('nope');
+    a.sfx('constructor');
+    expect(stats.nodes).toBe(before);
+  });
+
+  it('builds every ambient bed and the stage hook switches music and bed together', () => {
+    const a = engine();
+    for (const name of AMBIENCES) {
+      a.ambience(name);
+      advance(0.2);
+      expect(a.bed?.name).toBe(name);
+    }
+    a.stage({ id: 'pause', music: 'copil', theme: 'office' });
+    expect(a.run?.name).toBe('cafe');
+    expect(a.bed?.name).toBe('cafe');
+    a.ambience(null);
+    expect(a.bed).toBeNull();
+  });
+
+  it('schedules nothing while muted, and resumes in time when unmuted', () => {
+    const a = engine();
+    a.setMuted(true);
+    a.music('office');
+    advance(1);
+    const before = stats.nodes;
+    a.sfx('jump');
+    advance(2);
+    expect(stats.nodes).toBe(before);
+    a.setMuted(false);
+    advance(0.5);
+    expect(stats.nodes).toBeGreaterThan(before);
+  });
+
+  it('brings layers in on the next beat and lets them out gently', () => {
+    const a = engine();
+    a.music('office');
+    advance(1);
+    a.intensity(1);
+    const run = /** @type {NonNullable<typeof a.run>} */ (a.run);
+    const up = /** @type {any} */ (run.drive.gain).last;
+    const now = stats.ctx.currentTime;
+    const beat = 60 / trackInfo('office').bpm;
+    expect(up.v).toBe(1);
+    expect(up.t).toBeGreaterThanOrEqual(now);
+    expect(up.t - now).toBeLessThanOrEqual(beat + 0.2);
+    run.drive.gain.value = 1;
+    a.intensity(0);
+    const down = /** @type {any} */ (run.drive.gain).last;
+    expect(down.v).toBe(0);
+    expect(down.tc).toBeGreaterThan(up.tc);
+  });
+});

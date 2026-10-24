@@ -1,5 +1,5 @@
 // Developer sound test: a full-page panel to audition every track and sound effect.
-import { SFX_TYPES, TRACKS } from './audio.js';
+import { AMBIENCES, SFX_TYPES, STAGES, TRACKS, trackInfo } from './audio.js';
 
 /** @typedef {import('./audio.js').Audio} Audio */
 
@@ -79,26 +79,70 @@ export function mountSoundTest(audio) {
   );
   const muteBtn = /** @type {HTMLButtonElement} */ (mix.lastElementChild);
 
-  const music = section('Tracks');
-  /** @type {HTMLButtonElement[]} */
-  const trackBtns = [];
-  const highlight = (/** @type {string | null} */ name) => {
-    for (const b of trackBtns)
-      b.style.background = b.dataset.track === name ? '#3d5a80' : '#232836';
+  /** Buttons of one exclusive group, the playing one highlighted. */
+  const group = () => {
+    /** @type {HTMLButtonElement[]} */
+    const list = [];
+    return {
+      /** @param {HTMLButtonElement} b @param {string} key */
+      add(b, key) {
+        b.dataset.key = key;
+        list.push(b);
+        return b;
+      },
+      /** @param {string | null} key */
+      pick(key) {
+        for (const b of list) b.style.background = b.dataset.key === key ? '#3d5a80' : '#232836';
+      },
+    };
   };
+  const tracks = group();
+  const beds = group();
+
+  const stages = section('Stages (music + ambience, as in game)');
+  for (const id of STAGES) {
+    stages.append(
+      button(id, () => {
+        audio.stage({ id });
+        tracks.pick(audio.wanted);
+        beds.pick(audio.ambWanted);
+      }),
+    );
+  }
+
+  const music = section('Tracks');
   for (const name of TRACKS) {
+    const { bpm, bars, seconds, loops } = trackInfo(name);
     const b = button(name, () => {
       audio.music(name);
-      highlight(name);
+      tracks.pick(name);
     });
-    b.dataset.track = name;
-    trackBtns.push(b);
-    music.append(b);
+    b.title = `${bpm} bpm · ${bars} bars · ${seconds.toFixed(0)} s${loops ? ' loop' : ''}`;
+    music.append(tracks.add(b, name));
   }
   music.append(
     button('■ stop', () => {
       audio.music(null);
-      highlight(null);
+      tracks.pick(null);
+    }),
+  );
+
+  const amb = section('Ambience');
+  for (const name of AMBIENCES) {
+    amb.append(
+      beds.add(
+        button(name, () => {
+          audio.ambience(name);
+          beds.pick(name);
+        }),
+        name,
+      ),
+    );
+  }
+  amb.append(
+    button('■ stop', () => {
+      audio.ambience(null);
+      beds.pick(null);
     }),
   );
 
