@@ -69,6 +69,22 @@ describe('intern', () => {
     expect(s.hero.hearts).toBe(HERO_STATS.kevin.hearts);
   });
 
+  it('walks home after a rush carried it beyond its patrol range', () => {
+    const s = sim(
+      room(20, [
+        ['S', 5, 3],
+        ['i', 11, 3],
+      ]),
+    );
+    const intern = find(s, 'intern');
+    const home = intern.home ?? intern.x;
+    // Pushed out of range (as a long rush does) with the hero gone.
+    intern.x = home - 4.2;
+    s.hero.x = 18;
+    run(s, IDLE, 120);
+    expect(Math.abs(intern.x - home)).toBeLessThan(3.2);
+  });
+
   it('can be stunned mid-telegraph', () => {
     const s = sim(
       room(20, [

@@ -194,7 +194,7 @@ test('after clicking mute, Space stays a game key', async ({ page, isMobile }) =
   await expect(page.locator('#muteBtn')).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('options open focused, and arrows change a list without leaving it', async ({
+test('options open focused, and up/down move past a list without changing it', async ({
   page,
   isMobile,
 }) => {
@@ -202,9 +202,12 @@ test('options open focused, and arrows change a list without leaving it', async 
   await toTitle(page);
   await openOptions(page);
   await expect(page.locator('#volMusic')).toBeFocused();
-  await page.locator('#optSpeed').focus();
+  const speed = page.locator('#optSpeed');
+  const before = await speed.inputValue();
+  await speed.focus();
   await page.keyboard.press('ArrowDown');
-  await expect(page.locator('#optSpeed')).toBeFocused();
+  await expect(speed).not.toBeFocused();
+  expect(await speed.inputValue()).toBe(before);
   await page.keyboard.press('Escape');
   await expect(page.locator('body')).toHaveAttribute('data-screen', 'title');
 });

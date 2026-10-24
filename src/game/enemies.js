@@ -34,7 +34,11 @@ function patrol(s, t, range) {
   if (
     solid(s, ahead, Math.floor(t.y + 0.5)) ||
     !solid(s, ahead, Math.floor(t.y) - 1) ||
-    (range > 0 && Math.abs(nx - (t.home ?? t.x)) > range)
+    // Out of range only turns back when the step leads further out, so a rush or a
+    // knock that carried it beyond the range walks it home instead of freezing it.
+    (range > 0 &&
+      Math.abs(nx - (t.home ?? t.x)) > range &&
+      Math.abs(nx - (t.home ?? t.x)) > Math.abs(t.x - (t.home ?? t.x)))
   )
     t.vx = -t.vx;
   else t.x = nx;

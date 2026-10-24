@@ -90,9 +90,8 @@ export class Input {
         if (e.repeat) e.preventDefault();
         return;
       }
-      // Sliders keep their left/right arrows, lists all four.
+      // Sliders and lists keep their left/right arrows; up/down always move focus.
       if ((k === 'left' || k === 'right') && target?.closest?.('input, select')) return;
-      if ((k === 'up' || k === 'down') && target?.closest?.('select')) return;
       e.preventDefault();
       if (!e.repeat) this.taps.add(k);
       this.held.add(k);

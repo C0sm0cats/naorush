@@ -256,7 +256,7 @@ for (const card of heroCards) {
   });
   // Left and right switch heroes, like any radio group.
   card.addEventListener('keydown', (e) => {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.repeat) return;
     const other = heroCards[1 - heroCards.indexOf(card)];
     other.click();
     other.focus();
