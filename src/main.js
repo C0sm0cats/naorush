@@ -661,8 +661,15 @@ function flyoverFocus(dt) {
 
 /** Rodolphe's show: coloured spotlights sweep the Espace VIP during the fight. @param {number} t */
 function stageLights(t) {
-  if (!level.boss || level.boss.id !== 'regionalDirector' || !sim.bossActive || sim.bossDone)
-    return null;
+  if (!level.boss || !sim.bossActive || sim.bossDone) return null;
+  const boss = sim.things.find((b) => b.kind === 'boss');
+  if (level.boss.id === 'techServicesDirector') {
+    // Julien's failover: a red alarm beacon pulses over the server room in phase 2.
+    if ((boss?.phase ?? 1) < 2) return null;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 7);
+    const alarm = { pos: [boss?.x ?? 0, 8, 0], radius: 10, color: [2.2 * pulse, 0.2, 0.2] };
+    return { ...lighting, lights: [alarm, ...lighting.lights] };
+  }
   const [x0, x1] = level.boss.arena;
   const mid = (x0 + x1) / 2;
   const half = (x1 - x0) / 2 - 1;
