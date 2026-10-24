@@ -29,8 +29,15 @@ import { MAT, rgb } from './voxels.js';
  * @property {string} [lips]
  * @property {string} [eyes]
  * @property {string} [prop] Held item: 'tablet' | 'laptop' | 'phone' | 'mug' | 'folder'.
+ * @property {string} [headset] Call headset colour: thin band, ear pads and a boom mic.
+ * @property {string} [headphones] Big over-ear headphones colour.
+ * @property {boolean} [turtleneck] The shirt is a ribbed turtleneck (no collar points).
+ * @property {boolean} [cardigan] Soft knit cardigan: no lapels, a button band, ribbed hem and cuffs.
+ * @property {string} [badge] Lanyard colour, with an ID badge hanging on the chest.
+ * @property {string} [backpack] Backpack colour: straps over the shoulders, the pack on the back.
+ * @property {string} [stripe] Sneaker side stripe colour (navy by default).
  *
- * @typedef {{mesh: Mesh}} Part
+ * @typedef {{mesh: Mesh, upright?: boolean}} Part
  */
 
 // Joint positions (model space, feet at y = 0, facing +z).
@@ -305,6 +312,18 @@ const faceZ = (x, y, d = 0) =>
   HEAD_R[2] *
     Math.sqrt(Math.max(0, 1 - (x / HEAD_R[0]) ** 2 - ((y - HEAD_C[1]) / HEAD_R[1]) ** 2)) +
   d;
+/** Rough height of each hairstyle's crown, as a multiple of the head radius. */
+const HAIR_TOP = /** @type {Record<string, number>} */ ({
+  short: 1.13,
+  quiff: 1.12,
+  long: 1.08,
+  midlong: 1.12,
+  bun: 1.1,
+  ponytail: 1.1,
+  curly: 1.26,
+  bob: 1.08,
+  bald: 1.0,
+});
 /** @param {number} x @param {number} y @param {number} z */
 const dir = (x, y, z) => unit([x, y, z]);
 /** Soft bump around direction `c`. @param {number[]} d @param {number[]} c @param {number} amp @param {number} w */
@@ -535,6 +554,81 @@ export function buildCharacter(gl, look) {
     if (look.earrings)
       for (const s of [-1, 1])
         ell(b, [s * 0.205, 0.175, 0.005], [0.017, 0.017, 0.017], '#ffd166', { seg: 6, mat: gloss });
+
+    // Headgear: a band arching over the hair between two ear pieces.
+    const crown = HAIR_TOP[style] ?? 1.1;
+    /**
+     * @param {string} color @param {number} ax Half width at the ears.
+     * @param {number} r1 Radial thickness. @param {number} r2 Band width. @param {number} z
+     */
+    const band = (color, ax, r1, r2, z) =>
+      tube(
+        b,
+        (t) => {
+          const a = lerp(-Math.PI / 2, Math.PI / 2, t);
+          return [ax * Math.sin(a), HEAD_C[1] + (HEAD_R[1] * crown + r1) * Math.cos(a), z];
+        },
+        () => [r1, r2],
+        color,
+        { nu: 8, nv: 22, mat: gloss },
+      );
+    if (look.headset) {
+      // Call headset: slim band, pads on both ears, a boom mic swinging to the mouth.
+      const c = look.headset;
+      band(c, 0.226, 0.006, 0.011, -0.02);
+      for (const s of [-1, 1]) {
+        ell(b, [s * 0.222, 0.245, -0.008], [0.02, 0.044, 0.044], shade(c, 0.25), { seg: 9 });
+        ell(b, [s * 0.236, 0.245, -0.008], [0.014, 0.036, 0.036], c, { seg: 8, mat: gloss });
+      }
+      ell(b, [-0.249, 0.255, 0.008], [0.004, 0.006, 0.006], '#c6f432', {
+        seg: 4,
+        mat: MAT.EMISSIVE,
+      });
+      tube(
+        b,
+        (t) => {
+          const x = lerp(-0.238, -0.06, t);
+          const y = lerp(0.232, 0.162, t ** 1.4);
+          return [x, y, Math.max(lerp(0.0, 0.17, t), faceZ(x, y, 0.03))];
+        },
+        (t) => [0.0055 - 0.0015 * t, 0.0055 - 0.0015 * t],
+        c,
+        { nu: 6, nv: 14, ref: () => [0, 1, 0], mat: gloss },
+      );
+      ell(b, [-0.052, 0.16, faceZ(-0.052, 0.16, 0.03)], [0.016, 0.013, 0.013], '#2a2a32', {
+        seg: 6,
+      });
+    }
+    if (look.headphones) {
+      // Studio headphones: padded band, plush cushions and big cups with a lime ring.
+      const c = look.headphones;
+      band(c, 0.27, 0.011, 0.02, -0.01);
+      tube(
+        b,
+        (t) => {
+          const a = lerp(-0.75, 0.75, t);
+          const ry = HEAD_R[1] * crown - 0.001;
+          return [0.27 * Math.sin(a) * 0.93, HEAD_C[1] + ry * Math.cos(a), -0.01];
+        },
+        () => [0.008, 0.017],
+        '#3a3a46',
+        { nu: 8, nv: 12 },
+      );
+      for (const s of [-1, 1]) {
+        ell(b, [s * 0.248, 0.24, -0.01], [0.024, 0.07, 0.064], '#3a3a46', { seg: 10 });
+        ell(b, [s * 0.27, 0.24, -0.01], [0.026, 0.068, 0.06], c, { seg: 10, mat: gloss });
+        tube(
+          b,
+          (t) => {
+            const a = t * TAU;
+            return [s * 0.291, 0.24 + Math.sin(a) * 0.04, -0.01 + Math.cos(a) * 0.035];
+          },
+          () => [0.005, 0.005],
+          '#c6f432',
+          { nu: 5, nv: 18, ref: () => [1, 0, 0], mat: gloss },
+        );
+      }
+    }
 
     // Hair: one smooth shell melting into the skull, shaped per style.
     /** @param {number} v */
@@ -992,30 +1086,52 @@ export function buildCharacter(gl, look) {
           },
         );
     }
-    // Lapels rolling along both edges of the V, widest at the chest.
-    for (const s of [-1, 1])
-      tube(
-        b,
-        (t) => {
-          const y = lerp(yb, 0.535, t);
-          const r = J.row(J.tAt(y));
-          const w = 0.008 + 0.024 * Math.sin(Math.min(1, t * 1.25) * Math.PI * 0.75);
-          return ringPoint(r, s * (vee(y) + (w * 0.9) / r[1]), 0.002);
-        },
-        (t) => [0.008 + 0.024 * Math.sin(Math.min(1, t * 1.25) * Math.PI * 0.75), 0.0055],
-        lapelColor,
-        {
-          nu: 8,
-          nv: 12,
-          ref: (t) => {
-            const a = s * vee(lerp(yb, 0.535, t));
-            return [Math.sin(a), 0, Math.cos(a)];
+    // Lapels rolling along both edges of the V, widest at the chest; a cardigan has a
+    // flat knitted button band instead.
+    if (look.cardigan)
+      for (const s of [-1, 1])
+        tube(
+          b,
+          (t) => {
+            const y = lerp(jacketKeys[1][0] + 0.01, 0.535, t);
+            const r = J.row(J.tAt(y));
+            return ringPoint(r, s * (vee(y) + 0.011 / r[1]), 0.002);
           },
-        },
-      );
+          () => [0.011, 0.004],
+          lapelColor,
+          {
+            nu: 6,
+            nv: 14,
+            ref: (t) => {
+              const a = s * vee(lerp(jacketKeys[1][0] + 0.01, 0.535, t));
+              return [Math.sin(a), 0, Math.cos(a)];
+            },
+          },
+        );
+    else
+      for (const s of [-1, 1])
+        tube(
+          b,
+          (t) => {
+            const y = lerp(yb, 0.535, t);
+            const r = J.row(J.tAt(y));
+            const w = 0.008 + 0.024 * Math.sin(Math.min(1, t * 1.25) * Math.PI * 0.75);
+            return ringPoint(r, s * (vee(y) + (w * 0.9) / r[1]), 0.002);
+          },
+          (t) => [0.008 + 0.024 * Math.sin(Math.min(1, t * 1.25) * Math.PI * 0.75), 0.0055],
+          lapelColor,
+          {
+            nu: 8,
+            nv: 12,
+            ref: (t) => {
+              const a = s * vee(lerp(yb, 0.535, t));
+              return [Math.sin(a), 0, Math.cos(a)];
+            },
+          },
+        );
     // Shirt collar points either side of the throat.
     const open = look.openCollar ? 1 : 0;
-    if (!look.dress)
+    if (!look.dress && !look.turtleneck)
       for (const s of [-1, 1])
         tube(
           b,
@@ -1028,6 +1144,132 @@ export function buildCharacter(gl, look) {
           shade(look.shirt, -0.04),
           { nu: 6, nv: 5, ref: () => [0, 0, 1] },
         );
+    if (look.turtleneck) {
+      // Rolled ribbed collar hugging the neck.
+      const T = profile([
+        [0.462, 0.066, 0.064, -0.004],
+        [0.49, 0.078, 0.075, -0.004],
+        [0.53, 0.075, 0.072, -0.004],
+        [0.575, 0.066, 0.064, -0.006],
+        [0.59, 0.056, 0.054, -0.006],
+      ]);
+      loft(b, T, look.shirt, { seg: 24, steps: 3 });
+      for (let k = 0; k < 18; k++) {
+        const a = (k + 0.5) * (TAU / 18);
+        loft(b, T, shade(look.shirt, -0.07), {
+          seg: 1,
+          steps: 3,
+          t0: 0.4,
+          t1: 3.6,
+          dr: 0.002,
+          arc: () => [a - 0.03, a + 0.03],
+        });
+      }
+    }
+    if (look.badge) {
+      // Lanyard from behind the neck down to a clipped ID badge.
+      const zf = /** @param {number} y */ (y) => {
+        const r = J.row(J.tAt(y));
+        return r[2] + r[3];
+      };
+      for (const s of [-1, 1])
+        tube(
+          b,
+          (t) => {
+            const y = lerp(0.552, 0.37, t);
+            return ringPoint(J.row(J.tAt(y)), s * lerp(1.4, 0.06, t ** 0.6), 0.008);
+          },
+          () => [0.0075, 0.0028],
+          look.badge,
+          {
+            nu: 6,
+            nv: 14,
+            ref: (t) => {
+              const a = s * lerp(1.4, 0.06, t ** 0.6);
+              return [Math.sin(a), 0, Math.cos(a)];
+            },
+          },
+        );
+      // A clear holder edged in the lanyard colour, the card: header, photo, name lines.
+      const zc = zf(0.31) + 0.017;
+      ell(b, [0, 0.372, zf(0.372) + 0.01], [0.012, 0.012, 0.007], '#b9bec8', {
+        seg: 5,
+        mat: gloss,
+      });
+      b.roundedBox([0, 0.31, zc - 0.002], [0.046, 0.058, 0.003], 0.004, look.badge, { seg: 3 });
+      b.roundedBox([0, 0.307, zc], [0.04, 0.05, 0.0035], 0.003, '#ffffff', { seg: 3 });
+      b.roundedBox([0, 0.346, zc + 0.0015], [0.04, 0.011, 0.0035], 0.003, '#22346e', { seg: 2 });
+      b.roundedBox([-0.017, 0.31, zc + 0.002], [0.013, 0.016, 0.002], 0.002, '#9fb4d8', {
+        seg: 2,
+      });
+      ell(b, [-0.017, 0.313, zc + 0.004], [0.006, 0.007, 0.002], look.skin, { seg: 4 });
+      for (const [y, w] of [
+        [0.32, 0.014],
+        [0.305, 0.01],
+      ])
+        b.roundedBox([0.014, y, zc + 0.002], [w, 0.003, 0.0015], 0.0015, '#5a6478', { seg: 2 });
+      b.roundedBox([0, 0.274, zc + 0.002], [0.028, 0.005, 0.0015], 0.0015, look.badge, { seg: 2 });
+    }
+    if (look.backpack) {
+      // Straps over the shoulders with a buckle, the pack sitting on the back.
+      const bp = look.backpack;
+      const strap = spline([
+        [0.18, 1.2],
+        [0.32, 0.84],
+        [0.45, 0.6],
+        [0.515, 0.66],
+        [0.535, 1.57],
+        [0.515, 2.45],
+        [0.47, 2.55],
+        [0.42, 2.6],
+      ]);
+      for (const s of [-1, 1]) {
+        tube(
+          b,
+          (t) => {
+            const [y, a] = strap(t * 7);
+            return ringPoint(J.row(J.tAt(y)), s * a, 0.007);
+          },
+          () => [0.02, 0.005],
+          shade(bp, -0.25),
+          {
+            nu: 6,
+            nv: 32,
+            ref: (t) => {
+              const a = s * strap(t * 7)[1];
+              return [Math.sin(a), 0, Math.cos(a)];
+            },
+          },
+        );
+        const [y, a] = strap(1.5);
+        ell(b, ringPoint(J.row(J.tAt(y)), s * a, 0.013), [0.022, 0.013, 0.006], '#2a2a32', {
+          seg: 5,
+          rot: [0, s * a, 0],
+          mat: gloss,
+        });
+      }
+      const r = J.row(J.tAt(0.3));
+      const zb = r[3] - r[2];
+      b.roundedBox([0, 0.3, zb - 0.045], [0.135, 0.145, 0.05], 0.045, bp, { seg: 4 });
+      b.roundedBox([0, 0.22, zb - 0.1], [0.1, 0.065, 0.022], 0.02, shade(bp, -0.12), { seg: 3 });
+      tube(
+        b,
+        (t) => [lerp(-0.08, 0.08, t), 0.268, zb - 0.124],
+        () => [0.003, 0.003],
+        '#2a2a32',
+        { nu: 4, nv: 4, ref: () => [0, 1, 0] },
+      );
+      tube(
+        b,
+        (t) => {
+          const a = lerp(-Math.PI / 2, Math.PI / 2, t);
+          return [Math.sin(a) * 0.035, 0.445 + Math.cos(a) * 0.025, zb - 0.045];
+        },
+        () => [0.006, 0.008],
+        shade(bp, -0.25),
+        { nu: 5, nv: 8 },
+      );
+    }
     if (look.tie) {
       const tieZ = /** @param {number} y */ (y) => J.row(J.tAt(y))[2] + J.row(J.tAt(y))[3] - 0.004;
       ell(b, [0, 0.49, tieZ(0.49) + 0.008], [0.022, 0.02, 0.014], look.tie, { seg: 6, mat: gloss });
@@ -1053,10 +1295,31 @@ export function buildCharacter(gl, look) {
       shade(look.jacket, -0.3),
       { nu: 4, nv: 4, ref: () => [1, 0, 0] },
     );
-    for (const y of female ? [yb - 0.035] : [yb - 0.035, yb - 0.11]) {
-      const p = ringPoint(J.row(J.tAt(y)), 0, 0.004);
-      ell(b, p, [0.012, 0.012, 0.006], shade(look.jacket, -0.35), { seg: 5, lon: [-1.6, 1.6] });
-    }
+    if (look.cardigan) {
+      // Small buttons down the band, a ribbed welt at the hem.
+      for (let k = 0; k < 4; k++) {
+        const y = lerp(0.4, jacketKeys[1][0] + 0.09, k / 3);
+        const r = J.row(J.tAt(y));
+        const p = ringPoint(r, y > yb ? -(vee(y) + 0.011 / r[1]) : 0, 0.007);
+        ell(b, p, [0.008, 0.008, 0.004], shade(look.jacket, 0.55), { seg: 5, lon: [-1.6, 1.6] });
+      }
+      loft(b, J, lapelColor, { seg: 36, steps: 2, t0: 0, t1: J.tAt(0.045), dr: 0.003 });
+      for (let k = 0; k < 28; k++) {
+        const a = (k + 0.5) * (TAU / 28);
+        loft(b, J, shade(lapelColor, -0.12), {
+          seg: 1,
+          steps: 2,
+          t0: 0.05,
+          t1: J.tAt(0.04),
+          dr: 0.0045,
+          arc: () => [a - 0.012, a + 0.012],
+        });
+      }
+    } else
+      for (const y of female ? [yb - 0.035] : [yb - 0.035, yb - 0.11]) {
+        const p = ringPoint(J.row(J.tAt(y)), 0, 0.004);
+        ell(b, p, [0.012, 0.012, 0.006], shade(look.jacket, -0.35), { seg: 5, lon: [-1.6, 1.6] });
+      }
     // Hips in trousers (hidden under a skirt), and the neck.
     if (!skirted) ell(b, [0, 0.03, 0], [0.17, 0.08, 0.108], look.legs, { seg: 8 });
     // Cat paw prints scattered over the jacket, clear of the V and the button line.
@@ -1112,6 +1375,18 @@ export function buildCharacter(gl, look) {
     ]);
     loft(b, sleeve, look.jacket, { seg: 16, steps: 2 });
     if (look.paws) pawPrint(b, sleeve, 0.35, -0.2, 0.85, 0.2, look.paws);
+    if (look.cardigan)
+      loft(
+        b,
+        profile([
+          [-0.36, 0.047, 0.049],
+          [-0.354, 0.058, 0.06],
+          [-0.318, 0.056, 0.058],
+          [-0.31, 0.05, 0.052],
+        ]),
+        shade(look.jacket, -0.12),
+        { seg: 16, steps: 2 },
+      );
     loft(
       b,
       profile([
@@ -1258,7 +1533,7 @@ export function buildCharacter(gl, look) {
               return [s * (0.066 * Math.sqrt(Math.max(0, k)) + 0.0015), y, z];
             },
             (t) => [0.0065 * (1 - 0.65 * t), 0.003],
-            '#22346e',
+            look.stripe ?? '#22346e',
             { nu: 5, nv: 10, ref: () => [1, 0, 0] },
           );
         b.roundedBox([0, -0.552, -0.062], [0.014, 0.02, 0.008], 0.007, '#c6f432', { seg: 3 });
@@ -1299,17 +1574,61 @@ export function buildCharacter(gl, look) {
     });
   else if (look.prop === 'folder')
     prop = part(gl, (b) => b.roundedBox([0, 0, 0], [0.11, 0.15, 0.015], 0.01, '#ffd166'));
-  else if (look.prop === 'mug')
-    prop = part(gl, (b) =>
+  else if (look.prop === 'mug') {
+    // Coffee mug kept level whatever the arm does: glazed body, rim, handle, coffee.
+    prop = part(gl, (b) => {
+      const c = [0, -0.035, 0.015];
       b.lathe(
-        [0, 0, 0],
+        c,
         [
-          [0.04, 0],
-          [0.045, 0.1],
+          [0.0, 0.0],
+          [0.036, 0.0],
+          [0.042, 0.008],
+          [0.044, 0.07],
+          [0.046, 0.08],
         ],
-        '#ffffff',
-      ),
-    );
+        '#fbfbfd',
+        { mat: gloss },
+      );
+      b.lathe(
+        c,
+        [
+          [0.046, 0.08],
+          [0.04, 0.081],
+          [0.039, 0.074],
+        ],
+        '#e6e8ee',
+      );
+      b.lathe(
+        c,
+        [
+          [0.039, 0.072],
+          [0.0, 0.072],
+        ],
+        '#5a3420',
+        { mat: gloss },
+      );
+      b.lathe(
+        c,
+        [
+          [0.0441, 0.03],
+          [0.0446, 0.05],
+        ],
+        '#7a4fd6',
+      );
+      tube(
+        b,
+        (t) => {
+          const a = lerp(-1.25, 1.25, t) * 1.15;
+          return [0.042 + Math.cos(a) * 0.022, c[1] + 0.04 + Math.sin(a) * 0.024, c[2]];
+        },
+        () => [0.006, 0.0075],
+        '#fbfbfd',
+        { nu: 6, nv: 12, mat: gloss },
+      );
+    });
+    prop.upright = true;
+  }
 
   /** @type {Record<string, Part>} */
   const parts = {
@@ -1532,6 +1851,9 @@ export function poseCharacter(parts, x, y, z, facing, pose, o = {}, out = [], po
     );
   if (parts.skirt) multiply(TORSO, translation(0, 0.06, 0, F1), part('skirt'));
   // The prop is held in the right hand.
-  if (parts.prop) multiply(armR, translation(0, -0.43, 0.06, F1), part('prop'));
+  if (parts.prop) {
+    const p = multiply(armR, translation(0, -0.43, 0.06, F1), part('prop'));
+    if (parts.prop.upright) multiply(p, rotationX(pose.armR, F2), p);
+  }
   return out;
 }

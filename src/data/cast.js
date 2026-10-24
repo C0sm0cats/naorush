@@ -1,5 +1,5 @@
 /**
- * Character looks: the two heroes, a colleague and the two level bosses.
+ * Character looks: the two heroes, the two level bosses and the secondary cast.
  * @type {Record<string, import('../gfx/characters.js').Look & {name: string, title?: string, scale: number, bio?: string}>}
  */
 export const CAST = {
@@ -45,9 +45,11 @@ export const CAST = {
     hairStyle: 'short',
     jacket: '#3d7a5a',
     shirt: '#e9f2ec',
+    openCollar: true,
     legs: '#34445a',
-    shoes: '#f1f1f1',
+    shoes: '#7a4a2a',
     glasses: true,
+    headset: '#2b2e3a',
     prop: 'phone',
   },
   techServicesDirector: {
@@ -91,8 +93,13 @@ export const CAST = {
     hairStyle: 'ponytail',
     jacket: '#58d5ff',
     shirt: '#ffffff',
+    openCollar: true,
     legs: '#3a4a6b',
     shoes: '#ffffff',
+    sneakers: true,
+    stripe: '#ff6b8b',
+    badge: '#c6f432',
+    backpack: '#ff8a5c',
   },
   visio: {
     name: 'Chef de projet en visio',
@@ -103,8 +110,12 @@ export const CAST = {
     hairStyle: 'bob',
     jacket: '#7a4fd6',
     shirt: '#f3eefe',
+    cardigan: true,
+    turtleneck: true,
     legs: '#2c2a3a',
     shoes: '#222222',
     glasses: true,
+    headphones: '#2e3142',
+    prop: 'mug',
   },
 };
