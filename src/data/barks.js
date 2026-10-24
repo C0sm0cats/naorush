@@ -1,54 +1,66 @@
 /**
  * Short speech bubbles, keyed by speaker then by moment. One line is picked at
  * random; the same moment does not repeat for a few seconds.
+ *
+ * Voices: Kévin is methodical and dry (jalons, Gantt, RAID, REX, CR); Charline is
+ * quick and warm (client, closing, forecast, staffing, propale). Lines said at
+ * the start of a stage must fit every stage, bonus ones included.
  * @type {Record<string, Record<string, string[]>>}
  */
 export const BARKS = {
   kevin: {
     start: [
-      'C’est parti. Jalon 1 : l’enveloppe.',
-      'Planning serré, on y va.',
-      'Kick-off lancé, chacun à son jalon !',
-      'Le Gantt est prêt, moi aussi.',
-      'Objectif : livrer avant jeudi.',
+      'Kick-off. Chacun à son jalon !',
+      'Le Gantt est prêt. Moi aussi.',
+      'Chemin critique repéré. On y va.',
+      'Livrable identifié. Go.',
+      'Reste à faire : tout. Allons-y.',
+      'Réunion de lancement : terminée. Go !',
+      'Tâche 1 : avancer. Tâche 2 : ne pas tomber.',
+      'Ordre du jour : traverser. Simple.',
     ],
     checkpoint: [
       'Jalon atteint.',
-      'Badgé, tracé, planifié.',
+      'Badgé, tracé, daté.',
       'Point d’étape validé.',
-      'Chronotime est content.',
+      'Temps saisi dans Chronotime.',
       'Jalon vert au tableau de bord !',
+      'On consolide, et on avance.',
     ],
     hurt: [
       'Risque identifié… un peu tard.',
       'Je note ça dans le REX.',
       'Aïe. Plan B.',
       'Ça, c’était pas dans le RAID.',
-      'Petit glissement de planning.',
+      'Écart constaté. Je corrige.',
+      'Impact délai : modéré.',
+      'Point de vigilance, noté.',
+      'Aïe. J’escalade en COPIL.',
     ],
     key: [
       'Livrable récupéré !',
       'Ça, c’est un jalon.',
       'Livrable en main, je coche !',
-      'Objectif de l’étape : atteint.',
+      'Critère d’acceptation : rempli.',
+      'Recette validée du premier coup.',
     ],
     ammo: [
-      'Trois CR de plus au planning.',
+      'Trois CR de plus. Paré.',
       'Du papier frais !',
-      'De quoi documenter tout un comité.',
+      'De quoi documenter tout un COPIL.',
       'Comptes rendus rechargés.',
     ],
     meeting: [
-      'Je t’envoie l’invitation.',
-      'On en parle en réunion ?',
+      'Salle réservée, café prévu.',
       'Ordre du jour en pièce jointe !',
       'Je te mets au prochain comité.',
+      'Le CR suivra, promis.',
     ],
     internStun: [
       'Pause café méritée.',
       'Pose les dossiers, on reprend après.',
-      'Prends ton temps, le planning suit.',
-      'On fera un point mentorat après !',
+      'On fera un point mentorat !',
+      'Respire. Le jalon attendra.',
     ],
     visioMute: [
       'Micro coupé, on avance.',
@@ -58,15 +70,15 @@ export const BARKS = {
     ],
     archive: [
       'Archivage express.',
-      'Ces cartons n’étaient pas dans le planning.',
       'Dossier clos, REX classé.',
       'Un compte rendu, et ça déblaie !',
+      'Archives 2019 : classées.',
     ],
     secret: [
-      'Personne n’avait vu ça dans le planning !',
       'Un raccourci hors planning !',
       'Ça, c’est un gain de délai.',
       'Opportunité notée dans le RAID.',
+      'Personne ne l’avait mis au Gantt.',
     ],
     celine: ['Si c’est pour Céline Dion, on va faire le maximum !'],
     vacuumBounce: [
@@ -80,15 +92,16 @@ export const BARKS = {
       'Le café, mon meilleur sponsor.',
     ],
     idle: [
-      'Le planning n’attend pas…',
       'Je relis le Gantt.',
       'On avance ?',
       'Prochain comité dans… oh là.',
       'Je mets à jour le RAID…',
+      'Le reste à faire ne baisse pas seul.',
+      'Mes temps Chronotime… ce soir.',
     ],
     respawn: [
       'On reprend au dernier jalon.',
-      'Retour au badge. Deuxième essai, meilleur essai.',
+      'Deuxième essai, meilleur essai.',
       'REX fait, on repart.',
       'Replanification express !',
     ],
@@ -98,25 +111,25 @@ export const BARKS = {
       'Tout est tracé, chiffré, daté.',
       'Jalon tenu, comme promis.',
     ],
-    block: [
-      'Pas maintenant : attendons qu’il consulte PRIMO.',
-      'Patience : son œil est sur PRIMO bientôt.',
-      'On attend le bon créneau : PRIMO.',
-    ],
+    // Said when a CR bounces off (a boss on guard, a robot vacuum…): keep it generic.
+    block: ['Pas le bon créneau.', 'Bloqué. Je replanifie.', 'Ça ne passe pas… pas encore.'],
   },
   charline: {
     start: [
-      'Allez, on a une enveloppe à signer !',
-      'Objectif du jour : closer.',
       'Café, sourire, c’est parti !',
+      'Objectif du jour : closer.',
       'Une belle affaire nous attend !',
+      'On fonce, le client n’attend pas !',
+      'Agenda bouclé, on y va !',
+      'Allez, on transforme l’essai !',
+      'Pipe rempli, énergie au max !',
     ],
     checkpoint: [
       'Badgée !',
       'Point de passage signé.',
       'Check !',
-      'Et hop, badgée !',
       'Étape sécurisée, on continue !',
+      'Temps saisi, je file !',
     ],
     hurt: [
       'Oups, pas dans le forecast.',
@@ -124,12 +137,13 @@ export const BARKS = {
       'Aïe !',
       'On ne lâche rien !',
       'Une objection ? Je gère.',
+      'Je renégocie avec le sol.',
     ],
     key: ['Deal conclu !', 'Signé, scellé !', 'Celui-là, je le close !', 'Le forecast remonte !'],
     ammo: [
-      'De quoi convaincre tout un comité.',
+      'Trois propales prêtes à partir !',
       'Rechargée !',
-      'Propositions prêtes à partir !',
+      'Des arguments en stock !',
       'Pitch rechargé à bloc !',
     ],
     meeting: [
@@ -142,6 +156,7 @@ export const BARKS = {
       'Respire, je t’apporte un café !',
       'Tout va bien, on fait une pause !',
       'Tu gères, prends ton souffle !',
+      'Super énergie ! On la canalise ?',
     ],
     visioMute: [
       'Je te rappelle après le COPIL !',
@@ -149,9 +164,9 @@ export const BARKS = {
       'Je t’envoie un récap par mail !',
     ],
     block: [
-      'Trop lourd pour moi… Kévin en ferait des confettis.',
-      'Pas encore : il ne consulte pas PRIMO.',
-      'J’attends qu’il regarde PRIMO…',
+      'Pas encore le bon moment !',
+      'Objection notée, je reviens !',
+      'Ça ne passe pas… pour l’instant !',
     ],
     vacuumBounce: ['Hop ! Merci le robot !', 'Super partenariat, le robot !', 'Rebond gagnant !'],
     secret: [
@@ -161,12 +176,12 @@ export const BARKS = {
       'Personne ne grimpe aussi haut !',
     ],
     celine: [
-      'Des places pour Céline Dion ? Kévin va être aux anges !',
+      'Céline Dion ? Kévin va être aux anges !',
       'Céline Dion ! Je garde ça pour Kévin.',
       'Kévin va chanter tout l’après-midi !',
     ],
     heart: [
-      'Un café, et c’est reparti !',
+      'Café serré, énergie maxi !',
       'Plein d’énergie, on fonce !',
       'Café pris, objections bienvenues !',
     ],
@@ -176,6 +191,8 @@ export const BARKS = {
       'Je checke mes mails…',
       'Trois rappels clients en attente…',
       'Le forecast ne se fait pas tout seul !',
+      'Un consultant à staffer, moi…',
+      'Je relance la propale ?',
     ],
     respawn: [
       'On repart sur de bonnes bases.',
@@ -188,6 +205,7 @@ export const BARKS = {
       'Proposition envoyée !',
       'Et ça, c’est de la valeur !',
       'Offre sur mesure, rien que pour vous !',
+      'TJM justifié, ligne par ligne !',
     ],
   },
   colleague: {
@@ -197,6 +215,7 @@ export const BARKS = {
       'Je te rappelle après mon point !',
       'Non mais là je suis en réunion…',
       'Tu es sur mute, je crois !',
+      'Deux secondes, je suis en visio !',
     ],
     meeting: [
       'Ah, une réunion ? J’y vais !',
@@ -230,15 +249,16 @@ export const BARKS = {
   },
   partner: {
     waiting: [
-      'Il manque encore l’objet clé : regarde dans le HUD !',
-      'Sans l’objet clé, on ne passe pas. Il est derrière toi !',
-      'Suis la boussole du HUD : l’objet clé t’attend.',
+      'La boussole du HUD te montre le chemin.',
+      'On ne sort pas les mains vides !',
+      'Il nous manque encore le livrable !',
     ],
     welcome: [
       'Bien joué, binôme !',
       'On y est ! Suis-moi.',
       'Quelle équipe ! On continue.',
       'Parfait, étape bouclée !',
+      'Livré dans les temps !',
     ],
   },
   techServicesDirector: {
@@ -247,6 +267,7 @@ export const BARKS = {
       'Voyons les indicateurs…',
       'Vérifions la supervision…',
       'Un œil sur le SLA…',
+      'Les sondes sont au vert…',
     ],
     bossHit: [
       'Intéressant. Continuez.',
@@ -254,13 +275,15 @@ export const BARKS = {
       'Ça tient la charge.',
       'Solide. Je valide ce point.',
       'Bien documenté. J’apprécie.',
+      'Propre. Aucune dette technique.',
     ],
     hurt: [
       'Il faut que ça tienne la charge !',
       'Pas de mise en prod sans tests !',
       'Tout est redondé ici.',
-      'Mon infra ne tombe jamais.',
       'Bascule prévue. Rien ne m’arrête.',
+      'Incident clos. On reprend ?',
+      'Relevez-vous : on refait le test.',
     ],
   },
   regionalDirector: {
@@ -282,20 +305,20 @@ export const BARKS = {
       'Plus d’énergie !',
       'Le show ne fait que commencer !',
       'Toute la Région vous regarde !',
-      'Montrez-moi ce que vous valez !',
+      'Debout ! L’Ouest se relève toujours.',
     ],
   },
 };
 
 /** Opening lines before the first stage. @type {import('./levels/index.js').Line[]} */
 export const PROLOGUE = [
-  { who: 'narrator', text: 'Inetum, La Chapelle-sur-Erdre. Lundi matin.' },
+  { who: 'narrator', text: 'Inetum, La Chapelle-sur-Erdre. Lundi, 8 h 38.' },
   {
     who: 'narrator',
-    text: 'Jeudi commencent les NAO, les négociations annuelles. Tout est prêt… sauf l’enveloppe des augmentations, introuvable.',
+    text: 'Jeudi s’ouvrent les NAO, les négociations annuelles. Tout est prêt… sauf l’enveloppe des augmentations, partie en circuit de validation.',
   },
   {
     who: 'narrator',
-    text: 'Pour la retrouver et la faire signer à temps, il faudra traverser cinq étapes et convaincre deux directeurs.',
+    text: 'Kévin a un planning. Charline a un plan. À eux deux : cinq étapes, deux directeurs à convaincre, et trois jours.',
   },
 ];

@@ -9,7 +9,7 @@ export const SEMINAIRE = {
   theme: 'office',
   music: 'copil',
   name: 'Bonus : Séminaire annuel',
-  subtitle: 'Centre des congrès · jeudi, 18 h 00',
+  subtitle: 'Centre des congrès · vendredi, 18 h 00',
   keyModel: 'badge',
   keyLabel: 'Badge séminaire',
   rooms: [
@@ -77,7 +77,7 @@ export const SEMINAIRE = {
   intro: [
     {
       who: 'partner',
-      text: 'Séminaire annuel ! L’enveloppe NAO est signée, ce soir on fête ça avec toute la boîte.',
+      text: 'Séminaire annuel ! L’enveloppe est signée, les NAO sont lancées : ce soir, on fête ça tous ensemble.',
     },
     {
       who: 'hero',
@@ -96,6 +96,10 @@ export const SEMINAIRE = {
     {
       who: 'hero',
       text: 'Et pour le buffet. Les petits fours, eux, n’attendront pas le prochain COPIL.',
+    },
+    {
+      who: 'partner',
+      text: 'Julien et Rodolphe nous gardent une place au premier rang. Belle semaine, binôme.',
     },
   ],
 };

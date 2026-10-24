@@ -69,7 +69,7 @@ export const TS = {
   intro: [
     {
       who: 'partner',
-      text: 'Salle serveurs, 19 °C. Julien a l’enveloppe, et il ne valide rien sans une architecture irréprochable.',
+      text: 'Salle serveurs, 19 °C. Julien a l’enveloppe, et chez lui, rien ne passe sans une architecture irréprochable.',
     },
     { who: 'hero', text: 'Ça tombe bien : nos comptes rendus sont en haute disponibilité.' },
   ],
@@ -78,23 +78,29 @@ export const TS = {
       who: 'boss',
       text: 'Bienvenue chez Technologies & Services. Ici, tout est redondé, sécurisé, supervisé.',
     },
-    { who: 'boss', text: 'Une enveloppe NAO ? Montrez-moi que votre dossier tient la charge.' },
+    {
+      who: 'boss',
+      text: 'L’enveloppe des NAO ne quittera ce bureau qu’avec un dossier qui tient la charge. Montrez-moi le vôtre.',
+    },
     {
       who: 'hint',
-      text: 'Quand il consulte PRIMO, sa garde tombe : lance un compte rendu (X ou CR). Surveille les ombres au sol et les câbles qui s’allument.',
+      text: 'Quand il consulte PRIMO, sa garde tombe : lance un CR (X ou CR). Évite les ombres au sol et les câbles allumés.',
     },
   ],
   outro: [
     {
       who: 'boss',
-      text: 'Dossier robuste, arguments tracés, aucun point de défaillance. Je valide.',
+      text: 'Dossier robuste, arguments tracés, aucun point de défaillance unique. Je valide.',
     },
     {
       who: 'boss',
-      text: 'Pour la signature finale, voyez Rodolphe. Mais d’abord, le comité de pilotage de demain doit acter le dossier.',
+      text: 'Je signe l’enveloppe pour Technologies & Services. Reste celle de Rodolphe, après l’avis du comité de pilotage, demain.',
     },
-    { who: 'partner', text: 'Merci Julien !' },
-    { who: 'boss', text: 'Merci à vous. Bon déploiement !' },
+    { who: 'partner', text: 'Merci, Julien ! Vous ne serez pas déçu.' },
+    {
+      who: 'boss',
+      text: 'Merci à vous. Ce dossier, nous l’avons construit ensemble. Bon déploiement !',
+    },
   ],
   phaseLine: 'Bascule sur le site de secours !',
 };

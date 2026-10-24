@@ -30,20 +30,20 @@ export const PARKING = {
     {
       x0: 5.5,
       x1: 7.5,
-      keys: 'Espace pour sauter sur le toit de la voiture.',
-      touch: 'SAUT pour monter sur le toit de la voiture.',
+      keys: 'Espace : saute sur le toit de la voiture.',
+      touch: 'SAUT : monte sur le toit de la voiture.',
     },
     {
       x0: 12,
       x1: 14.5,
-      keys: 'Saute contre le mur : tu t’accroches au rebord. ↑ pour grimper, ↓ pour lâcher.',
-      touch: 'Saute contre le mur : tu t’accroches au rebord. ▲ pour grimper, ▼ pour lâcher.',
+      keys: 'Saute contre le mur pour t’accrocher. ↑ grimpe, ↓ lâche.',
+      touch: 'Saute contre le mur pour t’accrocher. ▲ grimpe, ▼ lâche.',
     },
     {
       x0: 28.5,
       x1: 31.5,
-      keys: 'X lance un compte rendu : le collègue en call partira en réunion.',
-      touch: 'CR lance un compte rendu : le collègue en call partira en réunion.',
+      keys: 'X : un compte rendu, et le collègue file en réunion.',
+      touch: 'CR : un compte rendu, et le collègue file en réunion.',
     },
     {
       x0: 34.5,
@@ -60,9 +60,8 @@ export const PARKING = {
     {
       x0: 71.5,
       x1: 75.5,
-      keys: 'Dalle fragile : elle tremble, puis cède. Ici le trou est peu profond… à l’étage, beaucoup moins !',
-      touch:
-        'Dalle fragile : elle tremble, puis cède. Ici le trou est peu profond… à l’étage, beaucoup moins !',
+      keys: 'Dalle fragile : elle tremble, puis cède. Ici, la chute est courte !',
+      touch: 'Dalle fragile : elle tremble, puis cède. Ici, la chute est courte !',
     },
   ],
   decor: [
@@ -94,21 +93,21 @@ export const PARKING = {
   intro: [
     {
       who: 'partner',
-      text: 'Te voilà ! Pas de temps à perdre : l’enveloppe doit être retrouvée et signée avant jeudi.',
+      text: 'Te voilà ! L’enveloppe des NAO a disparu, et elle doit être signée avant jeudi.',
     },
     {
       who: 'hero',
-      text: 'Alors on monte la chercher. Il me faut juste un badge visiteur : j’ai oublié le mien.',
+      text: 'Alors on monte la chercher. Seul souci : mon badge est resté sur mon bureau.',
     },
     {
       who: 'partner',
-      text: 'Il est vers les ascenseurs. Saute sur les toits des voitures, accroche-toi aux rebords, et badge sur Chronotime !',
+      text: 'Un badge visiteur t’attend près des ascenseurs. Toits des voitures, rebords… et pense à badger sur Chronotime !',
     },
   ],
   outro: [
     {
       who: 'partner',
-      text: 'Badge récupéré ! Direction l’open space : le bon de commande signé doit y être.',
+      text: 'Badge récupéré ! Direction l’open space : le bon de commande nous dira où est partie l’enveloppe.',
     },
   ],
 };

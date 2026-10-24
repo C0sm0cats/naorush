@@ -7,27 +7,27 @@ import { POSTER_LIST } from '../gfx/posters.js';
 
 /** In-game hint for each poster: what it means for play. Artwork comes from gfx/posters.js. */
 export const POSTER_HINTS = {
-  'inetum-lcp7': 'La Chapelle-sur-Erdre. Ici commence la mission.',
-  'learning-academy': 'Module 1 : saute vers un rebord, tu t’y accroches. ↑ pour grimper.',
+  'inetum-lcp7': 'La Chapelle-sur-Erdre. C’est ici que commence la mission.',
+  'learning-academy': 'Module 1 : saute vers un rebord pour t’y accrocher, puis grimpe.',
   chronotime: 'Badge aux bornes Chronotime : en cas de pépin, tu repars de là.',
-  'global-service-center': 'Câbles à nu : le GSC est prévenu. Ne marche pas dessus.',
+  'global-service-center': 'Câbles à nu : le GSC est prévenu. En attendant, ne marche pas dessus.',
   'sap-concur': 'Les tickets Swile se ramassent… et se déclarent.',
-  mypeopledoc: 'Un collègue en call bloque le passage : un CR (X) l’envoie en réunion.',
+  mypeopledoc: 'Un collègue en call bloque le passage ? Un CR l’envoie en réunion, ravi.',
   swile: 'Chaque ticket Swile compte pour le score.',
   'bon-commande': 'Sans bon de commande signé, pas de sortie.',
-  'ordre-mission': 'Les ramettes de papier rechargent tes comptes rendus.',
-  'success-factors': 'Objectif du jour : arriver au rooftop.',
+  'ordre-mission': 'Chaque ramette de papier recharge trois comptes rendus.',
+  'success-factors': 'Un objectif par étape : la boussole du HUD te l’indique.',
   gcomp: 'La rémunération se négocie… avec des arguments.',
   'power-up': 'Les ascenseurs montent et descendent : saute au bon moment.',
-  'power-up-tour': 'Le séminaire de la Région Ouest, sur le toit. Tout le monde y est.',
+  'power-up-tour': 'Le grand rendez-vous de la Région Ouest, sur le toit. Tout le monde y est.',
   'lets-connect': 'Les collègues en call sont partout. Garde des CR.',
   'gen-ai': 'Astuce IA : un CR lancé détruit les slides KPI en vol.',
   'charity-day': 'Des petits gestes, de grands impacts.',
-  'summer-party': 'Le buffet attendra la fin des négociations.',
-  cooptation: 'Ton binôme t’attend au bout de chaque étage.',
-  'your-digital-hub': 'Le portail de tout. Ici : les bornes Chronotime sont tes amies.',
+  'summer-party': 'Le buffet se mérite : d’abord, la sortie.',
+  cooptation: 'Ton binôme t’attend au bout de chaque étape.',
+  'your-digital-hub': 'Le portail de tout. À retenir : les bornes Chronotime sont tes amies.',
   'my-way': 'Chaque étape compte : la suivante est juste au bout du couloir.',
-  spark: 'Les imprimantes clignotent avant de tirer : regarde le voyant.',
+  spark: 'Une idée lumineuse ? Les imprimantes, elles, clignotent avant de tirer.',
   gofluent: 'Les invitations en visio volent bas : saute-les, ou réponds par un CR.',
   primo: 'Les directeurs consultent PRIMO : c’est là qu’ils baissent la garde.',
   copil: 'En COPIL, tout est planifié… même les pièges. Observe, puis passe.',
@@ -37,10 +37,10 @@ export const POSTER_HINTS = {
   'adopt-tools': 'Un outil s’adopte : la coupure d’eau, par exemple, calme les sprinklers.',
   'gen-ai-hub':
     'Astuce IA : les nacelles montent et descendent en rythme. Observe avant de sauter.',
-  annuaire: 'Le binôme t’attend à la sortie de chaque étape.',
+  annuaire: 'Julien, Rodolphe, Mathis… tout le monde est dans l’annuaire. Même le stagiaire.',
   'celine-dion':
     'Billetterie CSE : deux places dorées attendent quelqu’un, tout près, sur les armoires…',
-  'espace-vip': 'Rodolphe, le Directeur Région Ouest, négocie ici. Vise pendant qu’il consulte.',
+  'espace-vip': 'Rodolphe, le Directeur Région Ouest, reçoit ici. Vise quand il consulte PRIMO.',
 };
 
 /** Whiteboard artwork for the two heroes; the bosses' boards are drawn in code. */

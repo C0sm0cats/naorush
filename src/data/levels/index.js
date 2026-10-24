@@ -48,6 +48,7 @@ import { TS } from './ts.js';
  *   keyLabel: string,
  *   keyModel?: 'key'|'badge'|'envelope',
  *   phaseLine?: string,
+ *   finaleLine?: string,
  *   tips?: Array<{x0: number, x1: number, y0?: number, y1?: number, keys: string, touch: string}>,
  *   name: string,
  *   subtitle: string,

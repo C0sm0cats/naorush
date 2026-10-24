@@ -34,9 +34,8 @@ export const LCP7 = {
     {
       x0: 37,
       x1: 39.5,
-      keys: 'Le stagiaire s’arrête net quand il te repère… puis il fonce. Saute par-dessus, ou X : un CR et c’est la pause café.',
-      touch:
-        'Le stagiaire s’arrête net quand il te repère… puis il fonce. Saute par-dessus, ou CR : c’est la pause café.',
+      keys: 'Le stagiaire s’arrête, puis fonce : saute-le, ou X pour une pause café.',
+      touch: 'Le stagiaire s’arrête, puis fonce : saute-le, ou CR pour une pause café.',
     },
   ],
   decor: [
@@ -86,22 +85,22 @@ export const LCP7 = {
   intro: [
     {
       who: 'hero',
-      text: 'Open space LCP7. Le bon de commande signé doit être quelque part par ici.',
+      text: 'Open space LCP7. Le bon de commande signé est quelque part par ici.',
     },
     {
       who: 'partner',
-      text: 'Attention : les fauteuils roulent tout seuls, les tiroirs claquent et le stagiaire court avec ses dossiers.',
+      text: 'Prudence : les fauteuils roulent seuls, les tiroirs claquent, et le stagiaire court avec ses dossiers.',
     },
     { who: 'partner', text: 'Et regarde bien le sol : certaines dalles ne tiennent qu’à un fil.' },
   ],
   outro: [
     {
       who: 'partner',
-      text: 'Le bon de commande ! Par contre, l’enveloppe est partie chez Julien, à Technologies & Services.',
+      text: 'Le bon de commande ! Regarde le circuit de visa : l’enveloppe est partie chez Julien, à Technologies & Services.',
     },
     {
       who: 'hero',
-      text: 'Julien ne valide rien sans une architecture solide. On va lui apporter des arguments.',
+      text: 'Julien ne valide rien sans une architecture solide. Préparons nos arguments.',
     },
   ],
 };

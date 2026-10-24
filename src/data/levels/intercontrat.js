@@ -9,7 +9,7 @@ export const INTERCONTRAT = {
   theme: 'office',
   music: 'office',
   name: 'Bonus : Intercontrat',
-  subtitle: 'Plateau de l’intercontrat · vendredi, 16 h 30',
+  subtitle: 'Plateau de l’intercontrat · jeudi, 9 h 30',
   keyLabel: 'Ordre de mission',
   rooms: ['Accueil', 'La fosse', 'Coin formation', 'L’escalier des étagères', 'Départ en mission'],
   map: [
@@ -65,17 +65,22 @@ export const INTERCONTRAT = {
   intro: [
     {
       who: 'partner',
-      text: 'Vendredi, 16 h 30 : l’intercontrat. Une nouvelle mission attend preneur au bout du plateau !',
+      text: 'Jeudi, 9 h 30. Pendant que les NAO s’ouvrent, un ordre de mission attend au bout du plateau de l’intercontrat.',
     },
     {
       who: 'hero',
       text: 'Des étagères à escalader, des tickets partout… on appelle ça de la montée en compétences.',
     },
+    {
+      who: 'partner',
+      text: 'Ramène-le vite : quelqu’un a hâte de repartir en mission, et côté staffing, chaque jour compte !',
+    },
   ],
   outro: [
     {
       who: 'partner',
-      text: 'Ordre de mission signé ! Départ lundi, et on a même gagné le pot de vendredi.',
+      text: 'Ordre de mission signé ! Départ lundi chez le client, au bon TJM.',
     },
+    { who: 'hero', text: 'Fin de l’intercontrat, client ravi. Ça, c’est un staffing réussi.' },
   ],
 };

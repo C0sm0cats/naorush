@@ -10,7 +10,7 @@ export const ROOFTOP = {
   name: 'Power UP Tour',
   subtitle: 'Rooftop, Nantes · mercredi, 18 h 30',
   keyModel: 'envelope',
-  keyLabel: 'Signature',
+  keyLabel: 'Enveloppe signée',
   open: true,
   rooms: [
     'Sortie de secours',
@@ -83,22 +83,25 @@ export const ROOFTOP = {
     { who: 'hero', text: 'Le Power UP Tour… toute la Région Ouest est là !' },
     {
       who: 'partner',
-      text: 'Rodolphe ouvre la soirée à l’Espace VIP. Attention aux trous dans la toiture, et prends la nacelle pour la terrasse haute.',
+      text: 'Rodolphe ouvre la soirée à l’Espace VIP. Gare aux trous dans la toiture, et prends la nacelle vers la terrasse haute.',
     },
   ],
   bossIntro: [
     { who: 'boss', text: 'Mesdames et messieurs, bienvenue au Power UP Tour !' },
     {
       who: 'boss',
-      text: 'Vous m’apportez l’enveloppe des NAO ? Alors montrez-moi l’énergie de la Région Ouest !',
+      text: 'L’enveloppe des NAO, visée par Julien, actée en COPIL… Il ne manque que ma signature. Alors montrez-moi l’énergie de la Région Ouest !',
     },
     {
       who: 'hint',
-      text: 'Saute par-dessus les ondes de choc, suis les flèches au sol et vise pendant qu’il consulte PRIMO.',
+      text: 'Saute les ondes de choc, suis les flèches au sol, et vise quand il consulte PRIMO.',
     },
   ],
   outro: [
-    { who: 'boss', text: 'Quelle énergie ! C’est exactement l’esprit de la Région Ouest.' },
+    {
+      who: 'boss',
+      text: 'Quelle énergie ! Julien m’avait prévenu : un dossier solide, une équipe soudée. C’est ça, l’esprit de la Région Ouest.',
+    },
     {
       who: 'boss',
       text: 'L’enveloppe est signée. Les NAO commencent demain, et elles commencent bien.',
@@ -107,4 +110,5 @@ export const ROOFTOP = {
     { who: 'boss', text: 'Non : on l’a fait ensemble. Et maintenant… buffet pour tout le monde !' },
   ],
   phaseLine: 'Et maintenant… la tournée régionale !',
+  finaleLine: 'Pour la Région Ouest : le grand final !',
 };

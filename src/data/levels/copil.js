@@ -72,7 +72,7 @@ export const COPIL = {
   intro: [
     {
       who: 'partner',
-      text: 'Mercredi, 10 h : comité de pilotage. Sans compte rendu validé, Rodolphe ne pourra pas signer.',
+      text: 'Mercredi, 10 h : comité de pilotage. Sans CR validé, Rodolphe ne pourra pas signer.',
     },
     {
       who: 'hero',
@@ -88,6 +88,6 @@ export const COPIL = {
       who: 'partner',
       text: 'Compte rendu validé à l’unanimité ! Rodolphe nous attend ce soir au Power UP Tour, sur le toit.',
     },
-    { who: 'hero', text: 'Dernière ligne droite. En route pour l’Espace VIP !' },
+    { who: 'hero', text: 'Dernière ligne droite. Cap sur l’Espace VIP !' },
   ],
 };

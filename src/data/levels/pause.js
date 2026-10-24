@@ -31,8 +31,8 @@ export const PAUSE = {
       x0: 68.5,
       x1: 73.5,
       y0: 5.5,
-      keys: 'Dès que tu prends le badge, les bonbonnes dévalent : file vers la porte, à gauche !',
-      touch: 'Dès que tu prends le badge, les bonbonnes dévalent : file vers la porte, à gauche !',
+      keys: 'Badge en main, les bonbonnes dévalent : file vers la porte, à gauche !',
+      touch: 'Badge en main, les bonbonnes dévalent : file vers la porte, à gauche !',
     },
   ],
   decor: [
@@ -68,12 +68,12 @@ export const PAUSE = {
   intro: [
     {
       who: 'partner',
-      text: 'Pause café ! Le badge de la cafétéria est resté au fond de la salle.',
+      text: 'Vendredi, 10 h 30 : pause café ! Mais le badge de la cafét’ est resté au fond de la salle.',
     },
     { who: 'hero', text: 'Je le récupère et je reviens. Qu’est-ce qui pourrait mal tourner ?' },
     {
       who: 'partner',
-      text: 'Les bonbonnes d’eau sont posées un peu en équilibre… Cours vite au retour !',
+      text: 'Les bonbonnes d’eau tiennent en équilibre… Au retour, cours !',
     },
   ],
   outro: [
@@ -81,5 +81,6 @@ export const PAUSE = {
       who: 'partner',
       text: 'Badge cafét’ récupéré ! Les cafés sont pour moi. Les bonbonnes, pour le service technique.',
     },
+    { who: 'hero', text: 'Un café, et on attaque les comptes rendus de la semaine.' },
   ],
 };
