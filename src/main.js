@@ -117,10 +117,24 @@ function show(next) {
   if (next === 'pause') $('resume').focus();
 }
 
+/** Little lines shown while a stage loads. */
+const LOADING_TIPS = [
+  'Le saviez-vous ? Les CR de Kévin font tomber des piles entières de cartons.',
+  'Astuce : quand un directeur consulte PRIMO, c’est le moment d’envoyer un compte rendu.',
+  'Charline peut sauter une deuxième fois en l’air. Pratique pour les rebords très hauts.',
+  'Chaque piège prévient : une secousse, un voyant, une goutte. Observe, puis passe.',
+  'Les cafés rendent un cœur. Les ramettes de papier, trois comptes rendus.',
+  'Le robot aspirateur fait un excellent tremplin.',
+  'Badge aux bornes Chronotime : en cas de pépin, tu repars de là.',
+  'Deux secrets par étape : un pour chaque héros. Un léger scintillement les trahit.',
+  'Le défi du jour change à minuit. Partage ton score avec tes collègues !',
+];
+
 /** Rebuilds the scene when the stage changes; restarts the simulation either way. @param {number} i */
 async function loadStage(i) {
   if (i !== stage || view.levelId !== LEVELS[i].id) {
-    // Building a stage takes a moment: show the loading screen first.
+    // Building a stage takes a moment: show the loading screen first, with a tip.
+    $('loadingTip').textContent = LOADING_TIPS[Math.floor(Math.random() * LOADING_TIPS.length)];
     show('loading');
     await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
     stage = i;

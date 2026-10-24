@@ -1192,3 +1192,12 @@ body[data-pad='l'] .touch .big {
   color: #fff;
   background: #ffffff1f;
 }
+
+.loading-tip {
+  max-width: min(520px, 86vw);
+  margin: 0;
+  color: #9fb0cf;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
