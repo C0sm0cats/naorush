@@ -68,6 +68,14 @@ export const BARKS = {
     meeting: ['Ah, une réunion ? J’y vais !', 'Oh, un compte rendu ! Merci !'],
     wake: ['Bon, où en étais-je ?', 'Je reprends mon call !'],
   },
+  visio: {
+    invite: [
+      'Je t’envoie une invitation !',
+      'On se cale un point ?',
+      'Tu as reçu mon invit’ ?',
+      'Réunion dans 5 minutes !',
+    ],
+  },
   intern: {
     internStun: ['Une pause café ? Avec plaisir !', 'Ouf, mes dossiers…'],
   },

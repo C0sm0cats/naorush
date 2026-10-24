@@ -187,8 +187,8 @@ const say = (who, moment, force) => bubbles.say(who, moment, force);
 /** Where a speech bubble sits: above the hero, the partner at the exit, or the boss. @param {string} who */
 function bubbleAnchor(who) {
   if (who === heroId) return [sim.hero.x + HERO.w / 2, sim.hero.y + 2.1];
-  if (who === 'colleague' || who === 'intern') {
-    const kind = who === 'colleague' ? 'colleague' : 'intern';
+  if (who === 'colleague' || who === 'intern' || who === 'visio') {
+    const kind = who;
     const near = sim.things
       .filter((t) => t.kind === kind && t.alive)
       .sort((a, b) => Math.abs(a.x - sim.hero.x) - Math.abs(b.x - sim.hero.x))[0];
@@ -618,6 +618,9 @@ function onEvent(e) {
       break;
     case 'bump':
       say('colleague', 'bump');
+      break;
+    case 'invite':
+      if (Math.random() < 0.4) say('visio', 'invite');
       break;
     case 'meeting':
       if (Math.random() < 0.5) say('colleague', 'meeting');
