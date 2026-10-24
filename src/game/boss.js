@@ -7,9 +7,16 @@ import { DT, GRAVITY, HERO, emit, hurt, knock, make } from './world.js';
  * convinced they sign the NAO envelope: everyone wins.
  *
  * Julien (Technologies & Services) deploys: KPI volleys, server racks dropped
- * from the ceiling, a failover teleport and live cable runs.
+ * from the ceiling, a failover teleport, live cable runs and, in phase 2, a
+ * load balancer that lowers racks on every other slot, then on the others.
  * Rodolphe (Région Ouest) puts on a show: fans of slides, stage-shaking leaps,
- * a regional tour dash across the stage and spotlight zones.
+ * a regional tour dash across the stage, spotlight zones and, in phase 2, an
+ * encore where the spotlight comes back to the one spot it had spared.
+ *
+ * Every attack is announced at least 0.6 s before it can hurt. Each sequence
+ * holds two rounds: after a successful CR the director moves on to the other
+ * round, so the fight never repeats itself. A step written 'state:variant'
+ * plays the state's pose with a twist (the variant is kept in `b.variant`).
  *
  * @typedef {import('./sim.js').Sim} Sim
  * @typedef {import('./world.js').Thing} Thing
@@ -21,18 +28,18 @@ export const PATTERNS = {
   techServicesDirector: {
     phase2: 2,
     seq: [
-      ['volley', 'rackDrop', 'consult'],
-      ['teleport', 'cables', 'volley', 'consult'],
+      ['volley', 'rackDrop', 'consult', 'rackDrop', 'volley', 'consult'],
+      ['teleport', 'cables', 'volley', 'consult', 'teleport', 'rackDrop:balancer', 'consult'],
     ],
-    consult: [2.6, 2.2],
+    consult: [2.8, 2.4],
   },
   regionalDirector: {
     phase2: 3,
     seq: [
-      ['fan', 'leap', 'consult'],
-      ['dash', 'zones', 'fan', 'consult'],
+      ['fan', 'leap', 'consult', 'leap', 'fan', 'consult'],
+      ['dash', 'zones', 'fan', 'consult', 'leap', 'zones:encore', 'consult'],
     ],
-    consult: [2.4, 2.0],
+    consult: [2.6, 2.3],
   },
 };
 
@@ -42,9 +49,11 @@ export const BOSS_DEBRIS = new Set(['kpi', 'wave', 'rack', 'zone']);
 /** @param {Sim} s @param {Thing} b */
 const pattern = (s, b) => PATTERNS[s.boss?.id ?? 'techServicesDirector'].seq[(b.phase ?? 1) - 1];
 
-/** @param {Sim} s @param {Thing} b @param {string} state */
-function enter(s, b, state) {
+/** @param {Sim} s @param {Thing} b @param {string} step 'state' or 'state:variant'. */
+function enter(s, b, step) {
+  const [state, variant] = step.split(':');
   b.state = state;
+  b.variant = variant;
   b.t = 0;
   b.vx = 0;
   if (state === 'consult') emit(s, 'consult', b.x, b.y + 2.2);
@@ -93,10 +102,25 @@ export function stepBoss(s, b) {
       if (b.t > 1.8) nextAttack(s, b);
       break;
     case 'volley':
-      for (const k of [0.5, 1.05, 1.6]) if (at(b, k)) throwKpi(s, b, hx - b.x, 5.5);
-      if (b.t > 2.1) nextAttack(s, b);
+      // Three throws, each released at the end of the arm's wind-up (0.89 s for the first).
+      for (const k of [0.89, 1.44, 1.99]) if (at(b, k)) throwKpi(s, b, hx - b.x, 5.5);
+      if (b.t > 2.4) nextAttack(s, b);
       break;
     case 'rackDrop':
+      if (b.variant === 'balancer') {
+        // Load balancer: shadows on every other slot of the stage, then on the
+        // others once the first batch has landed. Step aside, then step back.
+        const batch = at(b, DT) ? 0 : at(b, 1.55) ? 1 : -1;
+        if (batch >= 0) {
+          const flip = (Math.floor((b.hp ?? 0) + s.deaths) + batch) % 2;
+          for (let x = x0 + 1, i = 0; x <= x1 - 1; x += 2, i++)
+            if (i % 2 === flip && Math.abs(x - b.x) > 1.2)
+              s.things.push(make('rack', x, floor, { state: 'warn', y0: floor }));
+          if (batch) emit(s, 'telegraph', b.x, b.y + 2.3);
+        }
+        if (b.t > 3.3) nextAttack(s, b);
+        break;
+      }
       if (at(b, DT)) {
         // Shadows on the floor first, then the racks come down on them.
         for (const dx of [0, -3, 3]) {
@@ -108,7 +132,9 @@ export function stepBoss(s, b) {
       break;
     case 'teleport':
       if (at(b, 0.55)) {
-        b.x = b.x > (x0 + x1) / 2 ? x0 + 2.5 : x1 - 2.5;
+        // Fails over to the other side of the room, never onto the hero.
+        const x = b.x > (x0 + x1) / 2 ? x0 + 2.5 : x1 - 2.5;
+        if (Math.abs(hx - x) > 2) b.x = x;
         emit(s, 'teleport', b.x, b.y + 1);
       }
       if (b.t > 1) nextAttack(s, b);
@@ -125,10 +151,11 @@ export function stepBoss(s, b) {
       if (b.t > 2) nextAttack(s, b);
       break;
     case 'fan':
-      if (at(b, 0.55))
+      if (at(b, 0.6)) {
         for (let i = 0; i < 5; i++) throwKpi(s, b, face * (2.2 + i * 1.6), 5 + (i % 2) * 2.5);
-      if (at(b, 0.55)) emit(s, 'fan', b.x, b.y + 1.8);
-      if (b.t > 1.5) nextAttack(s, b);
+        emit(s, 'fan', b.x, b.y + 1.8);
+      }
+      if (b.t > 1.6) nextAttack(s, b);
       break;
     case 'leap':
       // Crouch (telegraph), jump, slam: two shockwaves run outwards.
@@ -162,27 +189,34 @@ export function stepBoss(s, b) {
       if (b.t > 2.4) nextAttack(s, b);
       break;
     }
-    case 'zones':
+    case 'zones': {
+      // Two thirds of the stage light up; the encore then lights the spared third.
+      const third = (x1 - x0) / 3;
+      const safe = (b.hp ?? 0) % 3;
+      /** @param {number} i */
+      const spot = (i) =>
+        s.things.push(
+          make('zone', x0 + i * third, floor, { w: third, state: 'warn', variant: 'spot' }),
+        );
       if (at(b, DT)) {
-        const third = (x1 - x0) / 3;
-        const safe = (b.hp ?? 0) % 3;
-        for (let i = 0; i < 3; i++)
-          if (i !== safe)
-            s.things.push(
-              make('zone', x0 + i * third, floor, { w: third, state: 'warn', variant: 'spot' }),
-            );
+        for (let i = 0; i < 3; i++) if (i !== safe) spot(i);
         emit(s, 'zoneWarn', (x0 + x1) / 2, floor);
       }
-      if (b.t > 2) nextAttack(s, b);
+      const encore = b.variant === 'encore';
+      if (encore && at(b, 1.3)) {
+        // Not 'zoneWarn': its hint says to hide in the dark spot, which is now the target.
+        spot(safe);
+        emit(s, 'telegraph', b.x, b.y + 2.3);
+      }
+      if (b.t > (encore ? 3.1 : 2)) nextAttack(s, b);
       break;
+    }
     case 'consult':
       if (b.t > p.consult[(b.phase ?? 1) - 1]) nextAttack(s, b);
       break;
     case 'hit':
-      if (b.t > 0.6) {
-        b.step = -1;
-        nextAttack(s, b);
-      }
+      // Picks up at the other round of the sequence.
+      if (b.t > 0.6) nextAttack(s, b);
       break;
     case 'phase':
       if (b.t > 1.8) {
@@ -288,5 +322,6 @@ export function resetBoss(s, b) {
     vx: 0,
     phase: 1,
     step: -1,
+    variant: undefined,
   });
 }
