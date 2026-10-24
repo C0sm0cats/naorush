@@ -1,6 +1,94 @@
 import { STRIDE } from './voxels.js';
 import { identity, lookAt, multiply, ortho } from './mat4.js';
 
+/** Extra room (world units / tiles) kept around the camera view before an item is culled. */
+const VIEW_MARGIN = 6;
+/** Extra room around the sun's shadow box before an item is left out of the shadow map. */
+const SHADOW_MARGIN = 2;
+const WHITE = new Float32Array([1, 1, 1]);
+/** @type {{flash?: number}} */
+const NO_FX = {};
+
+/**
+ * Bounding radius around the mesh origin, from the interleaved vertex positions.
+ * @param {{data: ArrayBuffer | ArrayBufferView, count: number}} geo
+ */
+function meshRadius(geo) {
+  const d = /** @type {unknown} */ (geo.data);
+  /** @type {ArrayBuffer | undefined} */
+  let buf;
+  let off = 0;
+  let len = 0;
+  if (d instanceof ArrayBuffer) {
+    buf = d;
+    len = d.byteLength;
+  } else if (ArrayBuffer.isView(d) && d.byteOffset % 4 === 0) {
+    buf = /** @type {ArrayBuffer} */ (d.buffer);
+    off = d.byteOffset;
+    len = d.byteLength;
+  }
+  if (!buf || STRIDE % 4) return Infinity;
+  const f = new Float32Array(buf, off, len >> 2);
+  const step = STRIDE / 4;
+  const n = Math.min(geo.count, Math.floor(f.length / step));
+  let r2 = 0;
+  for (let i = 0, o = 0; i < n; i++, o += step) {
+    const x = f[o],
+      y = f[o + 1],
+      z = f[o + 2];
+    const q = x * x + y * y + z * z;
+    if (q > r2) r2 = q;
+  }
+  return Number.isFinite(r2) ? Math.sqrt(r2) : Infinity;
+}
+
+/**
+ * Left, right, bottom, top clip planes (normalised) of a view-projection matrix.
+ * @param {Float32Array} m
+ * @param {Float64Array} out 16 numbers: 4 planes of (nx, ny, nz, d).
+ */
+function extractPlanes(m, out) {
+  for (let i = 0; i < 4; i++) {
+    const row = i >> 1;
+    const sign = i & 1 ? -1 : 1;
+    const a = m[3] + sign * m[row],
+      b = m[7] + sign * m[4 + row],
+      c = m[11] + sign * m[8 + row],
+      d = m[15] + sign * m[12 + row];
+    const l = Math.hypot(a, b, c) || 1;
+    out[i * 4] = a / l;
+    out[i * 4 + 1] = b / l;
+    out[i * 4 + 2] = c / l;
+    out[i * 4 + 3] = d / l;
+  }
+}
+
+/**
+ * Conservative visibility test: the item's bounding sphere against four clip planes.
+ * Items placed at the world origin (office shell, skyline, diorama) are never culled.
+ * @param {DrawItem} it
+ * @param {Float64Array} planes
+ * @param {number} margin
+ */
+function visible(it, planes, margin) {
+  const m = it.model;
+  const x = m[12],
+    y = m[13],
+    z = m[14];
+  if (x === 0 && y === 0 && z === 0) return true;
+  const r = it.mesh.radius;
+  if (!(r < Infinity)) return true;
+  const s2 = Math.max(
+    m[0] * m[0] + m[1] * m[1] + m[2] * m[2],
+    m[4] * m[4] + m[5] * m[5] + m[6] * m[6],
+    m[8] * m[8] + m[9] * m[9] + m[10] * m[10],
+  );
+  const reach = -(r * Math.sqrt(s2) + margin);
+  for (let i = 0; i < 16; i += 4)
+    if (planes[i] * x + planes[i + 1] * y + planes[i + 2] * z + planes[i + 3] < reach) return false;
+  return true;
+}
+
 const MAIN_VS = `#version 300 es
 layout(location=0) in vec3 aPos;
 layout(location=1) in vec3 aNormal;
@@ -171,6 +259,8 @@ export class Mesh {
    */
   constructor(gl, geo) {
     this.count = geo.count;
+    /** Bounding radius around the mesh origin (for culling). */
+    this.radius = meshRadius(geo);
     this.vao = /** @type {WebGLVertexArrayObject} */ (gl.createVertexArray());
     this.buffer = gl.createBuffer();
     gl.bindVertexArray(this.vao);
@@ -298,6 +388,19 @@ export class Renderer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     this.width = 1;
     this.height = 1;
+    // Per-frame scratch storage: render() allocates nothing.
+    this.lightProj = ortho(-22, 22, -16, 16, 1, 90);
+    this.lightView = new Float32Array(16);
+    this.lightVP = new Float32Array(16);
+    this.lightEye = new Float64Array(3);
+    this.lightTarget = new Float64Array(3);
+    this.viewPlanes = new Float64Array(16);
+    this.shadowPlanes = new Float64Array(16);
+    this.lightPos = new Float32Array(32);
+    this.lightColor = new Float32Array(24);
+    /** Indices and distances of the nearest point lights, sorted by distance. */
+    this.nearIdx = new Int32Array(8);
+    this.nearDist = new Float64Array(8);
     this.resize();
   }
 
@@ -320,14 +423,28 @@ export class Renderer {
    * @param {Sprite[]} sprites
    * @param {{flash?: number}} [fx]
    */
-  render(camera, lit, items, sprites, fx = {}) {
+  render(camera, lit, items, sprites, fx = NO_FX) {
     const gl = this.gl;
     this.resize();
     // Sun shadow map centred on what the camera looks at.
-    const [fx0, fy0] = camera.focus;
+    const fx0 = camera.focus[0],
+      fy0 = camera.focus[1];
     const d = lit.sunDir;
-    const lightEye = [fx0 - d[0] * 40, fy0 - d[1] * 40, -d[2] * 40];
-    const lightVP = multiply(ortho(-22, 22, -16, 16, 1, 90), lookAt(lightEye, [fx0, fy0, 0]));
+    const eye = this.lightEye;
+    eye[0] = fx0 - d[0] * 40;
+    eye[1] = fy0 - d[1] * 40;
+    eye[2] = -d[2] * 40;
+    const target = this.lightTarget;
+    target[0] = fx0;
+    target[1] = fy0;
+    target[2] = 0;
+    const lightVP = multiply(
+      this.lightProj,
+      lookAt(eye, target, undefined, this.lightView),
+      this.lightVP,
+    );
+    extractPlanes(lightVP, this.shadowPlanes);
+    extractPlanes(camera.viewProj, this.viewPlanes);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFbo);
     gl.viewport(0, 0, this.shadowSize, this.shadowSize);
@@ -338,10 +455,14 @@ export class Renderer {
     gl.polygonOffset(2, 4);
     gl.useProgram(this.depth.p);
     gl.uniformMatrix4fv(this.depth.u.uLightVP, false, lightVP);
-    for (const it of items) {
-      if (it.noShadow) continue;
-      gl.uniformMatrix4fv(this.depth.u.uModel, false, it.model);
-      gl.bindVertexArray(it.mesh.vao);
+    const uDepthModel = this.depth.u.uModel;
+    /** @type {WebGLVertexArrayObject | null} */
+    let vao = null;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.noShadow || !visible(it, this.shadowPlanes, SHADOW_MARGIN)) continue;
+      gl.uniformMatrix4fv(uDepthModel, false, it.model);
+      if (it.mesh.vao !== vao) gl.bindVertexArray((vao = it.mesh.vao));
       gl.drawArrays(gl.TRIANGLES, 0, it.mesh.count);
     }
     gl.disable(gl.POLYGON_OFFSET_FILL);
@@ -376,31 +497,32 @@ export class Renderer {
     gl.uniform1f(m.u.uFogFar, lit.fogRange[1]);
     gl.uniform3fv(m.u.uEye, camera.eye);
     gl.uniform1f(m.u.uFlash, fx.flash ?? 0);
-    // The shader takes 8 point lights: keep the ones nearest to what the camera looks at.
-    const near = (/** @type {{pos: number[]}} */ l) => Math.hypot(l.pos[0] - fx0, l.pos[1] - fy0);
-    const lights =
-      lit.lights.length > 8
-        ? [...lit.lights].sort((a, b) => near(a) - near(b)).slice(0, 8)
-        : lit.lights;
-    gl.uniform1i(m.u.uLights, lights.length);
-    if (lights.length) {
-      gl.uniform4fv(
-        m.u.uLightPos,
-        lights.flatMap((l) => [...l.pos, l.radius]),
-      );
-      gl.uniform3fv(
-        m.u.uLightColor,
-        lights.flatMap((l) => l.color),
-      );
-    }
+    this.uploadLights(lit.lights, fx0, fy0);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.shadowTex);
     gl.uniform1i(m.u.uShadow, 0);
-    for (const it of items) {
-      gl.uniformMatrix4fv(m.u.uModel, false, it.model);
-      gl.uniform1f(m.u.uRim, it.rim ?? 0);
-      gl.uniform3fv(m.u.uTint, it.tint ?? [1, 1, 1]);
-      gl.bindVertexArray(it.mesh.vao);
+    const uModel = m.u.uModel,
+      uRim = m.u.uRim,
+      uTint = m.u.uTint;
+    vao = null;
+    let rim = NaN;
+    let tr = NaN,
+      tg = NaN,
+      tb = NaN;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (!visible(it, this.viewPlanes, VIEW_MARGIN)) continue;
+      gl.uniformMatrix4fv(uModel, false, it.model);
+      const r = it.rim ?? 0;
+      if (r !== rim) gl.uniform1f(uRim, (rim = r));
+      const t = it.tint ?? WHITE;
+      if (t[0] !== tr || t[1] !== tg || t[2] !== tb) {
+        tr = t[0];
+        tg = t[1];
+        tb = t[2];
+        gl.uniform3fv(uTint, t);
+      }
+      if (it.mesh.vao !== vao) gl.bindVertexArray((vao = it.mesh.vao));
       gl.drawArrays(gl.TRIANGLES, 0, it.mesh.count);
     }
 
@@ -420,6 +542,55 @@ export class Renderer {
       gl.drawArrays(gl.TRIANGLES, 0, 6);
     }
     gl.bindVertexArray(null);
+  }
+
+  /**
+   * Uploads the point lights; the shader takes 8, so keep the ones nearest to
+   * what the camera looks at (stable order on ties, like a stable sort).
+   * @param {Lighting['lights']} all
+   * @param {number} fx0
+   * @param {number} fy0
+   */
+  uploadLights(all, fx0, fy0) {
+    const gl = this.gl;
+    const u = this.main.u;
+    const idx = this.nearIdx,
+      dist = this.nearDist;
+    let n = 0;
+    if (all.length <= 8) {
+      n = all.length;
+      for (let i = 0; i < n; i++) idx[i] = i;
+    } else {
+      for (let i = 0; i < all.length; i++) {
+        const p = all[i].pos;
+        const dd = Math.hypot(p[0] - fx0, p[1] - fy0);
+        if (n === 8 && !(dd < dist[7])) continue;
+        let j = n < 8 ? n++ : 7;
+        while (j > 0 && dist[j - 1] > dd) {
+          dist[j] = dist[j - 1];
+          idx[j] = idx[j - 1];
+          j--;
+        }
+        dist[j] = dd;
+        idx[j] = i;
+      }
+    }
+    gl.uniform1i(u.uLights, n);
+    if (!n) return;
+    const pos = this.lightPos,
+      col = this.lightColor;
+    for (let k = 0; k < n; k++) {
+      const l = all[idx[k]];
+      pos[k * 4] = l.pos[0];
+      pos[k * 4 + 1] = l.pos[1];
+      pos[k * 4 + 2] = l.pos[2];
+      pos[k * 4 + 3] = l.radius;
+      col[k * 3] = l.color[0];
+      col[k * 3 + 1] = l.color[1];
+      col[k * 3 + 2] = l.color[2];
+    }
+    gl.uniform4fv(u.uLightPos, pos, 0, n * 4);
+    gl.uniform3fv(u.uLightColor, col, 0, n * 3);
   }
 }
 
