@@ -36,7 +36,7 @@ test('the title offers the daily challenge and the trophies', async ({ page }) =
   await expect(page.locator('body')).toHaveAttribute('data-screen', 'title', { timeout: 60000 });
   await expect(page.locator('#dailyBtn')).toContainText('Défi du jour :');
   await page.locator('#trophiesBtn').click();
-  await expect(page.locator('#trophyList li')).toHaveCount(14);
+  await expect(page.locator('#trophyList li')).toHaveCount(15);
   await page.locator('#trophiesClose').click();
   await expect(page.locator('body')).toHaveAttribute('data-screen', 'title');
 });

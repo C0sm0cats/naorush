@@ -437,6 +437,7 @@ function stageWon() {
   const bonus = stage >= CAMPAIGN || Boolean(challenge);
   if (!bonus) store(SAVE_KEY, last ? 0 : stage + 1);
   trophies.stageWon(sim, level.id, last);
+  if (challenge) trophies.dailyDone(challenge.key);
   if (last) return credits();
   $('next').hidden = bonus;
   $('wonKicker').textContent = challenge

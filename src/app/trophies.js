@@ -22,6 +22,7 @@ export const TROPHIES = [
   { id: 'tickets', name: 'Repas offerts', text: 'Ramasser 150 tickets Swile au total.' },
   { id: 'bonus', name: 'Départ en mission', text: 'Finir l’étape bonus Intercontrat.' },
   { id: 'pause', name: 'Pause méritée', text: 'Échapper aux bonbonnes de la salle de pause.' },
+  { id: 'daily', name: 'Habitué du défi', text: 'Réussir le défi du jour trois jours différents.' },
 ];
 
 const KEY = 'naorush.trophies';
@@ -30,17 +31,19 @@ export class Trophies {
   /** @param {(t: Trophy) => void} onUnlock */
   constructor(onUnlock) {
     this.onUnlock = onUnlock;
-    /** @type {{got: Record<string, boolean>, counts: Record<string, number>, secrets: string[]}} */
-    this.data = { got: {}, counts: {}, secrets: [] };
-    const saved = /** @type {{got?: unknown, counts?: unknown, secrets?: unknown}} */ (
-      load(KEY, {})
-    );
+    /** @type {{got: Record<string, boolean>, counts: Record<string, number>, secrets: string[], days: string[]}} */
+    this.data = { got: {}, counts: {}, secrets: [], days: [] };
+    const saved =
+      /** @type {{got?: unknown, counts?: unknown, secrets?: unknown, days?: unknown}} */ (
+        load(KEY, {})
+      );
     // Keep only well-formed parts of an older or damaged save.
     if (saved.got && typeof saved.got === 'object')
       this.data.got = /** @type {Record<string, boolean>} */ (saved.got);
     if (saved.counts && typeof saved.counts === 'object')
       this.data.counts = /** @type {Record<string, number>} */ (saved.counts);
     if (Array.isArray(saved.secrets)) this.data.secrets = saved.secrets;
+    if (Array.isArray(saved.days)) this.data.days = saved.days;
     /** Hits taken during the current boss fight. */
     this.bossHits = 0;
   }
@@ -121,6 +124,15 @@ export class Trophies {
       this.unlock('nao');
       this.unlock(sim.heroId);
     }
+  }
+
+  /** A daily challenge completed. @param {string} day */
+  dailyDone(day) {
+    if (!this.data.days.includes(day)) {
+      this.data.days.push(day);
+      this.save();
+    }
+    if (this.data.days.length >= 3) this.unlock('daily');
   }
 
   /** @returns {Array<Trophy & {got: boolean}>} */
