@@ -112,7 +112,9 @@ export class Hud {
     this.key.classList.toggle('have', sim.hasKey);
     // A small compass: where the key item is, then where the exit is.
     const hx = sim.hero.x + HERO.w / 2;
-    const target = sim.things.find((t) => t.alive && t.kind === (sim.hasKey ? 'exit' : 'key'));
+    const find = (/** @type {string} */ kind) => sim.things.find((t) => t.alive && t.kind === kind);
+    // Before the boss signs, the key item does not exist yet: point at the boss.
+    const target = sim.hasKey ? find('exit') : (find('key') ?? find('boss'));
     const arrow = !target || Math.abs(target.x - hx) < 3 ? '' : target.x > hx ? ' ▶' : ' ◀';
     const label = sim.hasKey ? `${level.keyLabel} ✓ · Sortie${arrow}` : `${level.keyLabel}${arrow}`;
     if (this.key.textContent !== label) this.key.textContent = label;
