@@ -821,13 +821,12 @@ body:not([data-screen='play']) .bossbar {
   width: 70%;
   height: 16px;
   color: var(--lime);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 1.6px;
   text-shadow: 0 1px 2px #000c;
 }
-.consult[hidden] {
-  display: flex;
+.consult.off {
   visibility: hidden;
 }
 .consult-bar {
@@ -1349,7 +1348,7 @@ body:not([data-screen='play']) .bossbar {
     top: calc(max(12px, env(safe-area-inset-top)) + 54px + var(--toast-h, 0px));
   }
   body.boss .hint {
-    top: calc(max(12px, env(safe-area-inset-top)) + 102px + var(--toast-h, 0px));
+    top: calc(max(12px, env(safe-area-inset-top)) + 124px + var(--toast-h, 0px));
   }
 }
 .pad {

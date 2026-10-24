@@ -156,7 +156,9 @@ export class Hud {
     }
     const consult = boss?.state === 'consult';
     this.bossbar.classList.toggle('open', consult);
-    this.bossConsult.hidden = !consult;
+    // A class, not `hidden`: the row keeps its height so the toast below never jumps.
+    this.bossConsult.classList.toggle('off', !consult);
+    this.bossConsult.setAttribute('aria-hidden', String(!consult));
     if (consult && boss) {
       const length = p.consult[phase - 1] ?? 1;
       const left = Math.max(0, 1 - (boss.t ?? 0) / length);
