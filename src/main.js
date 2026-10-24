@@ -311,7 +311,7 @@ function openOptions() {
   refreshOptions();
   show('options');
 }
-$('optionsBtn').onclick = $('pauseOptions').onclick = openOptions;
+$('optionsBtn').onclick = $('pauseOptions').onclick = $('goOptions').onclick = openOptions;
 $('trophiesBtn').onclick = () => {
   renderTrophies($('trophyList'), trophies.list());
   audio.sfx('select');
@@ -355,7 +355,7 @@ $('posterNext').onclick = () => showPoster(1);
 $('postersClose').onclick = () => show('cast');
 function closeOptions() {
   input.capture = null;
-  show(optionsFrom === 'pause' ? 'pause' : 'title');
+  show(optionsFrom === 'pause' || optionsFrom === 'gameover' ? optionsFrom : 'title');
 }
 $('optionsClose').onclick = closeOptions;
 // Switching tabs or apps pauses the game and the sound.
