@@ -101,12 +101,12 @@ const OVERLAYS = /** @type {const} */ ([
 function show(next) {
   screen = next;
   document.body.dataset.screen = next;
+  // Focus never lingers on a hidden screen's button: Enter or Space would press it.
+  /** @type {HTMLElement | null} */ (document.activeElement)?.blur();
   for (const id of OVERLAYS) $(id).hidden = (id === 'reader' ? 'reading' : id) !== next;
   input.clear();
   if (next === 'title') $('play').focus();
   if (next === 'won') $($('next').hidden ? 'menu' : 'next').focus();
-  // Nothing keeps focus during play, so Space never presses a button by accident.
-  if (next === 'play') /** @type {HTMLElement | null} */ (document.activeElement)?.blur();
   if (next === 'gameover') $('goResume').focus();
   if (next === 'pause') $('resume').focus();
 }
