@@ -56,6 +56,8 @@ export class Input {
     this.held = new Set();
     /** @type {Set<string>} */
     this.taps = new Set();
+    /** Keyboard keys held down since the last clear(). @type {Set<string>} */
+    this.keys = new Set();
     /** Custom bindings: action → key code. @type {Record<string, string>} */
     this.custom = {};
     this.custom = load(BIND_KEY, {});
@@ -93,14 +95,23 @@ export class Input {
       // Sliders and lists keep their left/right arrows; up/down always move focus.
       if ((k === 'left' || k === 'right') && target?.closest?.('input, select')) return;
       e.preventDefault();
+      // A key still held from before clear() (say, Space on the last dialogue
+      // line) stays ignored until it is pressed again.
+      if (e.repeat && !this.keys.has(e.code)) return;
+      this.keys.add(e.code);
       if (!e.repeat) this.taps.add(k);
       this.held.add(k);
     });
     addEventListener('keyup', (/** @type {KeyboardEvent} */ e) => {
+      this.keys.delete(e.code);
       const k = this.actionFor(e.code);
-      if (k) this.held.delete(k);
+      // Two keys on one action (← and Q): releasing one keeps the other going.
+      if (k && ![...this.keys].some((c) => this.actionFor(c) === k)) this.held.delete(k);
     });
-    addEventListener('blur', () => this.held.clear());
+    addEventListener('blur', () => {
+      this.held.clear();
+      this.keys.clear();
+    });
     // The gamepad focus ring only shows until the mouse or a finger takes over.
     addEventListener('pointerdown', () => document.body.classList.remove('padnav'));
     this.bindTouch();
@@ -239,6 +250,7 @@ export class Input {
   clear() {
     this.held.clear();
     this.taps.clear();
+    this.keys.clear();
     this.padBlocked = new Set(this.padHeld);
   }
 }
