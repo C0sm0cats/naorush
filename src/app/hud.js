@@ -10,7 +10,6 @@ const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 const EVENT_TEXT = {
   checkpoint: 'Badgé ! Chronotime enregistre ta progression.',
   door: 'Badge accepté : la porte du fond s’ouvre.',
-  key: 'Bon de commande signé ! Attention à la bonbonne…',
   collapse: 'Le planning s’effondre !',
   bump: '« Je suis en call, là ! » — un CR (X) l’enverra en réunion.',
   block: 'Il est concentré : attends qu’il consulte PRIMO.',
@@ -76,8 +75,20 @@ export class Hud {
     this.toastTime = 2.8;
   }
 
+  /** Stage-specific wording. @param {{keyLabel: string, bottle: boolean}} stage */
+  setStage(stage) {
+    this.stage = stage;
+  }
+
   /** @param {import('../game/sim.js').SimEvent} e */
   event(e) {
+    if (e.type === 'key' && this.stage) {
+      this.toast(
+        `${this.stage.keyLabel} récupéré !` +
+          (this.stage.bottle ? ' Attention à la bonbonne…' : ''),
+      );
+      return;
+    }
     const tip = FIRST_TIME[/** @type {keyof typeof FIRST_TIME} */ (e.type)];
     if (tip && !this.seen.has(e.type)) {
       this.seen.add(e.type);

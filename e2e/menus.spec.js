@@ -157,14 +157,14 @@ test('poster gallery navigates and wraps', async ({ page, isMobile }) => {
   await page.locator('#postersBtn').click();
   await expect(page.locator('body')).toHaveAttribute('data-screen', 'posters');
   const caption = page.locator('#posterCaption');
-  await expect(caption).toHaveText(/ 1 \/ 31$/);
+  await expect(caption).toHaveText(/ 1 \/ 32$/);
   await expect(page.locator('#posterImg')).toHaveAttribute('src', /^data:image/);
   await page.locator('#posterNext').click();
-  await expect(caption).toHaveText(/ 2 \/ 31$/);
+  await expect(caption).toHaveText(/ 2 \/ 32$/);
   await page.locator('#posterPrev').click();
-  await expect(caption).toHaveText(/ 1 \/ 31$/);
+  await expect(caption).toHaveText(/ 1 \/ 32$/);
   await page.locator('#posterPrev').click();
-  await expect(caption).toHaveText(/ 31 \/ 31$/);
+  await expect(caption).toHaveText(/ 32 \/ 32$/);
   if (isMobile) {
     await page.locator('#postersClose').click();
     await expect(page.locator('body')).toHaveAttribute('data-screen', 'cast');
@@ -173,11 +173,11 @@ test('poster gallery navigates and wraps', async ({ page, isMobile }) => {
     return;
   }
   await page.keyboard.press('ArrowRight');
-  await expect(caption).toHaveText(/ 1 \/ 31$/);
+  await expect(caption).toHaveText(/ 1 \/ 32$/);
   await page.keyboard.press('ArrowRight');
-  await expect(caption).toHaveText(/ 2 \/ 31$/);
+  await expect(caption).toHaveText(/ 2 \/ 32$/);
   await page.keyboard.press('ArrowLeft');
-  await expect(caption).toHaveText(/ 1 \/ 31$/);
+  await expect(caption).toHaveText(/ 1 \/ 32$/);
   await page.keyboard.press('Escape');
   await expect(page.locator('body')).toHaveAttribute('data-screen', 'cast');
   await page.keyboard.press('Escape');

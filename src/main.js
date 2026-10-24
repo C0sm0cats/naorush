@@ -154,6 +154,7 @@ async function loadStage(i) {
   view.doorT = 0;
   camera.snap(sim.hero.x, sim.hero.y + 3);
   hud.lastHearts = -1;
+  hud.setStage({ keyLabel: level.keyLabel, bottle: sim.things.some((t) => t.kind === 'bottle') });
   pending = null;
   hitstop = 0;
   wonTimer = 0;

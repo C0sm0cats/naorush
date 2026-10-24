@@ -1241,12 +1241,17 @@ function buildBed(ctx, buf, dest, name) {
       }
     });
     every(14000, 30000, () => {
-      const lp = filt('lowpass', 1800, 0.5);
+      // A short-lived filter, released once the ring is over (not kept with the bed).
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 1800;
+      lp.Q.value = 0.5;
       lp.connect(out);
       for (let k = 0; k < 4; k++) {
         blip('sine', 1330, 0.012, 0.09, lp, k * 0.12);
         blip('sine', 1000, 0.012, 0.09, lp, k * 0.12 + 0.06);
       }
+      setTimeout(() => lp.disconnect(), 900);
     });
   } else if (name === 'datacenter') {
     const hum = gain(0.6);
@@ -1532,6 +1537,14 @@ export class Audio {
     run.next = now + 0.08;
     const total = bars.length * 16;
     run.timer = setInterval(() => {
+      // After a main-thread stall (a stage being built), skip the missed steps instead
+      // of playing them all at once.
+      const s16 = 60 / def.bpm / 4;
+      if (run.next < ctx.currentTime - s16) {
+        const skip = Math.ceil((ctx.currentTime - run.next) / s16);
+        run.step += skip;
+        run.next += skip * s16;
+      }
       while (run.next < ctx.currentTime + LOOKAHEAD) {
         if (def.once && run.step >= total) {
           if (run.timer) clearInterval(run.timer);
