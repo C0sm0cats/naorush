@@ -1,5 +1,6 @@
 import { BARKS } from '../data/barks.js';
 import { CAST } from '../data/cast.js';
+import { project } from '../gfx/mat4.js';
 
 /**
  * Story dialogue (typewriter box at the bottom) and speech bubbles above heads.
@@ -79,10 +80,8 @@ export class Dialogue {
 
 /** World point to CSS pixels. @param {Float32Array} vp @param {number} x @param {number} y */
 function toScreen(vp, x, y) {
-  const cx = vp[0] * x + vp[4] * y + vp[12];
-  const cy = vp[1] * x + vp[5] * y + vp[13];
-  const cw = vp[3] * x + vp[7] * y + vp[15];
-  return [((cx / cw) * 0.5 + 0.5) * innerWidth, (0.5 - (cy / cw) * 0.5) * innerHeight];
+  const p = project(vp, x, y, 0);
+  return [(p.x * 0.5 + 0.5) * innerWidth, (0.5 - p.y * 0.5) * innerHeight];
 }
 
 /** A short line in a bubble above a character's head. */

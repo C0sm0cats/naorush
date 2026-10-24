@@ -1,4 +1,4 @@
-import { DT, step } from './sim.js';
+import { step } from './sim.js';
 import { PERIOD, phaseOf } from './traps.js';
 
 /**
@@ -189,5 +189,3 @@ export function solve(start, o = {}) {
   }
   return { won: false, inputs: [], explored, closest: best.sim };
 }
-
-export const SECONDS_PER_FRAME = DT;
