@@ -310,7 +310,8 @@ function background(ctx, s, W, H) {
   ctx.globalAlpha = 0.13;
   circle(ctx, W - u * 0.08, u * 0.1, u * 0.36, s.accent);
   circle(ctx, u * 0.02, H - u * 0.24, u * 0.24, s.accent);
-  ctx.globalAlpha = 0.3;
+  // Background ornaments stay faint so the title and the art read from afar.
+  ctx.globalAlpha = 0.22;
   // Dot grid in the top-right corner.
   for (let i = 0; i < 6; i++) {
     for (let j = 0; j < 4; j++) circle(ctx, W - 36 - i * 22, 34 + j * 22, 3.2, s.accent);
@@ -326,7 +327,7 @@ function background(ctx, s, W, H) {
     const dy = i * q * 1.15 - (i === 2 ? q * 1.15 : 0);
     box(ctx, sx + dx, sy + dy, q, q, q * 0.18, cols[i]);
   }
-  ctx.globalAlpha = 0.5;
+  ctx.globalAlpha = 0.36;
   // Sparkles stay in the side margins, clear of text and art.
   for (let i = 0; i < 4; i++) {
     const x = (i % 2 ? W - 26 : 26) + (r() - 0.5) * 12;
@@ -346,7 +347,8 @@ function titleBlock(ctx, s, x, y, maxW, size, align = 'left') {
     const str = s.lines[i];
     const w = measure(ctx, str, size);
     const fs = Math.min(size, (size * maxW) / w);
-    y += fs * 0.84 + (i ? fs * 0.06 : 0);
+    // Accented capitals (COMITÉ, À...) rise above the cap height: give them headroom.
+    y += fs * 0.84 + (i ? fs * 0.06 : 0) + (/[ÀÂÉÈÊËÎÏÔÙÛÇ]/.test(str) ? fs * 0.12 : 0);
     if (s.shadow)
       text(ctx, str, x + fs * 0.05, y + fs * 0.05, fs, s.shadow, { align, spacing: -1 });
     text(ctx, str, x, y, fs, s.colors[Math.min(i, s.colors.length - 1)], { align, spacing: -1 });
@@ -354,9 +356,18 @@ function titleBlock(ctx, s, x, y, maxW, size, align = 'left') {
   return y;
 }
 
-/** @param {Ctx} ctx @param {string} str @param {number} x @param {number} y @param {number} size @param {string} c @param {CanvasTextAlign} [align] */
-function kicker(ctx, str, x, y, size, c, align = 'left') {
-  text(ctx, str.toUpperCase(), x, y, size, c, { weight: 800, spacing: size * 0.22, align });
+/**
+ * Small spaced caps above the title, as heavy as the title so they survive minification.
+ * @param {Ctx} ctx @param {string} str @param {number} x @param {number} y @param {number} size
+ * @param {string} c @param {CanvasTextAlign} [align] @param {number} [maxW]
+ */
+function kicker(ctx, str, x, y, size, c, align = 'left', maxW = undefined) {
+  text(ctx, str.toUpperCase(), x, y, size, c, { weight: 900, spacing: size * 0.16, align, maxW });
+}
+
+/** Height of a tagline card at a given size (an upper bound when the text has to shrink). @param {Spec} s @param {number} size */
+function tagHeight(s, size) {
+  return size * (1.25 * s.tagline.split('\n').length + 0.66);
 }
 
 /**
@@ -367,19 +378,21 @@ function kicker(ctx, str, x, y, size, c, align = 'left') {
  */
 function taglineCard(ctx, s, x, y, size, maxW, align) {
   const lines = s.tagline.split('\n');
-  const pad = size * 0.7;
+  const pad = size * 0.6;
   let fs = size;
-  const widest = Math.max(...lines.map((l) => measure(ctx, l, fs, 750)));
+  const widest = Math.max(...lines.map((l) => measure(ctx, l, fs, 800)));
   if (widest > maxW - pad * 2) fs *= (maxW - pad * 2) / widest;
-  const tw = Math.max(...lines.map((l) => measure(ctx, l, fs, 750)));
+  const tw = Math.max(...lines.map((l) => measure(ctx, l, fs, 800)));
   const lh = fs * 1.25;
   const w = tw + pad * 2;
   const h = lh * lines.length + pad * 1.1;
   const left = align === 'center' ? x - w / 2 : x;
+  // A flat drop shadow lifts the card off busy backgrounds, the same on every poster.
+  box(ctx, left + 6, y + 7, w, h, Math.min(28, h / 2), 'rgba(10,14,30,0.24)');
   box(ctx, left, y, w, h, Math.min(28, h / 2), s.tagBg);
   lines.forEach((l, i) => {
     text(ctx, l, left + w / 2, y + pad * 0.55 + lh * (i + 0.78), fs, s.tagFg, {
-      weight: 750,
+      weight: 800,
       align: 'center',
     });
   });
@@ -421,54 +434,54 @@ function compose(ctx, s) {
   background(ctx, s, W, H);
   if (s.shape === 'portrait') {
     const M = 60;
-    let y = 64;
+    let y = 62;
     if (s.kicker) {
-      kicker(ctx, s.kicker, M + 4, y + 26, 26, s.ink);
-      y += 36;
+      kicker(ctx, s.kicker, M + 4, y + 28, 30, s.ink, 'left', W - 2 * M);
+      y += 40;
     }
     y = titleBlock(ctx, s, M, y, W - 2 * M, s.titleSize ?? 150);
     if (s.extra) y = s.extra(ctx, M, y);
-    const tagTop = 832;
-    if (s.art) placeArt(ctx, s.art, M - 10, y + 26, W - 2 * M + 20, tagTop - y - 48);
-    taglineCard(ctx, s, W / 2, tagTop, 36, W - 2 * M, 'center');
-    footer(ctx, W / 2, H - 34, 26, s.ink, 'center');
+    const tagTop = H - 70 - tagHeight(s, 44);
+    if (s.art) placeArt(ctx, s.art, M - 10, y + 26, W - 2 * M + 20, tagTop - y - 44);
+    taglineCard(ctx, s, W / 2, tagTop, 44, W - 2 * M + 24, 'center');
+    footer(ctx, W / 2, H - 28, 24, s.ink, 'center');
   } else if (s.shape === 'landscape' && s.layout === 'stack') {
     const M = 64;
-    let y = 50;
+    let y = 48;
     if (s.kicker) {
-      kicker(ctx, s.kicker, W / 2, y + 26, 26, s.ink, 'center');
-      y += 34;
+      kicker(ctx, s.kicker, W / 2, y + 28, 30, s.ink, 'center', W - 2 * M);
+      y += 38;
     }
     y = titleBlock(ctx, s, W / 2, y, W - 2 * M, s.titleSize ?? 150, 'center');
     if (s.extra) y = s.extra(ctx, W / 2, y);
-    const tagTop = 606;
-    if (s.art) placeArt(ctx, s.art, M, y + 20, W - 2 * M, tagTop - y - 36);
-    taglineCard(ctx, s, W / 2, tagTop, 32, W - 2 * M, 'center');
-    footer(ctx, W / 2, H - 30, 24, s.ink, 'center');
+    const tagTop = H - 64 - tagHeight(s, 40);
+    if (s.art) placeArt(ctx, s.art, M, y + 20, W - 2 * M, tagTop - y - 34);
+    taglineCard(ctx, s, W / 2, tagTop, 40, W - 2 * M, 'center');
+    footer(ctx, W / 2, H - 26, 22, s.ink, 'center');
   } else if (s.shape === 'landscape') {
     const M = 64;
     const colW = 470;
-    let y = 70;
+    let y = 68;
     if (s.kicker) {
-      kicker(ctx, s.kicker, M + 3, y + 26, 26, s.ink);
-      y += 36;
+      kicker(ctx, s.kicker, M + 3, y + 28, 30, s.ink, 'left', colW);
+      y += 40;
     }
     y = titleBlock(ctx, s, M, y, colW, s.titleSize ?? 140);
     if (s.extra) y = s.extra(ctx, M, y);
     if (s.art) placeArt(ctx, s.art, 560, 50, 420, 640);
-    taglineCard(ctx, s, M, Math.max(y + 36, 560), 32, colW, 'left');
-    footer(ctx, M, H - 40, 24, s.ink);
+    taglineCard(ctx, s, M, Math.max(y + 32, H - 78 - tagHeight(s, 40)), 40, colW, 'left');
+    footer(ctx, M, H - 36, 22, s.ink);
   } else {
     const X = 500;
     const maxW = W - X - 70;
     if (s.art) placeArt(ctx, s.art, 40, 36, 420, H - 72);
-    let y = 70;
+    let y = 66;
     if (s.kicker) {
-      kicker(ctx, s.kicker, X + 4, y + 30, 30, s.ink);
-      y += 42;
+      kicker(ctx, s.kicker, X + 4, y + 32, 34, s.ink, 'left', maxW);
+      y += 46;
     }
     y = titleBlock(ctx, s, X, y, maxW, s.titleSize ?? 160);
-    taglineCard(ctx, s, X, y + 34, 36, maxW, 'left');
+    taglineCard(ctx, s, X, y + 30, 44, maxW, 'left');
     footer(ctx, W - 70, H - 38, 26, s.ink, 'right');
   }
 }
@@ -3609,10 +3622,10 @@ const SPECS = {
     shape: 'landscape',
     layout: 'stack',
     kicker: 'COPIL · Gouvernance',
-    lines: ['Comité de pilotage'],
-    colors: [C.navy],
+    lines: ['COMITÉ DE', 'PILOTAGE'],
+    colors: [C.navy, C.blue],
     shadow: C.paper,
-    titleSize: 110,
+    titleSize: 116,
     tagline: 'Décisions à l’heure. Café inclus.',
     bg: [mix(C.sun, C.paper, 0.45), mix(C.sun, C.pink, 0.15)],
     ink: C.navy,

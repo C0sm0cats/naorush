@@ -6,6 +6,7 @@
 export const PAUSE = {
   id: 'pause',
   theme: 'office',
+  mood: 'lounge',
   music: 'copil',
   name: 'Bonus : Salle de pause',
   subtitle: 'Espace détente · vendredi, 10 h 30',

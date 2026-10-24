@@ -1,5 +1,6 @@
 import { TILE } from '../game/sim.js';
 import { POSTER_H, WHITEBOARD_W, posterWidth } from '../data/inetum.js';
+import { LEVELS } from '../data/levels/index.js';
 import { MAT, Volume, meshVolume, rgb } from './voxels.js';
 
 /**
@@ -64,11 +65,28 @@ export const PALETTE = {
 };
 
 /**
- * Light mood of an office stage, read from what furnishes it: the seminar has its
- * stage truss, the break room its bistro tables, the steering committee its long
- * meeting tables, a manned open space its desks and whiteboards; a floor with none
- * of them is the half-empty intercontrat plateau late on a Friday.
- * @typedef {'morning'|'corporate'|'lounge'|'late'|'event'} Mood
+ * Light mood of a stage: the time of day and the kind of room it is set in. Levels
+ * name it in their `mood` field; it drives the ceiling fixtures, floor and wall
+ * finishes, the back row of furniture and what the windows look out on.
+ *   dawn: parking B2, early Monday       morning: LCP7 open space, daylight
+ *   night: T&S server hall               corporate: COPIL, regional head office
+ *   dusk: rooftop terrace                idle: intercontrat plateau, a calm morning
+ *   lounge: coffee break room            event: seminar evening, congress centre
+ * @typedef {'dawn'|'morning'|'night'|'corporate'|'dusk'|'idle'|'lounge'|'event'} Mood
+ */
+
+/** Default mood of the non-office themes. */
+const THEME_MOOD = /** @type {const} */ ({
+  parking: 'dawn',
+  datacenter: 'night',
+  rooftop: 'dusk',
+});
+
+/**
+ * Fallback for an office stage without a `mood` field, guessed from what furnishes
+ * it: the seminar has its stage truss, the break room its bistro tables, the
+ * steering committee its long meeting tables, a manned open space its desks and
+ * whiteboards; a floor with none of them is the half-empty intercontrat plateau.
  * @param {import('../data/levels/index.js').Decor[]} decor
  * @param {string[]} map
  * @returns {Mood}
@@ -79,22 +97,136 @@ export function officeMood(decor, map) {
   if (has('bistro')) return 'lounge';
   if (map.some((row) => row.includes('Y'))) return 'corporate';
   if (has('desk') || has('whiteboard')) return 'morning';
-  return 'late';
+  return 'idle';
+}
+
+/**
+ * Mood of a stage: the explicit one if given, else the `mood` field of the level
+ * these decor belong to, else a guess from the theme and furniture.
+ * @param {'office'|'datacenter'|'rooftop'|'parking'} theme
+ * @param {import('../data/levels/index.js').Decor[]} decor
+ * @param {string[]} map
+ * @param {Mood} [mood]
+ * @returns {Mood}
+ */
+export function stageMood(theme, decor, map, mood) {
+  if (mood) return mood;
+  const own = LEVELS.find((l) => l.decor === decor)?.mood;
+  if (own) return own;
+  return theme === 'office' ? officeMood(decor, map) : THEME_MOOD[theme];
 }
 
 /**
  * Ceiling fixtures per mood: emissive panel colour and the light it casts.
- * @type {Record<Mood|'parking'|'datacenter', {panel: number, color: number[], radius: number}>}
+ * @type {Record<Mood, {panel: number, color: number[], radius: number}>}
  */
 const FIXTURES = {
+  dawn: { panel: rgb('#dff6ff'), color: [0.3, 0.55, 0.7], radius: 7.5 },
   morning: { panel: rgb('#fff6d8'), color: [0.52, 0.49, 0.42], radius: 6.5 },
+  night: { panel: rgb('#bfe9ff'), color: [0.24, 0.46, 0.72], radius: 6.5 },
   corporate: { panel: rgb('#f4f8ff'), color: [0.52, 0.54, 0.58], radius: 6.8 },
+  dusk: { panel: rgb('#ffd27a'), color: [0.62, 0.38, 0.16], radius: 5.5 },
+  idle: { panel: rgb('#f6f4ec'), color: [0.54, 0.53, 0.5], radius: 6.5 },
   lounge: { panel: rgb('#ffdca0'), color: [0.72, 0.5, 0.28], radius: 5.5 },
-  late: { panel: rgb('#ffe7b8'), color: [0.58, 0.46, 0.32], radius: 6.5 },
   event: { panel: rgb('#ffcf8a'), color: [0.8, 0.5, 0.26], radius: 7 },
-  parking: { panel: rgb('#dff6ff'), color: [0.3, 0.55, 0.7], radius: 7.5 },
-  datacenter: { panel: rgb('#bfe9ff'), color: [0.24, 0.46, 0.72], radius: 6.5 },
 };
+
+/**
+ * Wall paint of an office stage per mood: plaster, skirting band, artwork panels,
+ * pillars, and the tint of the reflections on the glass.
+ * @type {Partial<Record<Mood, {wall: number, low: number, panel: number, pillar: number, glint: number}>>}
+ */
+const WALLS = {
+  morning: {
+    wall: PALETTE.wall,
+    low: PALETTE.wallLow,
+    panel: rgb('#d9d1c3'),
+    pillar: rgb('#bdb4a6'),
+    glint: rgb('#eaf6ff'),
+  },
+  corporate: {
+    wall: rgb('#dcdad4'),
+    low: rgb('#7d8796'),
+    panel: rgb('#eeece6'),
+    pillar: rgb('#c9c7c1'),
+    glint: rgb('#f4f9ff'),
+  },
+  idle: {
+    wall: rgb('#cdbf9f'),
+    low: rgb('#998b6e'),
+    panel: rgb('#ddd1b5'),
+    pillar: rgb('#b9ab8c'),
+    glint: rgb('#fff0d6'),
+  },
+  lounge: {
+    wall: rgb('#eadac2'),
+    low: rgb('#c4704e'),
+    panel: rgb('#f3e8d6'),
+    pillar: rgb('#d8c4a6'),
+    glint: rgb('#fffaf0'),
+  },
+  event: {
+    wall: rgb('#4e4060'),
+    low: rgb('#2e2540'),
+    panel: rgb('#625278'),
+    pillar: rgb('#443857'),
+    glint: rgb('#c9a8ff'),
+  },
+};
+
+/**
+ * Office floor finish per mood. Trapdoor columns keep the plain carpet the
+ * disguised tile is drawn with, so no pattern gives the trap away.
+ * @param {Mood} mood
+ * @param {Set<number>} trapCols
+ * @returns {(x: number, y: number, z: number) => number}
+ */
+function officeFloor(mood, trapCols) {
+  const carpet = vary(PALETTE.carpet, 0.12, 4);
+  switch (mood) {
+    case 'corporate': {
+      // Carpet tiles laid in alternating pile directions, with fine seams.
+      const alt = vary(rgb('#46597b'), 0.1, 4);
+      return (x, y, z) => {
+        if (trapCols.has(x >> 3)) return carpet(x, y, z);
+        if (x % 8 === 0 || z % 8 === 0) return rgb('#36445f');
+        return ((x >> 3) + (z >> 3)) % 2 ? alt(x, y, z) : carpet(x, y, z);
+      };
+    }
+    case 'event': {
+      // Congress-hall carpet: the house blue with a sparse gold and pink motif.
+      return (x, y, z) => {
+        if (trapCols.has(x >> 3)) return carpet(x, y, z);
+        const mx = x % 12,
+          mz = z % 8;
+        if ((mx === 3 && mz === 4) || (mx === 9 && mz === 0)) return rgb('#e8b84a');
+        if ((mx === 2 || mx === 4) && mz === 4) return rgb('#b04a86');
+        return carpet(x, y, z);
+      };
+    }
+    case 'lounge': {
+      // Warm oak parquet: staggered planks with dark joints.
+      const oak = [rgb('#b9875a'), rgb('#a8774c'), rgb('#c49466'), rgb('#b07f52')];
+      return (x, _y, z) => {
+        const row = z >> 1;
+        const off = (row * 5) % 12;
+        if ((x + off) % 12 === 0) return rgb('#7a5236');
+        return oak[Math.floor(noise(Math.floor((x + off) / 12), row, 7) * 4)];
+      };
+    }
+    case 'idle': {
+      // Worn checkerboard of sage carpet tiles and the odd coffee stain.
+      const a = vary(rgb('#6b7a72'), 0.1, 4),
+        b = vary(rgb('#5d6b66'), 0.1, 4);
+      return (x, y, z) => {
+        if (noise(x >> 1, z >> 1, 19) > 0.993) return rgb('#58564a');
+        return ((x >> 3) + (z >> 3)) % 2 ? a(x, y, z) : b(x, y, z);
+      };
+    }
+    default:
+      return carpet;
+  }
+}
 
 /**
  * @param {import('../game/sim.js').Sim} sim
@@ -102,13 +234,15 @@ const FIXTURES = {
  * @param {string[]} [map] Level rows, used for tile styles ('M' meeting room, 'B' paper reams,
  *   'V' server rack, 'H' HVAC unit).
  * @param {'office'|'datacenter'|'rooftop'|'parking'} [theme]
+ * @param {Mood} [moodName] Light mood (default: the level's `mood` field, see {@link stageMood}).
  */
-export function buildOffice(sim, decor, map = [], theme = 'office') {
+export function buildOffice(sim, decor, map = [], theme = 'office', moodName) {
   const roof = theme === 'rooftop';
   const dc = theme === 'datacenter';
   const park = theme === 'parking';
-  const mood = theme === 'office' ? officeMood(decor, map) : null;
-  const fixture = FIXTURES[mood ?? (park ? 'parking' : 'datacenter')];
+  const mood = stageMood(theme, decor, map, moodName);
+  const fixture = FIXTURES[mood];
+  const paint = WALLS[mood] ?? /** @type {NonNullable<typeof WALLS.morning>} */ (WALLS.morning);
   const concrete = vary(rgb('#7b818c'), 0.08, 4);
   const pebbles = vary(rgb('#7d7a75'), 0.2, 1);
   /** Roof gravel: pebbles, with lighter washed patches and a few pale stones. */
@@ -142,6 +276,10 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
           noise(x >> 1, z >> 1, 11) > 0.45
         )
           return noise(x, z, 3) > 0.5 ? rgb('#25282d') : rgb('#2c2f35');
+        // Painted arrows along the driving lane, pointing on towards the lifts.
+        const dz = Math.abs(z - zv(0.9));
+        const k = (x % (10 * V)) + dz;
+        if (dz <= 3 && k >= 7 && k < 10 && !trapCols.has(x >> 3)) return rgb('#d9d6cc');
         return asphalt(x, y, z);
       }
     : dc
@@ -154,7 +292,7 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
             : ((x >> 2) + (z >> 2)) % 2
               ? rgb('#a3acb7')
               : rgb('#8d96a2')
-      : vary(PALETTE.carpet, 0.14, 2);
+      : officeFloor(mood, trapCols);
   /** Visual style of a solid tile, from the level's ASCII map. */
   /** @param {number} c @param {number} r */
   const styleAt = (c, r) => map[sim.h - 1 - r]?.[c] ?? '#';
@@ -184,6 +322,15 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
     });
   /** @param {number} x */
   const onPanel = (x) => panels.some(([a, b]) => x >= a && x < b);
+  // Car park: the ramp up to the street near the entrance, glowing with dawn light.
+  let dawnAt = -1;
+  for (let c = 1; park && dawnAt < 0 && c + 5 < sim.w; c++) {
+    let ok = true;
+    for (let x = c * V - 3; x < (c + 5) * V + 3; x++) if (onPanel(x)) ok = false;
+    if (ok) dawnAt = c * V;
+  }
+  if (dawnAt >= 0)
+    lights.push({ pos: [dawnAt / V + 2.5, 6, -2], radius: 6.5, color: [0.75, 0.5, 0.36] });
   if (roof) buildRoofBack(vol, sx, sim, decor);
   else
     for (let x = 0; x < sx; x++) {
@@ -195,6 +342,27 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
           // Bare concrete, a blue level band and hazard stripes along the floor.
           const stripe = ty > 3.05 && ty < 3.45;
           const band = ty > 5.6 && ty < 6.1;
+          if (dawnAt >= 0 && x >= dawnAt && x < dawnAt + 5 * V && ty > 4.2 && ty < 8.3) {
+            const u = (x - dawnAt) / (5 * V),
+              v = (ty - 4.2) / 4.1;
+            if (x - dawnAt < 2 || dawnAt + 5 * V - x <= 2 || ty < 4.45 || ty > 8.05)
+              vol.box(x, y, 0, x + 1, y + 1, 4, rgb('#4a4f58'));
+            else if (v < 0.12 + u * 0.42) vol.box(x, y, 0, x + 1, y + 1, 1, rgb('#3a3e46'));
+            else if (Math.hypot((u - 0.74) * 1.25, v - 0.6) < 0.075)
+              vol.box(x, y, 0, x + 1, y + 1, 1, rgb('#fff1c9'), MAT.EMISSIVE);
+            else
+              vol.box(
+                x,
+                y,
+                0,
+                x + 1,
+                y + 1,
+                1,
+                lerpColor(rgb('#d8643c'), rgb('#4f80b8'), v * 1.15 - 0.15),
+                MAT.EMISSIVE,
+              );
+            continue;
+          }
           // Neon strips under the ceiling: lime and pink, the Inetum colours.
           if (ty > 8.7 && ty < 8.85) {
             vol.box(x, y, 0, x + 1, y + 1, 4, rgb('#c6f432'), MAT.EMISSIVE);
@@ -218,14 +386,16 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
         }
         if (dc && y >= 78 && y < 84) {
           // The T&S band: lime, with navy pixel lettering at the start of every room.
-          const lx = x % (20 * V);
+          const lx = (x % (20 * V)) - 6 * V;
+          const glyph = BAND_TEXT[Math.floor(lx / 12)];
+          const px = (lx % 12) >> 1;
           const letter =
-            lx > 6 * V &&
-            lx < 10 * V &&
-            (lx >> 1) % 4 !== 3 &&
+            lx >= 0 &&
+            glyph !== undefined &&
+            px < 5 &&
             y > 78 &&
-            y < 83 &&
-            noise(x >> 1, y, 13) > 0.35;
+            y < 84 &&
+            glyph[83 - y][px] === '1';
           vol.box(x, y, 0, x + 1, y + 1, 3, letter ? PALETTE.fascia : PALETTE.accent);
           continue;
         }
@@ -244,16 +414,16 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
           if (mullion) vol.box(x, y, 0, x + 1, y + 1, 3, PALETTE.mullion);
           continue;
         }
-        const base = dc ? rgb('#4a5568') : PALETTE.wall;
+        const base = dc ? rgb('#4a5568') : paint.wall;
         const c =
           ty < 1
             ? dc
               ? rgb('#2d3646')
-              : PALETTE.wallLow
+              : paint.low
             : panel && inWindowBand
               ? dc
                 ? rgb('#5b6678')
-                : rgb('#d9d1c3')
+                : paint.panel
               : base;
         vol.box(x, y, 0, x + 1, y + 1, 3, vary(c, 0.05, 4)(x, y, 0));
         // A lime cable-tray stripe runs along the server hall.
@@ -266,8 +436,9 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
     for (const [a, b] of panels)
       for (const x of [a, b - 1]) vol.box(x, 4.2 * V, 3, x + 1, 9.6 * V, 4, PALETTE.mullion);
     // Window sills.
-    vol.box(0, 4.2 * V - 1, 3, sx, 4.2 * V, 6, dc ? rgb('#2d3646') : PALETTE.wallLow);
+    vol.box(0, 4.2 * V - 1, 3, sx, 4.2 * V, 6, dc ? rgb('#2d3646') : paint.low);
   }
+  if (theme === 'office') glassGlints(vol, sx, onPanel, paint.glint, mood === 'event');
 
   // Tiles.
   for (let r = 0; r < sim.h; r++)
@@ -440,7 +611,7 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
             x0 + V,
             y0 + V,
             sz,
-            park ? concrete : vary(rgb('#bdb4a6'), 0.05, V),
+            park ? concrete : vary(dc ? rgb('#bdb4a6') : paint.pillar, 0.05, V),
           );
           if (above !== TILE.SOLID && roof) {
             // Raised roof terrace: gravel and a pale parapet.
@@ -466,8 +637,6 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
             park ? rgb('#8a909a') : dc ? PALETTE.ceiling : tiles,
           );
           const lamp = park ? c % 6 === 3 && below !== TILE.SOLID : c % 5 === 2;
-          // Friday 16:30 on the intercontrat floor: half the rows are already switched off.
-          const off = mood === 'late' && c % 10 === 7;
           if (lamp && mood === 'lounge' && below !== TILE.SOLID) {
             // Break room: warm pendant shades on cords instead of ceiling panels.
             const cx = x0 + 3,
@@ -490,15 +659,14 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
               x0 + V - (park ? 0 : 1),
               y0,
               zv(park ? -0.6 : 0.4),
-              off ? rgb('#b9b6ae') : fixture.panel,
-              off ? MAT.MATTE : MAT.EMISSIVE,
+              fixture.panel,
+              MAT.EMISSIVE,
             );
-            if (!off)
-              lights.push({
-                pos: [c + 0.5, r - 0.6, -0.6],
-                radius: fixture.radius,
-                color: fixture.color,
-              });
+            lights.push({
+              pos: [c + 0.5, r - 0.6, -0.6],
+              radius: fixture.radius,
+              color: fixture.color,
+            });
           }
         }
       } else if (t === TILE.HAZARD) {
@@ -520,9 +688,11 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
       }
     }
 
-  furnish({ vol, sim, map, decor, theme, zv, onPanel, lights, mood });
+  furnish({ vol, sim, map, decor, theme, zv, onPanel, lights, mood, dawnAt });
   for (const d of decor) placeDecor(vol, d, sz);
-  return { vol, mesh: meshVolume(vol), lights };
+  const back = buildBackdrop(sim.w, mood);
+  const mesh = back ? mergeMeshes(meshVolume(vol), meshVolume(back)) : meshVolume(vol);
+  return { vol, mesh, lights };
 }
 
 /**
@@ -535,8 +705,16 @@ export function buildOffice(sim, decor, map = [], theme = 'office') {
  * @property {(z: number) => number} zv World z to voxel z.
  * @property {(x: number) => boolean} onPanel Whether a voxel column is reserved for artwork.
  * @property {Array<{pos: number[], radius: number, color: number[]}>} lights Point lights to add to.
- * @property {Mood|null} mood Light mood of an office stage.
+ * @property {Mood} mood Light mood of the stage.
+ * @property {number} dawnAt Car park: left voxel x of the daylight ramp opening (-1: none).
  */
+
+/** "T&S" in 5×5 pixel glyphs (rows top to bottom), for the server hall band. */
+const BAND_TEXT = [
+  ['11111', '00100', '00100', '00100', '00100'],
+  ['01100', '10010', '01101', '10010', '01101'],
+  ['01111', '10000', '01110', '00001', '11110'],
+];
 
 /** 3×5 pixel digits for the car park bay numbers, rows top to bottom. */
 const DIGITS = [
@@ -557,7 +735,7 @@ const DIGITS = [
  * cable trays, pipes, vents... Collision comes from the sim tiles, never from this.
  * @param {FurnishContext} ctx
  */
-function furnish({ vol, sim, map, decor, theme, zv, onPanel, lights, mood }) {
+function furnish({ vol, sim, map, decor, theme, zv, onPanel, lights, mood, dawnAt }) {
   const { w, h, tiles } = sim;
   /** @param {number} c @param {number} r */
   const tile = (c, r) => (c < 0 || c >= w || r < 0 || r >= h ? TILE.SOLID : tiles[c + r * w]);
@@ -607,7 +785,8 @@ function furnish({ vol, sim, map, decor, theme, zv, onPanel, lights, mood }) {
     tile(c, ceil - 1) === TILE.EMPTY && tile(c, ceil - 2) === TILE.EMPTY;
 
   if (theme === 'office') {
-    // Far back row of open-space desks, in pods of three.
+    // Far back row, in groups of three: desks in an open space, credenzas at the
+    // head office, sofas in the break room, the buffet at the seminar.
     let pod = 0;
     for (let c = 1; c < w - 2;) {
       if (!clear(c) || !clear(c + 1)) {
@@ -615,7 +794,7 @@ function furnish({ vol, sim, map, decor, theme, zv, onPanel, lights, mood }) {
         pod = 0;
         continue;
       }
-      backDesk(vol, c * V, F, noise(c, base, 41), pod === 0);
+      backRow(vol, mood, c * V, F, noise(c, base, 41), pod);
       c += 2;
       if (++pod === 3) {
         c++;
@@ -675,6 +854,46 @@ function furnish({ vol, sim, map, decor, theme, zv, onPanel, lights, mood }) {
       const len = 8 + Math.floor(noise(room, 1, 59) * 9);
       vol.box(x0 + 7, top - 7, 10, x0 + 7 + len, top - 6, 11, rgb('#f4f1ea'));
     }
+    const top = (h - 1) * V;
+    if (mood === 'event')
+      // Seminar: fabric banners hung from the ceiling, in the event colours.
+      for (let c = 3; c < Math.min(w - 2, arena[0] - 2); c += 6) {
+        if (c % 20 >= 7 && c % 20 <= 11) continue;
+        if (onPanel(c * V - 1) || onPanel(c * V + V) || !openBelow(c, h - 1)) continue;
+        if (tile(c, h - 4) !== TILE.EMPTY) continue;
+        const x = c * V;
+        const k = Math.floor(c / 6) % 3;
+        const cloth = [rgb('#c2367f'), rgb('#5b3fa8'), rgb('#1f2a44')][k];
+        vol.box(x - 1, top - 3, 5, x + V + 1, top - 2, 7, rgb('#2a2f38'));
+        vol.box(x, top - 24, 6, x + V, top - 3, 7, cloth);
+        vol.box(x, top - 22, 6, x + V, top - 21, 8, k === 1 ? rgb('#ff8fc8') : PALETTE.accent);
+        vol.box(x + 2, top - 12, 6, x + 6, top - 8, 8, k === 2 ? rgb('#ff4f9a') : PALETTE.accent);
+        vol.box(x + 3, top - 26, 6, x + 5, top - 24, 7, cloth);
+      }
+    if (mood === 'lounge')
+      // Break room: trailing plants hung from the ceiling between the pendants.
+      for (let c = 0; c < w; c += 5) {
+        if (c % 20 >= 7 && c % 20 <= 11) continue;
+        if (!openBelow(c, h - 1) || tile(c, h - 4) !== TILE.EMPTY) continue;
+        const x = c * V + 2,
+          z = zv(-1.8);
+        vol.box(x + 1, top - 6, z + 1, x + 2, top, z + 2, rgb('#2a2f38'));
+        vol.box(x - 1, top - 9, z - 1, x + 4, top - 6, z + 4, rgb('#f0eee8'));
+        vol.box(x - 1, top - 7, z - 1, x + 4, top - 6, z + 4, rgb('#c4704e'));
+        for (let k = -2; k < 6; k++) {
+          const len = 2 + Math.floor(noise(c, k, 97) * 9);
+          const lz = k % 2 ? z - 1 : z + 3;
+          vol.box(
+            x + k,
+            top - 7 - len,
+            lz,
+            x + k + 1,
+            top - 6,
+            lz + 1,
+            k % 3 ? PALETTE.leaf : PALETTE.leafLight,
+          );
+        }
+      }
   }
 
   if (theme === 'datacenter') {
@@ -748,6 +967,7 @@ function furnish({ vol, sim, map, decor, theme, zv, onPanel, lights, mood }) {
     for (let c = 6; c < w - 2; c += 13) {
       const x = c * V;
       if (ground[c] !== base || onPanel(x - 2) || onPanel(x + V + 2)) continue;
+      if (dawnAt >= 0 && x + V + 8 > dawnAt && x - 8 < dawnAt + 5 * V) continue;
       vol.box(x + 1, F + 5, 3, x + 7, F + 13, 5, rgb('#d7263d'));
       vol.box(x + 2, F + 6, 4, x + 6, F + 12, 5, rgb('#f1f1f1'), MAT.GLOSSY);
       vol.box(x + 3, F + 7, 4, x + 5, F + 11, 6, rgb('#c41d2f'));
@@ -859,16 +1079,72 @@ function furnish({ vol, sim, map, decor, theme, zv, onPanel, lights, mood }) {
 }
 
 /**
- * One desk of the far back row: white top, monitor, a chair pushed in front.
+ * Reflections on the façade glass: a pair of short slanted streaks on some panes,
+ * the cartoon shorthand for "there is a window here". Thin and sparse, so cheap.
+ * @param {Volume} vol
+ * @param {number} sx Volume width in voxels.
+ * @param {(x: number) => boolean} onPanel
+ * @param {number} color
+ * @param {boolean} lit Evening: the streaks catch the room lights and glow.
+ */
+function glassGlints(vol, sx, onPanel, color, lit) {
+  // Short streaks in the top corner of the upper pane: a glare, not a staircase.
+  const y0 = Math.ceil(6.9 * V) + 2;
+  const top = Math.floor(9.6 * V) - 1;
+  const soft = lit ? lerpColor(color, rgb('#2a2040'), 0.35) : lerpColor(color, rgb('#9fb8d0'), 0.3);
+  for (let bx = 0; bx < sx; bx += 4 * V) {
+    if (noise(bx, 1, 83) < 0.5) continue;
+    const start = bx + 4 + Math.floor(noise(bx, 1, 89) * 8);
+    for (const [dx, w, len] of [
+      [0, 2, 4],
+      [4, 1, 2],
+    ])
+      for (let k = 0; k < len; k++) {
+        const x = start + dx + k,
+          y = top - len - 3 + k + (dx ? 2 : 0);
+        if (y < y0 || onPanel(x) || onPanel(x + w - 1)) continue;
+        vol.box(x, y, 1, x + w, y + 1, 2, soft, lit ? MAT.EMISSIVE : MAT.GLOSSY);
+      }
+  }
+}
+
+/**
+ * One two-tile slot of the far back row, furnished for the mood.
+ * @param {Volume} vol
+ * @param {Mood} mood
+ * @param {number} a Left voxel x.
+ * @param {number} F Floor voxel y.
+ * @param {number} seed 0..1, picks the variant.
+ * @param {number} pod Position in its group of three.
+ */
+function backRow(vol, mood, a, F, seed, pod) {
+  if (mood === 'corporate') {
+    if (pod === 2) tallPlant(vol, a, F, seed);
+    else credenza(vol, a, F, seed);
+  } else if (mood === 'lounge') {
+    if (pod === 1) sideTable(vol, a, F, seed);
+    else sofa(vol, a, F, seed);
+  } else if (mood === 'event') {
+    if (pod === 2) cocktailTable(vol, a, F);
+    else buffet(vol, a, F, seed, pod === 0);
+  } else backDesk(vol, a, F, seed, pod === 0, mood === 'idle');
+}
+
+/**
+ * One desk of the far back row: a white or oak top, a single or dual monitor, a
+ * laptop or a desk lamp, a plant, a chair pushed in front. On the intercontrat
+ * plateau a calm morning: a few desks stand empty (screen off, chair rolled
+ * away, a moving box waiting for the next mission), the rest follow e-learning.
  * @param {Volume} vol
  * @param {number} a Left voxel x.
  * @param {number} F Floor voxel y.
  * @param {number} seed 0..1
  * @param {boolean} first First desk of its pod (no divider on its left).
+ * @param {boolean} idle
  */
-function backDesk(vol, a, F, seed, first) {
+function backDesk(vol, a, F, seed, first, idle) {
   const legs = rgb('#3a4560');
-  vol.box(a + 1, F + 5, 3, a + 15, F + 6, 10, rgb('#ebe8e1'));
+  vol.box(a + 1, F + 5, 3, a + 15, F + 6, 10, seed > 0.72 ? rgb('#d6bf98') : rgb('#ebe8e1'));
   vol.box(a + 1, F, 4, a + 2, F + 5, 9, legs);
   vol.box(a + 14, F, 4, a + 15, F + 5, 9, legs);
   if (!first) {
@@ -877,32 +1153,193 @@ function backDesk(vol, a, F, seed, first) {
   }
   // Monitor: lit with a spreadsheet, Teams or the intranet; some are off.
   const screens = [rgb('#58d5ff'), rgb('#7ee2a8'), rgb('#8b8cf7'), rgb('#d9f7ff')];
-  const on = seed > 0.18;
-  vol.box(a + 7, F + 6, 6, a + 9, F + 7, 7, rgb('#22262e'));
-  vol.box(a + 4, F + 7, 6, a + 12, F + 11, 7, rgb('#1b1f27'));
-  vol.box(
-    a + 5,
-    F + 8,
-    7,
-    a + 11,
-    F + 10,
-    8,
-    on ? screens[Math.floor(seed * 97) % 4] : rgb('#20262f'),
-    on ? MAT.EMISSIVE : MAT.GLOSSY,
-  );
-  if (seed > 0.55) vol.box(a + 11, F + 10, 7, a + 12, F + 11, 8, STICKY[Math.floor(seed * 31) % 4]);
+  const empty = idle && seed < 0.38;
+  const on = !empty && seed > 0.18;
+  const glow = on ? screens[Math.floor(seed * 97) % 4] : rgb('#20262f');
+  const mat = on ? MAT.EMISSIVE : MAT.GLOSSY;
+  const kind = Math.floor(seed * 89) % 4;
+  if (kind === 1) {
+    // Dual screens, slightly angled apart.
+    for (const [x0, z] of [
+      [a + 2, 5],
+      [a + 9, 6],
+    ]) {
+      vol.box(x0 + 2, F + 6, z, x0 + 3, F + 7, z + 1, rgb('#22262e'));
+      vol.box(x0, F + 7, z, x0 + 5, F + 10, z + 1, rgb('#1b1f27'));
+      vol.box(x0 + 1, F + 8, z + 1, x0 + 4, F + 9, z + 2, glow, mat);
+    }
+  } else if (kind === 2) {
+    // Laptop on a riser.
+    vol.box(a + 5, F + 6, 6, a + 11, F + 7, 9, rgb('#c3cad3'));
+    vol.box(a + 5, F + 7, 6, a + 11, F + 10, 7, rgb('#c3cad3'));
+    vol.box(a + 6, F + 7, 7, a + 10, F + 9, 8, glow, mat);
+  } else {
+    vol.box(a + 7, F + 6, 6, a + 9, F + 7, 7, rgb('#22262e'));
+    vol.box(a + 4, F + 7, 6, a + 12, F + 11, 7, rgb('#1b1f27'));
+    vol.box(a + 5, F + 8, 7, a + 11, F + 10, 8, glow, mat);
+  }
+  if (kind === 3) {
+    // Desk lamp: weighted foot, one arm, lime head.
+    vol.box(a + 12, F + 6, 5, a + 14, F + 7, 7, rgb('#22262e'));
+    vol.box(a + 13, F + 7, 5, a + 14, F + 11, 6, rgb('#22262e'));
+    vol.box(a + 11, F + 11, 5, a + 14, F + 12, 7, PALETTE.accent);
+  } else if (seed > 0.5) {
+    // A small succulent in a terracotta pot.
+    vol.box(a + 12, F + 6, 4, a + 14, F + 8, 6, PALETTE.pot);
+    vol.box(a + 12, F + 8, 4, a + 14, F + 9, 6, PALETTE.leaf);
+    vol.box(a + 13, F + 9, 4, a + 14, F + 10, 5, PALETTE.leafLight);
+  }
+  if (seed > 0.55 && kind !== 1)
+    vol.box(a + 11, F + 10, 7, a + 12, F + 11, 8, STICKY[Math.floor(seed * 31) % 4]);
   vol.box(a + 5, F + 6, 9, a + 11, F + 7, 10, rgb('#d0d4da'));
-  if ((seed * 7) % 1 > 0.5)
-    vol.box(a + 12, F + 6, 8, a + 13, F + 7, 9, seed > 0.5 ? PALETTE.fascia : rgb('#f4f1ea'));
+  if (empty && (seed * 7) % 1 > 0.4) {
+    // A moving box, taped shut, waiting for the next mission.
+    vol.box(a + 2, F + 6, 7, a + 8, F + 10, 10, rgb('#c19a6b'));
+    vol.box(a + 4, F + 9, 7, a + 6, F + 10, 10, rgb('#e6d6b8'));
+  } else if ((seed * 7) % 1 > 0.5)
+    vol.box(a + 2, F + 6, 8, a + 3, F + 8, 9, seed > 0.5 ? PALETTE.fascia : rgb('#f4f1ea'));
   else vol.box(a + 2, F + 6, 4, a + 5, F + 7, 7, rgb('#fbfbf6'));
-  // Chair pushed in front, a little off-centre.
-  const dx = (Math.floor(seed * 13) % 5) - 2;
-  const chair = rgb('#34406a');
-  vol.box(a + 6 + dx, F, 11, a + 10 + dx, F + 1, 15, rgb('#22262e'));
-  vol.box(a + 7 + dx, F + 1, 12, a + 9 + dx, F + 3, 14, rgb('#22262e'));
-  vol.box(a + 5 + dx, F + 3, 11, a + 11 + dx, F + 4, 15, chair);
-  vol.box(a + 5 + dx, F + 4, 14, a + 11 + dx, F + 8, 15, chair);
-  vol.box(a + 6 + dx, F + 8, 14, a + 10 + dx, F + 9, 15, chair);
+  // Chair in front, a little off-centre; on the intercontrat floor some have rolled away.
+  if (empty && seed < 0.2) return;
+  const dx = empty ? (seed > 0.3 ? 4 : -3) : (Math.floor(seed * 13) % 5) - 2;
+  const dz = empty ? 2 : 0;
+  const chair = [rgb('#34406a'), rgb('#3a3f4a'), rgb('#2f6d6a')][Math.floor(seed * 53) % 3];
+  vol.box(a + 6 + dx, F, 11 + dz, a + 10 + dx, F + 1, 15 + dz, rgb('#22262e'));
+  vol.box(a + 7 + dx, F + 1, 12 + dz, a + 9 + dx, F + 3, 14 + dz, rgb('#22262e'));
+  vol.box(a + 5 + dx, F + 3, 11 + dz, a + 11 + dx, F + 4, 15 + dz, chair);
+  vol.box(a + 5 + dx, F + 4, 14 + dz, a + 11 + dx, F + 8, 15 + dz, chair);
+  vol.box(a + 6 + dx, F + 8, 14 + dz, a + 10 + dx, F + 9, 15 + dz, chair);
+}
+
+/**
+ * Head-office credenza: walnut or white lacquer, with binders, a plant or the
+ * team trophy on top.
+ * @param {Volume} vol @param {number} a @param {number} F @param {number} seed
+ */
+function credenza(vol, a, F, seed) {
+  const walnut = seed > 0.45;
+  const body = walnut ? rgb('#6e4b33') : rgb('#eeece6');
+  const seam = walnut ? rgb('#3b2a1e') : rgb('#c9c6be');
+  vol.box(a + 1, F + 1, 3, a + 15, F + 7, 9, (x) => (x === a + 8 ? seam : body));
+  vol.box(a, F + 7, 3, a + 16, F + 8, 10, walnut ? rgb('#5a3c28') : rgb('#2b3446'));
+  vol.box(a + 2, F, 4, a + 14, F + 1, 8, rgb('#22262e'));
+  for (const hx of [a + 6, a + 10])
+    vol.box(hx, F + 4, 9, hx + 1, F + 6, 10, PALETTE.metal, MAT.GLOSSY);
+  const what = Math.floor(seed * 71) % 3;
+  if (what === 0) {
+    const cols = [PALETTE.fascia, PALETTE.accent, rgb('#ff4f9a'), rgb('#3d8bfd')];
+    for (let k = 0; k < 4; k++)
+      vol.box(
+        a + 2 + k * 2,
+        F + 8,
+        4,
+        a + 4 + k * 2,
+        F + 13,
+        8,
+        cols[(k + Math.floor(seed * 9)) % 4],
+      );
+  } else if (what === 1) {
+    vol.box(a + 10, F + 8, 4, a + 14, F + 11, 8, rgb('#f0eee8'));
+    vol.box(a + 9, F + 11, 3, a + 15, F + 15, 9, PALETTE.leaf);
+    vol.box(a + 10, F + 15, 4, a + 14, F + 17, 8, PALETTE.leafLight);
+  } else {
+    // The trophy of the last Power UP Tour.
+    vol.box(a + 6, F + 8, 5, a + 10, F + 9, 8, rgb('#22262e'));
+    vol.box(a + 7, F + 9, 6, a + 9, F + 11, 7, rgb('#e8b84a'), MAT.GLOSSY);
+    vol.box(a + 6, F + 11, 5, a + 10, F + 14, 8, rgb('#f6c453'), MAT.GLOSSY);
+  }
+}
+
+/** A tall potted fig. @param {Volume} vol @param {number} a @param {number} F @param {number} seed */
+function tallPlant(vol, a, F, seed) {
+  vol.box(a + 5, F, 4, a + 11, F + 6, 10, seed > 0.5 ? rgb('#2b3446') : rgb('#f0eee8'));
+  vol.box(a + 7, F + 6, 6, a + 9, F + 11, 8, PALETTE.woodDark);
+  vol.box(a + 4, F + 10, 4, a + 12, F + 15, 10, PALETTE.leaf);
+  vol.box(a + 3, F + 13, 5, a + 13, F + 17, 9, PALETTE.leafLight);
+  vol.box(a + 5, F + 17, 5, a + 11, F + 20, 9, PALETTE.leaf);
+}
+
+/**
+ * Break-room sofa in a cheerful fabric, with a contrasting cushion.
+ * @param {Volume} vol @param {number} a @param {number} F @param {number} seed
+ */
+function sofa(vol, a, F, seed) {
+  const fabrics = [rgb('#2f8f8a'), rgb('#e0a83a'), rgb('#e8735a'), rgb('#5b6fd6')];
+  const k = Math.floor(seed * 37) % 4;
+  const cloth = fabrics[k];
+  const deep = lerpColor(cloth, 0x000000, 0.25);
+  vol.box(a + 2, F, 6, a + 3, F + 1, 7, PALETTE.woodDark);
+  vol.box(a + 13, F, 6, a + 14, F + 1, 7, PALETTE.woodDark);
+  vol.box(a + 1, F + 1, 4, a + 15, F + 3, 13, deep);
+  vol.box(a + 3, F + 3, 6, a + 13, F + 4, 13, (x) => (x === a + 8 ? deep : cloth));
+  vol.box(a + 1, F + 3, 4, a + 15, F + 9, 6, cloth);
+  vol.box(a + 1, F + 3, 6, a + 3, F + 6, 13, deep);
+  vol.box(a + 13, F + 3, 6, a + 15, F + 6, 13, deep);
+  vol.box(a + 4, F + 4, 6, a + 7, F + 7, 8, fabrics[(k + 2) % 4]);
+}
+
+/**
+ * Low side table with a cup and a magazine; sometimes a reading lamp beside it.
+ * @param {Volume} vol @param {number} a @param {number} F @param {number} seed
+ */
+function sideTable(vol, a, F, seed) {
+  vol.box(a + 4, F + 4, 6, a + 12, F + 5, 12, PALETTE.wood);
+  vol.box(a + 7, F, 8, a + 9, F + 4, 10, PALETTE.woodDark);
+  vol.box(a + 5, F + 5, 7, a + 8, F + 6, 10, rgb('#ff4f9a'));
+  vol.box(a + 9, F + 5, 8, a + 11, F + 7, 10, rgb('#f4f1ea'));
+  if (seed < 0.5) return;
+  vol.box(a + 13, F, 5, a + 15, F + 1, 7, rgb('#22262e'));
+  vol.box(a + 13, F + 1, 5, a + 14, F + 14, 6, rgb('#22262e'));
+  vol.box(a + 11, F + 14, 4, a + 16, F + 18, 8, rgb('#f6ead2'));
+  vol.box(a + 12, F + 13, 5, a + 15, F + 14, 7, rgb('#ffe2a8'), MAT.EMISSIVE);
+}
+
+/**
+ * Seminar buffet table: white cloth with pleats, a lime runner, trays of petits
+ * fours, rows of cups and, on the first table, the coffee urn.
+ * @param {Volume} vol @param {number} a @param {number} F @param {number} seed @param {boolean} first
+ */
+function buffet(vol, a, F, seed, first) {
+  vol.box(a, F + 5, 4, a + 16, F + 6, 12, rgb('#f7f5ef'));
+  vol.box(a, F, 11, a + 16, F + 5, 12, (x) => (x % 3 === 0 ? rgb('#dedbd2') : rgb('#f7f5ef')));
+  vol.box(a, F + 5, 7, a + 16, F + 6, 9, PALETTE.accent);
+  vol.box(a, F, 4, a + 1, F + 5, 11, rgb('#dedbd2'));
+  vol.box(a + 15, F, 4, a + 16, F + 5, 11, rgb('#dedbd2'));
+  const sweets = [rgb('#ff8fc0'), rgb('#ffd166'), rgb('#8b5a3c'), rgb('#c6f432'), rgb('#9fd8ff')];
+  vol.box(a + 2, F + 6, 6, a + 8, F + 7, 10, PALETTE.metal, MAT.GLOSSY);
+  for (let k = 0; k < 3; k++)
+    vol.box(
+      a + 2 + k * 2,
+      F + 7,
+      7,
+      a + 3 + k * 2,
+      F + 8,
+      8,
+      sweets[(k + Math.floor(seed * 7)) % 5],
+    );
+  if (first) {
+    vol.box(a + 11, F + 6, 5, a + 15, F + 13, 8, PALETTE.metal, MAT.GLOSSY);
+    vol.box(a + 12, F + 13, 6, a + 14, F + 14, 7, rgb('#22262e'));
+    vol.box(a + 12, F + 8, 8, a + 13, F + 9, 9, rgb('#22262e'));
+  } else
+    for (let k = 0; k < 3; k++)
+      vol.box(
+        a + 10 + k * 2,
+        F + 6,
+        6 + (k % 2) * 2,
+        a + 11 + k * 2,
+        F + 8,
+        7 + (k % 2) * 2,
+        rgb('#ffffff'),
+      );
+}
+
+/** Standing cocktail table in a white stretch cover. @param {Volume} vol @param {number} a @param {number} F */
+function cocktailTable(vol, a, F) {
+  vol.box(a + 5, F + 9, 6, a + 11, F + 10, 12, rgb('#f7f5ef'));
+  vol.box(a + 6, F, 7, a + 10, F + 9, 11, rgb('#f7f5ef'));
+  vol.box(a + 6, F + 5, 7, a + 10, F + 6, 11, PALETTE.accent);
+  vol.box(a + 7, F + 10, 8, a + 8, F + 12, 9, rgb('#ffcf8a'), MAT.GLOSSY);
 }
 
 /**
@@ -937,6 +1374,446 @@ function buildRoofBack(vol, sx, sim, decor) {
     while (floor > 0 && sim.tiles[Math.floor(a / V) + (floor - 1) * sim.w] === TILE.EMPTY) floor--;
     for (const lx of [a + 3, b - 5]) vol.box(lx, floor * V, 1, lx + 2, y0, 3, rgb('#5c6170'));
   }
+}
+
+/**
+ * Concatenates two interleaved vertex buffers (same layout, plain triangle lists).
+ * @param {{data: ArrayBuffer, count: number}} a
+ * @param {{data: ArrayBuffer, count: number}} b
+ */
+function mergeMeshes(a, b) {
+  const out = new Uint8Array(a.data.byteLength + b.data.byteLength);
+  out.set(new Uint8Array(a.data), 0);
+  out.set(new Uint8Array(b.data), a.data.byteLength);
+  return { data: out.buffer, count: a.count + b.count };
+}
+
+/** @param {number} a @param {number} b @param {number} t */
+const lerpColor = (a, b, t) => {
+  const k = Math.max(0, Math.min(1, t));
+  let out = 0;
+  for (const sh of [16, 8, 0]) {
+    const ca = (a >> sh) & 255,
+      cb = (b >> sh) & 255;
+    out |= Math.round(ca + (cb - ca) * k) << sh;
+  }
+  return out;
+};
+
+/**
+ * What the windows of a stage look out on, between the façade and the distant
+ * skyline: one coarse voxel layer per mood (a business park by the Erdre, the
+ * city centre, a building site, a courtyard garden, the canal at nightfall, the
+ * neighbouring roofs at dusk). It is merged into the office mesh, so it costs no
+ * extra draw call; big flat faces keep the greedy mesher's quad count low.
+ * @param {number} width Level width in tiles.
+ * @param {Mood} mood
+ * @returns {Volume | null}
+ */
+export function buildBackdrop(width, mood) {
+  if (mood === 'dawn' || mood === 'night') return null;
+  const S = 1 / 3;
+  const X0 = -10,
+    X1 = width + 10,
+    Y0 = -2,
+    Z0 = -15.5,
+    Z1 = -3.3;
+  const vol = new Volume(Math.ceil((X1 - X0) / S), Math.ceil(16 / S), Math.ceil((Z1 - Z0) / S), S, [
+    X0,
+    Y0,
+    Z0,
+  ]);
+  let seed = 11 + width * 7 + mood.charCodeAt(0) * 131 + mood.length * 977;
+  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  /** @param {number} a @param {number} b */
+  const range = (a, b) => a + rand() * (b - a);
+  /** @param {number[]} list */
+  const pick = (list) => list[Math.floor(rand() * list.length)];
+  /**
+   * Box in world units.
+   * @param {number} x0 @param {number} y0 @param {number} z0
+   * @param {number} x1 @param {number} y1 @param {number} z1
+   * @param {number | ((x: number, y: number, z: number) => number)} c
+   * @param {number} [m]
+   */
+  const B = (x0, y0, z0, x1, y1, z1, c, m = MAT.MATTE) => {
+    // Rounded to the grid, but never thinner than one voxel: slats and neon stay.
+    const q = (/** @type {number} */ v, /** @type {number} */ o) => Math.round((v - o) / S);
+    const ax = q(x0, X0),
+      ay = q(y0, Y0),
+      az = q(z0, Z0);
+    vol.box(
+      ax,
+      ay,
+      az,
+      Math.max(ax + 1, q(x1, X0)),
+      Math.max(ay + 1, q(y1, Y0)),
+      Math.max(az + 1, q(z1, Z0)),
+      c,
+      m,
+    );
+  };
+
+  /**
+   * Round tree from stacked blocks: trunk, a wide crown and a lighter cap.
+   * @param {number} x @param {number} z @param {number} h Crown base. @param {number} r
+   * @param {number} leaf @param {number} light
+   */
+  const tree = (x, z, h, r, leaf, light) => {
+    B(x - 0.17, Y0, z - 0.17, x + 0.17, h + 0.3, z + 0.17, rgb('#6b4a32'));
+    // Stepped dome: widest in the middle, lighter towards the sun.
+    const mid = lerpColor(leaf, light, 0.4);
+    for (const [k, y0, y1, c] of [
+      [0.7, 0, 0.3, leaf],
+      [1, 0.3, 0.8, leaf],
+      [1.1, 0.8, 1.3, mid],
+      [0.95, 1.3, 1.65, mid],
+      [0.6, 1.65, 1.9, light],
+    ])
+      B(x - r * k, h + r * y0, z - r * k * 0.7, x + r * k, h + r * y1, z + r * k * 0.7, c);
+  };
+
+  /**
+   * Modern block with continuous ribbon glazing (one quad per band).
+   * @param {number} x0 @param {number} x1 @param {number} z0 @param {number} z1 @param {number} top
+   * @param {number} body @param {number} glass @param {number} [mat]
+   */
+  const ribbonBlock = (x0, x1, z0, z1, top, body, glass, mat = MAT.GLOSSY) => {
+    B(x0, Y0, z0, x1, top, z1, body);
+    for (let y = 0.4; y < top - 0.7; y += 1.34)
+      B(x0 + 0.34, y, z1 - S, x1 - 0.34, y + 0.67, z1, glass, mat);
+    B(x0 - 0.17, top, z0, x1 + 0.17, top + 0.34, z1 + 0.17, lerpColor(body, 0x000000, 0.18));
+  };
+
+  /**
+   * Block with punched windows, some lit at night.
+   * @param {number} x0 @param {number} x1 @param {number} z0 @param {number} z1 @param {number} top
+   * @param {number} body @param {number} dark Unlit glass. @param {number} lit Share of lit windows.
+   */
+  const punchedBlock = (x0, x1, z0, z1, top, body, dark, lit) => {
+    // Emissive colours come out bright: keep them deep so lit rooms read warm, not white.
+    const warm = [rgb('#e0953f'), rgb('#eab05a'), rgb('#cf7536'), rgb('#6f98d0')];
+    const ox = Math.round((x0 - X0) / S),
+      ex = Math.round((x1 - X0) / S);
+    const ty = Math.round((top - 0.6 - Y0) / S);
+    const zf = Math.round((z1 - Z0) / S) - 1;
+    // Windows only on the street face: the hidden faces stay flat and cheap.
+    B(x0, Y0, z0, x1, top, z1, (x, y, z) =>
+      z !== zf || y >= ty || (x - ox) % 3 === 0 || y % 3 === 0 || x >= ex - 1 ? body : dark,
+    );
+    if (lit > 0)
+      for (let y = 1; y + 2 <= ty; y += 3)
+        for (let x = ox + 1; x + 3 <= ex; x += 3)
+          if (rand() < lit) vol.box(x, y, zf, x + 2, y + 2, zf + 1, pick(warm), MAT.EMISSIVE);
+  };
+
+  switch (mood) {
+    case 'morning': {
+      // La Chapelle-sur-Erdre business park: lawn, round trees, low white blocks.
+      // Mown lawn: broad stripes, flat colours (a handful of quads).
+      B(X0, Y0, Z0, X1, 0.7, Z1, (x) => (Math.floor(x / 9) % 2 ? rgb('#6aa84f') : rgb('#62a04a')));
+      B(X0, 0.7, -7, X1, 1, -6.3, rgb('#d8d0bd'));
+      for (let x = X0 + 1; x < X1 - 6;) {
+        const w = range(7, 14);
+        const top = range(4.4, 7.4);
+        const z1 = range(-12.3, -11);
+        const body = pick([rgb('#eceae4'), rgb('#e2e0da'), rgb('#f2efe8')]);
+        const glass = pick([rgb('#7fa6c6'), rgb('#6f98bc'), rgb('#8bb3cf')]);
+        ribbonBlock(x, x + w, z1 - 3, z1, top, body, glass);
+        if (rand() > 0.5)
+          B(x + w * 0.6, top, z1 - 2.2, x + w * 0.6 + 1.4, top + 0.67, z1 - 1, rgb('#b9bfc7'));
+        x += w + range(1.5, 5);
+      }
+      for (let x = X0 + 1; x < X1; x += range(3.5, 7))
+        tree(
+          x,
+          range(-9.5, -6),
+          range(2.6, 3.8),
+          range(1, 1.6),
+          pick([rgb('#3f8f4a'), rgb('#4b9a52'), rgb('#367f45')]),
+          rgb('#7cc46a'),
+        );
+      break;
+    }
+    case 'corporate': {
+      // Nantes city centre from a high floor: curtain-wall towers and stone blocks.
+      for (let x = X0; x < X1;) {
+        const stone = rand() < 0.35;
+        const w = stone ? range(6, 10) : range(5, 9);
+        if (stone) {
+          const top = range(6.5, 8.5);
+          const z1 = range(-11, -9.8);
+          punchedBlock(x, x + w, z1 - 3, z1, top, rgb('#e6dac2'), rgb('#4d5866'), 0);
+          for (const by of [2.3, 5])
+            if (by < top - 1) B(x, by, z1, x + w, by + S, z1 + S, rgb('#2c3138'));
+          B(x + S, top, z1 - 2.7, x + w - S, top + 0.67, z1 - S, rgb('#7d8a97'));
+          B(x + 2 * S, top + 0.67, z1 - 2.4, x + w - 2 * S, top + 1.34, z1 - 2 * S, rgb('#6e7b88'));
+          for (let dx = 1; dx < w - 1; dx += 2.4)
+            B(x + dx, top + 0.34, z1 - 0.67, x + dx + 0.67, top + 1, z1 - S, rgb('#e6dac2'));
+        } else {
+          const top = range(10, 17);
+          const z1 = range(-14, -12);
+          const ox = Math.round((x - X0) / S);
+          const zf = Math.round((z1 - Z0) / S) - 1;
+          const lo = rgb('#4f6f96'),
+            hi = rgb('#b4d0ea');
+          // Curtain wall: dark fins, spandrels, glass mirroring the sky (lighter higher up).
+          B(x, Y0, z1 - 3, x + w, top, z1, (vx, vy, vz) => {
+            if (vz !== zf) return rgb('#56657a');
+            if ((vx - ox) % 3 === 0) return rgb('#2e3a4c');
+            if (vy % 3 === 0) return rgb('#56657a');
+            return lerpColor(lo, hi, (Math.floor(vy / 3) * 3 * S + Y0) / 16);
+          });
+          B(x - S, top, z1 - 3, x + w + S, top + 0.67, z1 + S, rgb('#2e3a4c'));
+        }
+        x += w + range(0.7, 3);
+      }
+      // A lower roof right across the street: plant room and a green terrace.
+      for (let x = X0 + range(0, 8); x < X1; x += range(18, 30)) {
+        const w = range(8, 13);
+        B(x, Y0, -8, x + w, 2.4, -5.5, rgb('#c9c3b5'));
+        B(x + 0.67, 2.4, -7.6, x + w * 0.45, 2.75, -5.9, vary(rgb('#5f9a4e'), 0.15, 1));
+        B(x + w * 0.6, 2.4, -7.4, x + w * 0.6 + 2, 3.4, -6.2, rgb('#aeb5bf'));
+      }
+      break;
+    }
+    case 'idle': {
+      // Across the street a building is going up: bare concrete frame, scaffolding,
+      // green safety nets and a yellow tower crane, much like the next mission.
+      const concrete = rgb('#a9a59c');
+      const sites = [range(X0 + 2, width * 0.3), range(width * 0.55, width * 0.75)];
+      let built = X0;
+      for (const sx0 of sites) {
+        const w = range(16, 22);
+        const z1 = -9.6,
+          z0 = -13.4;
+        // Older neighbours fill the gap up to the site.
+        for (let x = built; x < sx0 - 3;) {
+          const bw = Math.min(range(5, 9), sx0 - 1 - x);
+          punchedBlock(
+            x,
+            x + bw,
+            -15,
+            -12,
+            range(5, 9),
+            pick([rgb('#d8cdb4'), rgb('#cbbfa4')]),
+            rgb('#5c6470'),
+            0,
+          );
+          x += bw + range(0.6, 2);
+        }
+        built = sx0 + w + 2;
+        const floors = 5;
+        for (let f = 0; f < floors; f++) {
+          const y = -1.3 + f * 1.8;
+          B(sx0, y, z0, sx0 + w, y + S, z1, concrete);
+          if (f === floors - 1) break;
+          for (let cx = sx0; cx <= sx0 + w - S; cx += 2.4) {
+            B(cx, y, z1 - S, cx + S, y + 1.8, z1, concrete);
+            B(cx, y, z0, cx + S, y + 1.8, z0 + S, concrete);
+          }
+          // Safety nets over part of the lower floors.
+          if (f < 3)
+            for (let bx = sx0; bx + 2.4 <= sx0 + w; bx += 2.4)
+              if (rand() < 0.45)
+                B(bx, y + S, z1, bx + 2.4, y + 1.8, z1 + S, (_x, vy) =>
+                  vy % 3 ? rgb('#3f8f5a') : rgb('#357a4c'),
+                );
+        }
+        // Rebar sticking out of the top slab.
+        for (let cx = sx0; cx <= sx0 + w - S; cx += 2.4)
+          B(cx, 5.9 + S, z1 - S, cx + S, 6.9, z1, rgb('#6b4a3a'));
+        // Scaffold: posts, ledgers and yellow toe boards up one side.
+        const sw = Math.min(w, range(6, 9));
+        for (let px = sx0; px <= sx0 + sw; px += 2)
+          B(px, Y0, z1 + 0.67, px + S, 7.4, z1 + 1, rgb('#9aa3ad'));
+        for (let f = 0; f < 4; f++) {
+          const y = -1.3 + (f + 1) * 1.8;
+          B(sx0, y, z1 + 0.34, sx0 + sw + S, y + S, z1 + 1, rgb('#9aa3ad'));
+          B(sx0, y + S, z1 + 0.67, sx0 + sw + S, y + 2 * S, z1 + 1, rgb('#e2b42a'));
+        }
+      }
+      for (let x = built; x < X1;) {
+        const bw = range(5, 9);
+        punchedBlock(
+          x,
+          x + bw,
+          -15,
+          -12,
+          range(5, 9),
+          pick([rgb('#d8cdb4'), rgb('#cbbfa4')]),
+          rgb('#5c6470'),
+          0,
+        );
+        x += bw + range(0.6, 2);
+      }
+      // Tower crane: lattice mast, jib, counter-jib with its weights, and a load.
+      const cx = width * 0.42;
+      const mast = (/** @type {number} */ _x, /** @type {number} */ y) =>
+        y % 3 ? rgb('#f2c230') : rgb('#c99a1a');
+      const jib = (/** @type {number} */ x) => (x % 3 ? rgb('#f2c230') : rgb('#c99a1a'));
+      B(cx, Y0, -12, cx + 0.67, 12.4, -11.33, mast);
+      B(cx - 10, 12.4, -12, cx + 4, 13.07, -11.33, jib);
+      B(cx + 2.4, 11.4, -12.33, cx + 4, 12.4, -11, rgb('#8d9099'));
+      B(cx - S, 11.4, -12.33, cx + 1, 12.4, -11, (_x, y) =>
+        y % 3 === 1 ? rgb('#5b7c9a') : rgb('#f4f1ea'),
+      );
+      B(cx - 6.67, 7.2, -11.67, cx - 6.33, 12.4, -11.33, rgb('#2a2f38'));
+      B(cx - 7.67, 6.2, -12, cx - 5.33, 7.2, -11, (x) => (x % 2 ? rgb('#b05a3a') : rgb('#8f4630')));
+      // Site hoarding along the pavement, in the house colours.
+      B(X0, Y0, -8.67, X1, 1.4, -8.33, (x) =>
+        Math.floor(x / 24) % 2 ? PALETTE.fascia : rgb('#2b3a5e'),
+      );
+      B(X0, 1.07, -8.67, X1, 1.4, -8.33, PALETTE.accent);
+      break;
+    }
+    case 'lounge': {
+      // The inner courtyard: a brick wall of flats with window boxes and ivy, trees, a pergola.
+      // Brick, with a darker soldier course under every row of windows.
+      B(X0, Y0, -13.5, X1, 12.7, -11.5, (_x, y) => ((y + 6) % 8 ? rgb('#b25a3d') : rgb('#93452f')));
+      const flowers = [rgb('#ff5f8f'), rgb('#ffd166'), rgb('#ff8a3d'), rgb('#f4f1ea')];
+      for (let y = 0.4; y < 11; y += 2.67)
+        for (let x = X0 + 1; x < X1 - 1; x += 2.67) {
+          // Flush with the brick: no relief, no ambient-occlusion seams around it.
+          B(x - S, y - S, -11.83, x + 1 + S, y + 2, -11.5, rgb('#f4efe6'));
+          B(x, y, -11.83, x + 1, y + 1.67, -11.5, rgb('#56677a'), MAT.GLOSSY);
+          if (rand() < 0.3) {
+            B(x - S, y - 0.67, -11.5, x + 1 + S, y - S, -10.83, rgb('#c4704e'));
+            B(x - S, y - S, -11.5, x + 1 + S, y, -10.83, pick(flowers));
+          }
+        }
+      // Ivy climbing from the courtyard.
+      for (let x = X0 + range(2, 10); x < X1; x += range(10, 22)) {
+        const w = range(2, 4.5),
+          h = range(3, 7);
+        B(x, Y0, -11.5, x + w, h, -11.17, (vx, vy) =>
+          noise(vx >> 1, vy >> 1, 3) > 0.45 ? rgb('#3f7f3c') : rgb('#5a9a48'),
+        );
+      }
+      for (let x = X0 + range(2, 6); x < X1; x += range(8, 13))
+        tree(x, range(-9, -7.5), range(2.4, 3.2), range(1.1, 1.5), rgb('#4f9a4a'), rgb('#8ccc6a'));
+      // Pergola with climbing vines, right outside the window.
+      const wood = rgb('#8a5f3c');
+      for (let x = X0 + range(0, 6); x < X1; x += range(22, 34)) {
+        const w = range(9, 14);
+        for (let px = x; px <= x + w; px += w / 3)
+          for (const pz of [-7.4, -4.8]) B(px, Y0, pz, px + S, 3.5, pz + S, wood);
+        for (const pz of [-7.4, -4.8]) B(x, 3.5, pz, x + w + S, 3.84, pz + S, wood);
+        for (let rx = x; rx <= x + w; rx += 1) B(rx, 3.84, -7.8, rx + S, 4.17, -4.4, wood);
+        for (let rx = x; rx < x + w; rx += 0.67)
+          if (rand() < 0.55)
+            B(rx, 4.17, range(-7.6, -6), rx + 0.67, 4.5, range(-5.6, -4.6), rgb('#5a9a48'));
+      }
+      break;
+    }
+    case 'event': {
+      // The canal by the congress centre at nightfall: dark water full of reflections,
+      // lit quays, a festoon of bulbs along the near bank.
+      B(X0, Y0, Z0, X1, 0.34, Z1, rgb('#141b30'), MAT.GLOSSY);
+      const glows = [rgb('#ffcf8a'), rgb('#ff6fb8'), rgb('#9b7bff'), rgb('#ffe2b0')];
+      for (let i = 0; i < width * 1.2; i++) {
+        const x = range(X0, X1),
+          z = range(-11, -5);
+        B(x, 0, z, x + range(0.67, 2), 0.34, z + S, pick(glows), MAT.EMISSIVE);
+      }
+      B(X0, Y0, -11.7, X1, 1, -11, vary(rgb('#4a4458'), 0.08, 2));
+      const hall = width * 0.45;
+      for (let x = X0; x < X1;) {
+        if (x < hall + 20 && x + 9 > hall) {
+          // The congress centre: a long glass hall glowing amber under a pink roof line.
+          B(hall, Y0, -15, hall + 20, 5, -11.7, rgb('#2b2740'));
+          B(
+            hall + S,
+            1.34,
+            -12,
+            hall + 20 - S,
+            4.34,
+            -11.7,
+            (vx) => (vx % 4 === 0 ? rgb('#3a3350') : rgb('#e39a4c')),
+            MAT.EMISSIVE,
+          );
+          B(hall, 5, -15, hall + 20, 5.34, -11.4, rgb('#c8387f'), MAT.EMISSIVE);
+          x = hall + 20 + range(0.7, 2);
+          continue;
+        }
+        const w = range(4, 8);
+        punchedBlock(
+          x,
+          x + w,
+          -15.4,
+          -12,
+          range(4, 11),
+          pick([rgb('#2a2440'), rgb('#352f4d'), rgb('#3a3350')]),
+          rgb('#1c1a2a'),
+          0.3,
+        );
+        if (rand() < 0.3) B(x, 1, -12, x + w, 1.34, -11.7, rgb('#9b6bff'), MAT.EMISSIVE);
+        x += w + range(0.4, 1.6);
+      }
+      // Festoon of bulbs strung between posts on the near quay.
+      const bulbs = [rgb('#ffd27a'), rgb('#ffb066'), rgb('#fff1c9'), rgb('#ff8fc8')];
+      for (let px = X0 + 2; px + 8 < X1; px += 8) {
+        B(px, Y0, -6.17, px + S, 4.6, -5.83, rgb('#22202c'));
+        for (let k = 1; k < 24; k++) {
+          const t = k / 24;
+          const y = 4.4 - 3.2 * t * (1 - t);
+          B(
+            px + t * 8,
+            y,
+            -6.17,
+            px + t * 8 + S,
+            y + S,
+            -5.83,
+            k % 2 ? pick(bulbs) : rgb('#22202c'),
+            k % 2 ? MAT.EMISSIVE : MAT.MATTE,
+          );
+        }
+      }
+      break;
+    }
+    case 'dusk': {
+      // Neighbouring roofs below the terrace: zinc and terracotta, water tanks,
+      // the first lit windows, an antenna light and a billboard.
+      for (let x = X0; x < X1;) {
+        const w = range(4, 9);
+        const far = rand() < 0.35;
+        const z1 = far ? range(-13, -11) : range(-8, -5.5);
+        const top = far ? range(2, 6.5) : range(-1, 2.2);
+        const body = pick([rgb('#e3d3b8'), rgb('#cf9f7c'), rgb('#bfb8ad'), rgb('#d9c6a5')]);
+        punchedBlock(x, x + w, z1 - range(2.5, 4), z1, top, body, rgb('#3b4a63'), 0.32);
+        const roof = rand();
+        if (roof < 0.4) {
+          B(x + S, top, z1 - 2.2, x + w - S, top + 0.67, z1 - S, rgb('#8a95a3'));
+          B(x + 0.67, top + 0.67, z1 - 1.9, x + w - 0.67, top + 1, z1 - 0.67, rgb('#7b8794'));
+        } else if (roof < 0.7) {
+          const tx = x + range(0.6, w - 2);
+          for (const lx of [tx, tx + 1])
+            B(lx, top, z1 - 1.6, lx + S, top + 0.67, z1 - 1.27, rgb('#4a505c'));
+          B(tx - S, top + 0.67, z1 - 1.9, tx + 1.67, top + 1.67, z1 - 0.9, rgb('#9aa1aa'));
+        } else if (far) {
+          const ax = x + range(0.6, w - 1);
+          B(ax, top, z1 - 1.3, ax + S, top + 2.4, z1 - 1, rgb('#4a505c'));
+          B(ax, top + 2.4, z1 - 1.3, ax + S, top + 2.74, z1 - 1, rgb('#ff3b3b'), MAT.EMISSIVE);
+        }
+        x += w + range(0.3, 1.6);
+      }
+      const bx = width * 0.3;
+      B(bx, 3, -12.4, bx + 0.34, 4.4, -12, rgb('#4a505c'));
+      B(bx + 3, 3, -12.4, bx + 3.34, 4.4, -12, rgb('#4a505c'));
+      // A rooftop sign: navy board, lime neon frame and a pink line of light.
+      const neon = rgb('#9fd12a');
+      B(bx - 0.67, 4.4, -12.4, bx + 4, 6.4, -12, rgb('#1f2a44'));
+      B(bx - 0.67, 4.4, -12, bx + 4, 4.74, -11.67, neon, MAT.EMISSIVE);
+      B(bx - 0.67, 6.07, -12, bx + 4, 6.4, -11.67, neon, MAT.EMISSIVE);
+      B(bx - 0.67, 4.74, -12, bx - 0.33, 6.07, -11.67, neon, MAT.EMISSIVE);
+      B(bx + 3.67, 4.74, -12, bx + 4, 6.07, -11.67, neon, MAT.EMISSIVE);
+      B(bx + 0.33, 5.24, -12, bx + 3, 5.57, -11.67, rgb('#e0408a'), MAT.EMISSIVE);
+      break;
+    }
+    default:
+      return null;
+  }
+  return vol;
 }
 
 /**

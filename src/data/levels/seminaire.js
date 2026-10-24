@@ -7,6 +7,7 @@
 export const SEMINAIRE = {
   id: 'seminaire',
   theme: 'office',
+  mood: 'event',
   music: 'copil',
   name: 'Bonus : Séminaire annuel',
   subtitle: 'Centre des congrès · vendredi, 18 h 00',

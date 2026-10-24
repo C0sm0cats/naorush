@@ -44,6 +44,7 @@ import { TS } from './ts.js';
  * @typedef {import('../../game/sim.js').LevelDef & {
  *   id: string,
  *   theme: 'office'|'datacenter'|'rooftop'|'parking',
+ *   mood?: import('../../gfx/world-builder.js').Mood,
  *   music: 'office'|'datacenter'|'rooftop'|'parking'|'copil',
  *   keyLabel: string,
  *   keyModel?: 'key'|'badge'|'envelope',

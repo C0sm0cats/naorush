@@ -6,6 +6,7 @@
 export const ROOFTOP = {
   id: 'rooftop',
   theme: 'rooftop',
+  mood: 'dusk',
   music: 'rooftop',
   name: 'Power UP Tour',
   subtitle: 'Rooftop, Nantes · mercredi, 18 h 30',

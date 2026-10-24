@@ -7,6 +7,7 @@
 export const TS = {
   id: 'ts',
   theme: 'datacenter',
+  mood: 'night',
   music: 'datacenter',
   name: 'Technologies & Services',
   subtitle: 'Pays de la Loire · mardi, 14 h 03',
@@ -41,8 +42,8 @@ export const TS = {
     { type: 'poster', id: 'gen-ai-hub', x: 25.6, y: 7.6 },
     { type: 'rack', x: 39.5, y: 3 },
     { type: 'poster', id: 'lets-connect', x: 48.6, y: 7.3 },
-    { type: 'monitor', x: 54, y: 7, z: -2 },
-    { type: 'plantSmall', x: 55, y: 7, z: -2 },
+    { type: 'monitor', x: 57.6, y: 7, z: -2 },
+    { type: 'plantSmall', x: 58.6, y: 7, z: -2 },
     { type: 'rack', x: 57.5, y: 3 },
     { type: 'poster', id: 'gcomp', x: 60.4, y: 4 },
     { type: 'poster', id: 'primo', x: 72.4, y: 4.4 },
@@ -94,7 +95,7 @@ export const TS = {
     },
     {
       who: 'boss',
-      text: 'Je signe l’enveloppe pour Technologies & Services. Reste celle de Rodolphe, après l’avis du comité de pilotage, demain.',
+      text: 'Je signe l’enveloppe pour Technologies & Services. Reste la signature de Rodolphe, après l’avis du comité de pilotage, demain.',
     },
     { who: 'partner', text: 'Merci, Julien ! Vous ne serez pas déçu.' },
     {

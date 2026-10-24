@@ -6,6 +6,7 @@
 export const COPIL = {
   id: 'copil',
   theme: 'office',
+  mood: 'corporate',
   music: 'copil',
   name: 'Comité de pilotage',
   subtitle: 'Siège régional · mercredi, 10 h 00',

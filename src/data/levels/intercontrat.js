@@ -7,6 +7,7 @@
 export const INTERCONTRAT = {
   id: 'intercontrat',
   theme: 'office',
+  mood: 'idle',
   music: 'office',
   name: 'Bonus : Intercontrat',
   subtitle: 'Plateau de l’intercontrat · jeudi, 9 h 30',

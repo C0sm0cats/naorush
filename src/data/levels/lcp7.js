@@ -5,6 +5,7 @@
 export const LCP7 = {
   id: 'lcp7',
   theme: 'office',
+  mood: 'morning',
   music: 'office',
   name: 'Open space LCP7',
   subtitle: 'La Chapelle-sur-Erdre · lundi, 8 h 47',
@@ -21,7 +22,7 @@ export const LCP7 = {
     '#                       MMMMMM                                                                  #  #',
     '#                       MMMMMM                 *                                                #  #',
     '#                       MMMMMM               $h$ O O                                            #  #',
-    '#                       MMMMMM               ###                                                #  #',
+    '#                       MMMMMM               #### # #                                           #  #',
     '#             $$$ a                                                    $$$ aT            R n K  #  #',
     '#             #####            #                                      ####### #####     ####### #  #',
     '#                              #                                              A  *#             D  #',
@@ -34,8 +35,8 @@ export const LCP7 = {
     {
       x0: 37,
       x1: 39.5,
-      keys: 'Le stagiaire s’arrête, puis fonce : saute-le, ou X pour une pause café.',
-      touch: 'Le stagiaire s’arrête, puis fonce : saute-le, ou CR pour une pause café.',
+      keys: 'Le stagiaire s’arrête, puis fonce : saute par-dessus, ou X pour une pause café.',
+      touch: 'Le stagiaire s’arrête, puis fonce : saute par-dessus, ou CR pour une pause café.',
     },
   ],
   decor: [

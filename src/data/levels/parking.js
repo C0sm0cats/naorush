@@ -6,6 +6,7 @@
 export const PARKING = {
   id: 'parking',
   theme: 'parking',
+  mood: 'dawn',
   music: 'parking',
   name: 'Parking B2',
   subtitle: 'La Chapelle-sur-Erdre · lundi, 8 h 40',

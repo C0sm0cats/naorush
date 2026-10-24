@@ -548,7 +548,85 @@ function glyph(b, rows, o, px, color) {
 // Props.
 
 /**
- * @typedef {'plant'|'plantSmall'|'cooler'|'printer'|'coffee'|'chair'|'rack'|'hvac'|'antenna'|'parasol'|'bistro'|'speaker'|'lampPost'|'monitor'|'kpi'|'wave'|'lift'|'gate'|'carBlue'|'carRed'|'carWhite'|'barrier'|'pillarSign'|'drawer'|'sprinkler'|'spray'|'paper'|'binders'|'vacuum'|'laptopStand'|'invite'|'cup'|'archive'|'copilTable'|'projector'|'truss'|'spotlight'|'curtain'|'shadow'|'puddle'|'warn'|'arrow'|'rackFall'|'confetti'} PropId
+ * Desk monitor without its picture: round foot, stand, thin bezel, power LED.
+ * @param {MeshBuilder} b
+ * @returns {number} z of the screen surface.
+ */
+function monitorFrame(b) {
+  b.lathe(
+    [0, 0, -0.03],
+    [
+      [0, 0],
+      [0.12, 0],
+      [0.115, 0.014],
+      [0, 0.016],
+    ],
+    '#30343c',
+    { mat: GLOSSY, seg: 32, scaleZ: 0.6 },
+  );
+  b.roundedBox([0, 0.14, -0.05], [0.03, 0.13, 0.012], 0.01, '#3a3f48', { mat: GLOSSY, seg: 3 });
+  b.roundedBox([0, 0.31, -0.01], [0.3, 0.185, 0.022], 0.02, '#20242c', { mat: GLOSSY, seg: 5 });
+  const z = 0.0125;
+  flatBox(b, [0.27, 0.137, z], [0.005, 0.003, 0.002], '#ffffff', EMISSIVE);
+  b.roundedBox([0, 0.49, -0.005], [0.03, 0.008, 0.012], 0.007, BLACK, { mat: GLOSSY, seg: 2 });
+  flatBox(b, [0, 0.49, 0.008], [0.004, 0.004, 0.001], '#4fb8ff', EMISSIVE);
+  b.roundedBox([0, 0.31, -0.035], [0.12, 0.09, 0.008], 0.008, '#2a2e36', { mat: GLOSSY, seg: 2 });
+  flatBox(b, [0, 0.142, 0.0125], [0.02, 0.004, 0.001], LIME);
+  return z;
+}
+
+/**
+ * Swivel office chair: five-star base on casters, gas lift, padded seat and back.
+ * @param {MeshBuilder} b @param {string} fabric @param {string} cushion @param {string} seam
+ * @param {string} accent
+ */
+function officeChair(b, fabric, cushion, seam, accent) {
+  b.lathe(
+    [0, 0, 0],
+    [
+      [0, 0.08],
+      [0.06, 0.08],
+      [0.05, 0.13],
+      [0, 0.13],
+    ],
+    GRAPHITE,
+    { mat: GLOSSY, seg: 24 },
+  );
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * TAU + 0.3;
+    const tip = [Math.sin(a) * 0.27, 0.07, Math.cos(a) * 0.27];
+    const s = mark(b);
+    b.roundedBox([0, 0, 0.14], [0.022, 0.018, 0.14], 0.016, GRAPHITE, { mat: GLOSSY, seg: 4 });
+    place(b, s, mul(rotY(a), rotX(0.08)), [0, 0.1, 0]);
+    const w = mark(b);
+    cyl(b, [0, -0.02, 0], 0.035, 0.04, BLACK, { mat: GLOSSY, seg: 12 });
+    cyl(b, [0, -0.022, 0], 0.014, 0.044, '#5b6270', { mat: GLOSSY, seg: 8 });
+    place(b, w, mul(rotY(a), rotZ(Math.PI / 2)), [tip[0], 0.035, tip[2]]);
+    b.roundedBox([tip[0], 0.075, tip[2]], [0.014, 0.02, 0.014], 0.01, GRAPHITE, { seg: 2 });
+  }
+  cyl(b, [0, 0.12, 0], 0.035, 0.16, GRAPHITE, { mat: GLOSSY });
+  cyl(b, [0, 0.27, 0], 0.022, 0.15, CHROME, { mat: GLOSSY });
+  b.roundedBox([0, 0.42, 0], [0.1, 0.025, 0.1], 0.02, BLACK, { seg: 4 });
+  b.roundedBox([0, 0.48, 0.02], [0.25, 0.05, 0.24], 0.05, fabric, { seg: 6 });
+  b.roundedBox([0, 0.505, 0.035], [0.2, 0.03, 0.19], 0.03, cushion, { seg: 4 });
+  flatBox(b, [0, 0.47, 0.262], [0.18, 0.006, 0.002], accent);
+  // Back spine and cushion.
+  b.roundedBox([0, 0.55, -0.2], [0.03, 0.12, 0.02], 0.018, GRAPHITE, { mat: GLOSSY, seg: 4 });
+  const s = mark(b);
+  b.roundedBox([0, 0, 0], [0.23, 0.24, 0.045], 0.045, fabric, { seg: 6 });
+  b.roundedBox([0, -0.02, 0.025], [0.18, 0.17, 0.03], 0.03, cushion, { seg: 4 });
+  for (let k = 0; k < 4; k++) flatBox(b, [0, -0.15 + k * 0.08, 0.056], [0.15, 0.003, 0.002], seam);
+  b.roundedBox([0, 0.2, 0.03], [0.12, 0.012, 0.02], 0.01, accent, { seg: 3 });
+  place(b, s, rotX(-0.12), [0, 0.84, -0.23]);
+  // Armrests.
+  for (const x of [-0.27, 0.27]) {
+    b.roundedBox([x, 0.56, 0.0], [0.02, 0.07, 0.02], 0.015, GRAPHITE, { mat: GLOSSY, seg: 4 });
+    b.roundedBox([x, 0.64, 0.02], [0.035, 0.018, 0.12], 0.016, BLACK, { seg: 4 });
+  }
+}
+
+/**
+ * @typedef {'plant'|'plantSnake'|'plantSmall'|'cactus'|'cooler'|'printer'|'coffee'|'chair'|'chairTeal'|'chairGrey'|'rack'|'hvac'|'antenna'|'parasol'|'bistro'|'speaker'|'lampPost'|'monitor'|'monitorCode'|'monitorCall'|'kpi'|'wave'|'lift'|'gate'|'carBlue'|'carRed'|'carWhite'|'barrier'|'pillarSign'|'drawer'|'sprinkler'|'spray'|'paper'|'binders'|'vacuum'|'laptopStand'|'invite'|'cup'|'archive'|'copilTable'|'projector'|'truss'|'spotlight'|'curtain'|'shadow'|'puddle'|'warn'|'arrow'|'rackFall'|'confetti'} PropId
  */
 
 /** @type {Record<PropId, (b: MeshBuilder) => void>} */
@@ -685,6 +763,98 @@ const BUILDERS = {
       );
       place(b, s, mul(rotY(ang), rotX(tilt)), [0, 0.15, 0]);
     }
+  },
+
+  plantSnake(b) {
+    // Snake plant: stiff upright blades with pale edges, in a tall charcoal pot.
+    b.lathe(
+      [0, 0, 0],
+      [
+        [0, 0],
+        [0.13, 0],
+        [0.145, 0.02],
+        [0.16, 0.38],
+        [0.17, 0.39],
+        [0.17, 0.41],
+        [0.155, 0.41],
+      ],
+      '#2e333c',
+      { mat: GLOSSY, seg: 28 },
+    );
+    b.lathe(
+      [0, 0, 0],
+      [
+        [0.1545, 0.33],
+        [0.157, 0.35],
+      ],
+      LIME,
+      { seg: 28 },
+    );
+    b.lathe(
+      [0, 0, 0],
+      [
+        [0.155, 0.395],
+        [0, 0.395],
+      ],
+      '#4a3324',
+      { seg: 20 },
+    );
+    const r = rng(17);
+    const greens = ['#2f6b3a', '#3b7d44', '#28603a'];
+    for (let i = 0; i < 15; i++) {
+      const ang = i * 2.39996 + (r() - 0.5) * 0.4;
+      const rs = 0.03 + r() * 0.08;
+      const base = [Math.sin(ang) * rs, 0.39, Math.cos(ang) * rs];
+      const L = 0.42 + r() * 0.4;
+      const col = tone(greens[i % 3], 0.9 + r() * 0.2, '#d9e8a0', i % 4 === 0 ? 0.12 : 0);
+      leaf(b, L, 0.075 + r() * 0.025, 0.03, col, mul(rotY(ang), rotX(-1.12 - r() * 0.32)), base);
+    }
+  },
+
+  cactus(b) {
+    // Round barrel cactus with a pink flower, in a white pot with a lime rim.
+    b.lathe(
+      [0, 0, 0],
+      [
+        [0, 0],
+        [0.075, 0],
+        [0.085, 0.01],
+        [0.095, 0.13],
+        [0.1, 0.14],
+        [0, 0.14],
+      ],
+      '#f2efe9',
+      { mat: GLOSSY, seg: 28 },
+    );
+    b.lathe(
+      [0, 0, 0],
+      [
+        [0.098, 0.128],
+        [0.1, 0.142],
+      ],
+      LIME,
+      { seg: 28 },
+    );
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * TAU;
+      b.ellipsoid(
+        [Math.sin(a) * 0.045, 0.215, Math.cos(a) * 0.045],
+        [0.04, 0.085, 0.04],
+        i % 2 ? '#4f9a5a' : '#5fae66',
+        {
+          mat: GLOSSY,
+          seg: 6,
+        },
+      );
+    }
+    b.ellipsoid([0, 0.22, 0], [0.07, 0.09, 0.07], '#57a560', { mat: GLOSSY, seg: 12 });
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * TAU;
+      b.ellipsoid([Math.sin(a) * 0.016, 0.312, Math.cos(a) * 0.016], [0.016, 0.008, 0.016], PINK, {
+        seg: 6,
+      });
+    }
+    b.ellipsoid([0, 0.316, 0], [0.01, 0.008, 0.01], '#ffd166', { seg: 6 });
   },
 
   cooler(b) {
@@ -879,49 +1049,15 @@ const BUILDERS = {
   },
 
   chair(b) {
-    b.lathe(
-      [0, 0, 0],
-      [
-        [0, 0.08],
-        [0.06, 0.08],
-        [0.05, 0.13],
-        [0, 0.13],
-      ],
-      GRAPHITE,
-      { mat: GLOSSY, seg: 24 },
-    );
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * TAU + 0.3;
-      const tip = [Math.sin(a) * 0.27, 0.07, Math.cos(a) * 0.27];
-      const s = mark(b);
-      b.roundedBox([0, 0, 0.14], [0.022, 0.018, 0.14], 0.016, GRAPHITE, { mat: GLOSSY, seg: 4 });
-      place(b, s, mul(rotY(a), rotX(0.08)), [0, 0.1, 0]);
-      const w = mark(b);
-      cyl(b, [0, -0.02, 0], 0.035, 0.04, BLACK, { mat: GLOSSY, seg: 12 });
-      cyl(b, [0, -0.022, 0], 0.014, 0.044, '#5b6270', { mat: GLOSSY, seg: 8 });
-      place(b, w, mul(rotY(a), rotZ(Math.PI / 2)), [tip[0], 0.035, tip[2]]);
-      b.roundedBox([tip[0], 0.075, tip[2]], [0.014, 0.02, 0.014], 0.01, GRAPHITE, { seg: 2 });
-    }
-    cyl(b, [0, 0.12, 0], 0.035, 0.16, GRAPHITE, { mat: GLOSSY });
-    cyl(b, [0, 0.27, 0], 0.022, 0.15, CHROME, { mat: GLOSSY });
-    b.roundedBox([0, 0.42, 0], [0.1, 0.025, 0.1], 0.02, BLACK, { seg: 4 });
-    b.roundedBox([0, 0.48, 0.02], [0.25, 0.05, 0.24], 0.05, NAVY, { seg: 6 });
-    b.roundedBox([0, 0.505, 0.035], [0.2, 0.03, 0.19], 0.03, '#2a3858', { seg: 4 });
-    flatBox(b, [0, 0.47, 0.262], [0.18, 0.006, 0.002], LIME);
-    // Back spine and cushion.
-    b.roundedBox([0, 0.55, -0.2], [0.03, 0.12, 0.02], 0.018, GRAPHITE, { mat: GLOSSY, seg: 4 });
-    const s = mark(b);
-    b.roundedBox([0, 0, 0], [0.23, 0.24, 0.045], 0.045, NAVY, { seg: 6 });
-    b.roundedBox([0, -0.02, 0.025], [0.18, 0.17, 0.03], 0.03, '#2a3858', { seg: 4 });
-    for (let k = 0; k < 4; k++)
-      flatBox(b, [0, -0.15 + k * 0.08, 0.056], [0.15, 0.003, 0.002], '#182238');
-    b.roundedBox([0, 0.2, 0.03], [0.12, 0.012, 0.02], 0.01, LIME, { seg: 3 });
-    place(b, s, rotX(-0.12), [0, 0.84, -0.23]);
-    // Armrests.
-    for (const x of [-0.27, 0.27]) {
-      b.roundedBox([x, 0.56, 0.0], [0.02, 0.07, 0.02], 0.015, GRAPHITE, { mat: GLOSSY, seg: 4 });
-      b.roundedBox([x, 0.64, 0.02], [0.035, 0.018, 0.12], 0.016, BLACK, { seg: 4 });
-    }
+    officeChair(b, NAVY, '#2a3858', '#182238', LIME);
+  },
+
+  chairTeal(b) {
+    officeChair(b, '#2f6d6a', '#3c8580', '#1f4a48', LIME);
+  },
+
+  chairGrey(b) {
+    officeChair(b, '#4a505c', '#5d6470', '#30343c', PINK);
   },
 
   rack(b) {
@@ -1309,20 +1445,8 @@ const BUILDERS = {
   },
 
   monitor(b) {
-    b.lathe(
-      [0, 0, -0.03],
-      [
-        [0, 0],
-        [0.12, 0],
-        [0.115, 0.014],
-        [0, 0.016],
-      ],
-      '#30343c',
-      { mat: GLOSSY, seg: 32, scaleZ: 0.6 },
-    );
-    b.roundedBox([0, 0.14, -0.05], [0.03, 0.13, 0.012], 0.01, '#3a3f48', { mat: GLOSSY, seg: 3 });
-    b.roundedBox([0, 0.31, -0.01], [0.3, 0.185, 0.022], 0.02, '#20242c', { mat: GLOSSY, seg: 5 });
-    const z = 0.0125;
+    // The intranet: blue header, side menu, a page of text and a lime button.
+    const z = monitorFrame(b);
     flatBox(b, [0, 0.32, z], [0.28, 0.16, 0.002], '#1e3a6e', EMISSIVE);
     flatBox(b, [0, 0.462, z + 0.002], [0.28, 0.018, 0.001], '#4fa3ff', EMISSIVE);
     flatBox(b, [-0.22, 0.3, z + 0.002], [0.05, 0.13, 0.001], '#16305c', EMISSIVE);
@@ -1336,11 +1460,59 @@ const BUILDERS = {
         EMISSIVE,
       );
     flatBox(b, [0.17, 0.25, z + 0.003], [0.05, 0.02, 0.001], LIME, EMISSIVE);
-    flatBox(b, [0.27, 0.137, z], [0.005, 0.003, 0.002], '#ffffff', EMISSIVE);
-    b.roundedBox([0, 0.49, -0.005], [0.03, 0.008, 0.012], 0.007, BLACK, { mat: GLOSSY, seg: 2 });
-    flatBox(b, [0, 0.49, 0.008], [0.004, 0.004, 0.001], '#4fb8ff', EMISSIVE);
-    b.roundedBox([0, 0.31, -0.035], [0.12, 0.09, 0.008], 0.008, '#2a2e36', { mat: GLOSSY, seg: 2 });
-    flatBox(b, [0, 0.142, 0.0125], [0.02, 0.004, 0.001], LIME);
+  },
+
+  monitorCode(b) {
+    // A dark code editor: file tree, gutter, indented lines in syntax colours.
+    const z = monitorFrame(b);
+    flatBox(b, [0, 0.32, z], [0.28, 0.16, 0.002], '#161a22', EMISSIVE);
+    flatBox(b, [-0.235, 0.32, z + 0.002], [0.045, 0.16, 0.001], '#202633', EMISSIVE);
+    const cols = ['#ff79c6', LIME, '#8be9fd', '#e8ecf4', '#ffb86c'];
+    const r = rng(23);
+    for (let i = 0; i < 9; i++) {
+      const indent = [0, 1, 2, 2, 1, 2, 3, 2, 0][i] * 0.03;
+      const len = 0.04 + r() * 0.1;
+      const x0 = -0.16 + indent;
+      flatBox(
+        b,
+        [x0 + len / 2, 0.45 - i * 0.033, z + 0.003],
+        [len / 2, 0.006, 0.001],
+        cols[i % 5],
+        EMISSIVE,
+      );
+      if (r() > 0.5)
+        flatBox(
+          b,
+          [x0 + len + 0.05, 0.45 - i * 0.033, z + 0.003],
+          [0.035, 0.006, 0.001],
+          cols[(i + 2) % 5],
+          EMISSIVE,
+        );
+    }
+  },
+
+  monitorCall(b) {
+    // A video call: four tiles with colleagues, and the red hang-up button.
+    const z = monitorFrame(b);
+    flatBox(b, [0, 0.32, z], [0.28, 0.16, 0.002], '#1d2130', EMISSIVE);
+    const bg = ['#3d4a7a', '#4b3a6e', '#2f5a5a', '#5a4a3a'];
+    const skin = ['#f6d3b3', '#b97a52', '#e0a57a', '#8a5536'];
+    const hair = ['#2b1d14', '#141a2c', '#c9822e', '#3a2a20'];
+    for (let i = 0; i < 4; i++) {
+      const cx = i % 2 ? 0.135 : -0.135,
+        cy = i < 2 ? 0.4 : 0.255;
+      flatBox(b, [cx, cy, z + 0.002], [0.13, 0.068, 0.001], bg[i], EMISSIVE);
+      flatBox(
+        b,
+        [cx, cy - 0.04, z + 0.003],
+        [0.045, 0.028, 0.001],
+        i % 2 ? '#e8ecf4' : '#2b3446',
+        EMISSIVE,
+      );
+      flatBox(b, [cx, cy + 0.008, z + 0.003], [0.026, 0.03, 0.001], skin[i], EMISSIVE);
+      flatBox(b, [cx, cy + 0.04, z + 0.004], [0.028, 0.008, 0.001], hair[i], EMISSIVE);
+    }
+    flatBox(b, [0, 0.175, z + 0.004], [0.03, 0.012, 0.001], '#ff4b4b', EMISSIVE);
   },
 
   kpi(b) {
@@ -1857,14 +2029,22 @@ const BUILDERS = {
 
   copilTable(b) {
     // Repeats seamlessly along x: everything spans exactly x ∈ [-0.5, 0.5].
-    flatBox(b, [0, 0.87, 0], [0.5, 0.03, 0.7], '#8a5632', GLOSSY);
+    // Walnut top with a pale edge band, a recessed graphite modesty panel on a
+    // steel spine, and a flush power box in the middle of each segment.
+    flatBox(b, [0, 0.87, 0], [0.5, 0.03, 0.7], '#7a4a2b', GLOSSY);
     for (let i = 0; i < 5; i++)
-      flatBox(b, [0, 0.9002, -0.55 + i * 0.27], [0.5, 0.0002, 0.012], '#7a4a2a', GLOSSY);
-    flatBox(b, [0, 0.82, 0.68], [0.5, 0.02, 0.02], '#5e3a22', GLOSSY);
+      flatBox(b, [0, 0.9002, -0.55 + i * 0.27], [0.5, 0.0002, 0.012], '#6a3f24', GLOSSY);
+    flatBox(b, [0, 0.87, 0.705], [0.5, 0.03, 0.006], '#d9c3a0');
+    flatBox(b, [0, 0.82, 0.68], [0.5, 0.02, 0.02], '#4e301c', GLOSSY);
     flatBox(b, [0, 0.82, 0.701], [0.5, 0.005, 0.001], LIME);
-    flatBox(b, [0, 0.41, 0], [0.5, 0.39, 0.03], NAVY);
+    flatBox(b, [0, 0.9005, -0.1], [0.07, 0.0005, 0.035], '#2b2f36', GLOSSY);
+    flatBox(b, [-0.03, 0.901, -0.1], [0.012, 0.0005, 0.012], LIME, EMISSIVE);
+    flatBox(b, [0, 0.44, -0.05], [0.5, 0.33, 0.025], '#2b3446');
+    flatBox(b, [0, 0.62, -0.024], [0.5, 0.004, 0.001], LIME);
+    flatBox(b, [0, 0.79, -0.05], [0.5, 0.02, 0.09], '#9aa3ad', GLOSSY);
     for (const z of [-0.45, 0.45]) flatBox(b, [0, 0.79, z], [0.5, 0.02, 0.02], '#3a3f48', GLOSSY);
-    flatBox(b, [0, 0.01, 0], [0.5, 0.01, 0.25], '#3a3f48', GLOSSY);
+    flatBox(b, [0, 0.08, -0.05], [0.5, 0.03, 0.06], '#9aa3ad', GLOSSY);
+    flatBox(b, [0, 0.01, -0.05], [0.5, 0.01, 0.28], '#3a3f48', GLOSSY);
   },
 
   projector(b) {
@@ -2109,11 +2289,15 @@ const BUILDERS = {
 /** @type {PropId[]} */
 export const PROP_IDS = [
   'plant',
+  'plantSnake',
   'plantSmall',
+  'cactus',
   'cooler',
   'printer',
   'coffee',
   'chair',
+  'chairTeal',
+  'chairGrey',
   'rack',
   'hvac',
   'antenna',
@@ -2122,6 +2306,8 @@ export const PROP_IDS = [
   'speaker',
   'lampPost',
   'monitor',
+  'monitorCode',
+  'monitorCall',
   'kpi',
   'wave',
   'lift',
@@ -2153,6 +2339,33 @@ export const PROP_IDS = [
   'rackFall',
   'confetti',
 ];
+
+/**
+ * Look-alike models a decor prop can be drawn with, so a room never lines up
+ * clones of one chair, plant or screen.
+ * @type {Partial<Record<PropId, PropId[]>>}
+ */
+export const PROP_VARIANTS = {
+  chair: ['chair', 'chairTeal', 'chairGrey'],
+  plant: ['plant', 'plantSnake'],
+  plantSmall: ['plantSmall', 'cactus'],
+  monitor: ['monitor', 'monitorCode', 'monitorCall'],
+};
+
+/**
+ * The variant of a decor prop to draw at a position: deterministic, so a stage
+ * looks the same on every visit.
+ * @param {PropId} id
+ * @param {number} x
+ * @param {number} [y]
+ * @returns {PropId}
+ */
+export function propVariant(id, x, y = 0) {
+  const list = PROP_VARIANTS[id];
+  if (!list) return id;
+  const h = Math.imul((Math.round(x * 4) * 73856093) ^ (Math.round(y) * 19349663), 2654435761);
+  return list[(h >>> 0) % list.length];
+}
 
 /**
  * Geometry for one prop without touching GL (handy for tests and tools).
