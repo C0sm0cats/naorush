@@ -520,10 +520,16 @@ async function share(text, button) {
 }
 $('share').onclick = () => {
   const hero = CAST[heroId].name;
+  // A little emoji card, like the word games: hearts kept, secrets, badges used.
+  const hearts =
+    '❤️'.repeat(Math.max(0, sim.hero.hearts)) +
+    '🖤'.repeat(Math.max(0, sim.maxHearts - sim.hero.hearts));
+  const card = `${hearts}  ${'⭐'.repeat(sim.secrets)}${'▫️'.repeat(sim.secretTotal - sim.secrets)}  ⏱️ ${clock(sim.time)}`;
   share(
-    (challenge ? `Défi du jour du ${challenge.key.split('-').reverse().join('/')} : ` : '') +
-      `j’ai fini « ${level.name} » dans NAO Rush avec ${hero} en ${clock(sim.time)}, ` +
-      `${sim.tickets} tickets Swile et ${sim.secrets}/${sim.secretTotal} secrets !`,
+    (challenge
+      ? `NAO Rush · Défi du ${challenge.key.split('-').reverse().join('/')} (${challenge.twist.label})\n`
+      : `NAO Rush · ${level.name}\n`) +
+      `${card}\n${hero}, ${sim.tickets} tickets Swile, ${sim.deaths} retour(s) au badge.`,
     $('share'),
   );
 };
