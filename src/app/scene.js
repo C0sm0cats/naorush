@@ -9,17 +9,18 @@ import {
 } from '../data/inetum.js';
 import { renderPlaque, renderWhiteboard } from '../gfx/boards.js';
 import { renderPoster } from '../gfx/posters.js';
-import { buildProps } from '../gfx/props.js';
+import { buildProps, propVariant } from '../gfx/props.js';
 import { DrawPool, buildCharacter, poseCharacter, poseOptions } from '../gfx/characters.js';
 import { chain, multiply, scaling, translation } from '../gfx/mat4.js';
 import { Mesh, Sprite } from '../gfx/renderer.js';
 import { buildThings } from '../gfx/things.js';
-import { MAT, Volume, meshVolume } from '../gfx/voxels.js';
+import { MAT, Volume, meshVolume, partitionMesh } from '../gfx/voxels.js';
 import { buildOffice, buildSkyline } from '../gfx/world-builder.js';
 import { HERO, TILE } from '../game/sim.js';
 import { assetUrl, crop, loadImage } from './assets.js';
 import { drawThing } from './draw-things.js';
 import { blinkAt, bossPose, heroPose, idlePose } from './poses.js';
+import { title } from './title.js';
 
 const IDENTITY = translation(0, 0, 0);
 const GALLERY = [
@@ -87,7 +88,9 @@ const BOARD_URLS = {};
 const SKYLINES = new Map();
 /** @param {WebGL2RenderingContext} gl @param {number} width @returns {Mesh} */
 function skylineMesh(gl, width) {
-  if (!SKYLINES.has(width)) SKYLINES.set(width, new Mesh(gl, buildSkyline(width)));
+  // Bands of 12 units: only the part seen through the windows is drawn. No shadow.
+  if (!SKYLINES.has(width))
+    SKYLINES.set(width, new Mesh(gl, partitionMesh(buildSkyline(width), 12)));
   return SKYLINES.get(width);
 }
 
@@ -183,7 +186,8 @@ export class LevelView {
     this.decor = level.decor;
     const office = buildOffice(sim, level.decor, level.map, level.theme);
     this.lights = office.lights;
-    this.office = new Mesh(gl, office.mesh);
+    // Bands of 8 tiles, culled one by one; faces no pass can see are dropped.
+    this.office = new Mesh(gl, partitionMesh(office.mesh, 8, level.lighting.sunDir));
     this.skyline =
       level.theme === 'datacenter' || level.theme === 'parking' ? null : skylineMesh(gl, sim.w);
     const shared = sharedMeshes(gl);
@@ -210,16 +214,19 @@ export class LevelView {
           while (row[c + n] === 'Q') n++;
           this.furniture.push({
             mesh: this.props[cars[carCount++ % cars.length]],
-            model: chain(translation(c + n / 2, y - 0.35, -0.6), scaling(n / 3.6, 1, 1)),
+            // Wheels on the floor, roof on the tile top (the hero stands on it): the
+            // 1.35-tall model is squashed to the 1-tile run.
+            model: chain(translation(c + n / 2, y, -0.6), scaling(n / 3.6, 1 / 1.35, 1)),
           });
         }
       }
     });
     for (const d of level.decor) {
-      if (d.type === 'desk') this.furniture.push(this.prop('chair', d.x + 4.7, d.y, -1.1));
+      if (d.type === 'desk')
+        this.furniture.push(this.prop(propVariant('chair', d.x + 4.7, d.y), d.x + 4.7, d.y, -1.1));
       else if (d.type in this.props) {
         const mesh = /** @type {keyof typeof this.props} */ (d.type);
-        this.furniture.push(this.prop(mesh, d.x, d.y, d.z ?? -1.9));
+        this.furniture.push(this.prop(propVariant(mesh, d.x, d.y), d.x, d.y, d.z ?? -1.9));
         if (d.type === 'lampPost')
           this.lights.push({ pos: [d.x, d.y + 2.5, -1.4], radius: 5, color: [0.7, 0.5, 0.3] });
       }
@@ -374,15 +381,29 @@ export class LevelView {
    * @returns {DrawItem[]}
    */
   items(sim, t, particles) {
+    const items = this.dynamicItems(sim, t, particles);
+    // Static scenery last: what stands in front fills the depth buffer first, so the
+    // walls and skyline behind it are rejected before shading.
+    for (const f of this.furniture) items.push(f);
+    items.push(this.officeItem);
+    if (this.skylineItem) items.push(this.skylineItem);
+    return items;
+  }
+
+  /**
+   * The cast, things, particles, doors and gates of this frame.
+   * @param {Sim} sim
+   * @param {number} t
+   * @param {import('./fx.js').Particle[]} particles
+   * @returns {DrawItem[]}
+   */
+  dynamicItems(sim, t, particles) {
     // Items come from the pool and are only valid until the next call: the renderer
     // consumes them right away.
     const pool = this.pool;
     pool.reset();
     const items = this.frame;
     items.length = 0;
-    items.push(this.officeItem);
-    for (const f of this.furniture) items.push(f);
-    if (this.skylineItem) items.push(this.skylineItem);
     if (this.party) {
       // The end: everybody celebrates the signed envelope at the Espace VIP.
       for (let i = 0; i < CROWD.length; i++) {
@@ -480,7 +501,7 @@ export class LevelView {
    */
   drawBoss(items, sim, b, t) {
     const id = sim.boss?.id ?? 'techServicesDirector';
-    const { pose, y, turn, tint, facing } = bossPose(b, sim.hero.x + HERO.w / 2, t);
+    const { pose, y, turn, tint, facing } = bossPose(b, sim.hero.x + HERO.w / 2, t, sim.boss?.id);
     // Entrances: Julien's racks light up one by one, Rodolphe's curtain opens.
     if (b.state === 'intro' || b.state === 'phase') {
       const k = Math.min(1, b.t / 1.6);
@@ -569,19 +590,8 @@ export class LevelView {
     }
     if (h.invuln > 0 && h.state !== 'dead' && Math.floor(t * 14) % 2 === 0) return;
     if (this.showcase) {
-      // Title screen: relaxed and smiling, weight shifting gently from foot to foot.
-      const sway = Math.sin(t * 1.1);
-      const wave = idlePose(t);
-      wave.legL = sway * 0.05;
-      wave.legR = -sway * 0.05;
-      wave.armL = 0.08 + Math.sin(t * 1.1 + 0.6) * 0.06;
-      wave.armR = 0.08 - Math.sin(t * 1.1 + 0.6) * 0.06;
-      wave.lean = -0.03;
-      wave.bob = Math.abs(sway) * 0.4;
-      wave.head = Math.sin(t * 0.7) * 0.08;
-      wave.mood = 'happy';
-      const o = poseOptions(CAST[sim.heroId].scale, 0.3, 0.35);
-      poseCharacter(this.cast[sim.heroId], hx, hy, 0.3, 1, wave, o, items, this.pool);
+      // Title screen: both heroes pose, the chosen one in front (see title.js).
+      title.draw(this.cast, sim.heroId, t, items, this.pool);
       return;
     }
     const pose = this.face(

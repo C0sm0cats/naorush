@@ -183,6 +183,8 @@ export class Particles {
   constructor() {
     /** @type {Particle[]} */
     this.list = [];
+    /** Spent particles, reused by emit() so bursts allocate nothing once warm. @type {Particle[]} */
+    this.free = [];
   }
 
   /** @param {string} type @param {number} x @param {number} y */
@@ -193,37 +195,51 @@ export class Particles {
       const a = Math.random() * Math.PI * 2;
       const sp = (o.speed ?? 3) * (0.4 + Math.random() * 0.6);
       const life = (o.life ?? 0.6) * (0.6 + Math.random() * 0.4);
-      this.list.push({
-        x,
-        y,
-        z: (Math.random() - 0.5) * 0.6,
-        vx: Math.cos(a) * sp,
-        vy: Math.abs(Math.sin(a)) * sp + (o.up ?? 2),
-        vz: (Math.random() - 0.5) * sp,
-        life,
-        max: life,
-        size: (o.size ?? 0.09) * (0.6 + Math.random() * 0.8),
-        color: o.colors[i % o.colors.length],
-        gravity: o.gravity ?? 14,
-      });
+      const z = (Math.random() - 0.5) * 0.6;
+      const vz = (Math.random() - 0.5) * sp;
+      const size = (o.size ?? 0.09) * (0.6 + Math.random() * 0.8);
+      const p = this.free.pop();
+      const vx = Math.cos(a) * sp,
+        vy = Math.abs(Math.sin(a)) * sp + (o.up ?? 2);
+      const color = o.colors[i % o.colors.length],
+        gravity = o.gravity ?? 14;
+      if (p) {
+        p.x = x;
+        p.y = y;
+        p.z = z;
+        p.vx = vx;
+        p.vy = vy;
+        p.vz = vz;
+        p.life = life;
+        p.max = life;
+        p.size = size;
+        p.color = color;
+        p.gravity = gravity;
+        this.list.push(p);
+      } else this.list.push({ x, y, z, vx, vy, vz, life, max: life, size, color, gravity });
     }
   }
 
   /** @param {number} dt */
   update(dt) {
     const list = this.list;
-    for (let i = list.length - 1; i >= 0; i--) {
+    // Spent particles go back to the free list; the rest keep their order.
+    let n = 0;
+    for (let i = 0; i < list.length; i++) {
       const p = list[i];
       p.vy -= p.gravity * dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.z += p.vz * dt;
       p.life -= dt;
-      if (p.life <= 0) list.splice(i, 1);
+      if (p.life <= 0) this.free.push(p);
+      else list[n++] = p;
     }
+    list.length = n;
   }
 
   clear() {
+    for (const p of this.list) this.free.push(p);
     this.list.length = 0;
   }
 }

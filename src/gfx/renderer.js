@@ -1,19 +1,27 @@
 import { STRIDE } from './voxels.js';
 import { identity, lookAt, multiply, ortho } from './mat4.js';
 
-/** Extra room (world units / tiles) kept around the camera view before an item is culled. */
-const VIEW_MARGIN = 6;
-/** Extra room around the sun's shadow box before an item is left out of the shadow map. */
-const SHADOW_MARGIN = 2;
+/** @typedef {import('./voxels.js').MeshPart} MeshPart */
+
+/**
+ * Extra room (world units) kept around the camera view and the sun's shadow box
+ * before an item is culled. Bounding boxes are exact, so this only absorbs
+ * rounding: nothing outside a frustum's side planes can reach its image.
+ */
+const VIEW_MARGIN = 0.5;
+const SHADOW_MARGIN = 0.5;
 const WHITE = new Float32Array([1, 1, 1]);
+const IDENTITY = identity();
 /** @type {{flash?: number}} */
 const NO_FX = {};
 
 /**
- * Bounding radius around the mesh origin, from the interleaved vertex positions.
- * @param {{data: ArrayBuffer | ArrayBufferView, count: number}} geo
+ * Axis-aligned bounding box of the interleaved vertex positions, as centre x, y, z
+ * then half extents; null when the data cannot be read (never culled).
+ * @param {{data: ArrayBuffer | ArrayBufferView, count: number, vertices?: number}} geo
+ * @returns {Float32Array | null}
  */
-function meshRadius(geo) {
+function meshBox(geo) {
   const d = /** @type {unknown} */ (geo.data);
   /** @type {ArrayBuffer | undefined} */
   let buf;
@@ -27,19 +35,37 @@ function meshRadius(geo) {
     off = d.byteOffset;
     len = d.byteLength;
   }
-  if (!buf || STRIDE % 4) return Infinity;
+  if (!buf || STRIDE % 4) return null;
   const f = new Float32Array(buf, off, len >> 2);
   const step = STRIDE / 4;
-  const n = Math.min(geo.count, Math.floor(f.length / step));
-  let r2 = 0;
+  const n = Math.min(geo.vertices ?? geo.count, Math.floor(f.length / step));
+  let x0 = Infinity,
+    y0 = Infinity,
+    z0 = Infinity,
+    x1 = -Infinity,
+    y1 = -Infinity,
+    z1 = -Infinity;
   for (let i = 0, o = 0; i < n; i++, o += step) {
     const x = f[o],
       y = f[o + 1],
       z = f[o + 2];
-    const q = x * x + y * y + z * z;
-    if (q > r2) r2 = q;
+    if (x < x0) x0 = x;
+    if (x > x1) x1 = x;
+    if (y < y0) y0 = y;
+    if (y > y1) y1 = y;
+    if (z < z0) z0 = z;
+    if (z > z1) z1 = z;
   }
-  return Number.isFinite(r2) ? Math.sqrt(r2) : Infinity;
+  if (!n) return new Float32Array(6);
+  const box = new Float32Array([
+    (x0 + x1) / 2,
+    (y0 + y1) / 2,
+    (z0 + z1) / 2,
+    (x1 - x0) / 2,
+    (y1 - y0) / 2,
+    (z1 - z0) / 2,
+  ]);
+  return box.every(Number.isFinite) ? box : null;
 }
 
 /**
@@ -64,29 +90,49 @@ function extractPlanes(m, out) {
 }
 
 /**
- * Conservative visibility test: the item's bounding sphere against four clip planes.
- * Items placed at the world origin (office shell, skyline, diorama) are never culled.
- * @param {DrawItem} it
+ * Conservative visibility test: a local bounding box, moved by the model matrix,
+ * against four clip planes (the box's world extents follow Arvo's method).
+ * @param {Float32Array} m Model matrix.
+ * @param {Float32Array | null} box Centre then half extents; null is always visible.
  * @param {Float64Array} planes
  * @param {number} margin
  */
-function visible(it, planes, margin) {
-  const m = it.model;
-  const x = m[12],
-    y = m[13],
-    z = m[14];
-  if (x === 0 && y === 0 && z === 0) return true;
-  const r = it.mesh.radius;
-  if (!(r < Infinity)) return true;
-  const s2 = Math.max(
-    m[0] * m[0] + m[1] * m[1] + m[2] * m[2],
-    m[4] * m[4] + m[5] * m[5] + m[6] * m[6],
-    m[8] * m[8] + m[9] * m[9] + m[10] * m[10],
-  );
-  const reach = -(r * Math.sqrt(s2) + margin);
-  for (let i = 0; i < 16; i += 4)
-    if (planes[i] * x + planes[i + 1] * y + planes[i + 2] * z + planes[i + 3] < reach) return false;
+function visible(m, box, planes, margin) {
+  if (!box) return true;
+  const bx = box[0],
+    by = box[1],
+    bz = box[2],
+    ex = box[3],
+    ey = box[4],
+    ez = box[5];
+  const cx = m[0] * bx + m[4] * by + m[8] * bz + m[12],
+    cy = m[1] * bx + m[5] * by + m[9] * bz + m[13],
+    cz = m[2] * bx + m[6] * by + m[10] * bz + m[14];
+  const wx = Math.abs(m[0]) * ex + Math.abs(m[4]) * ey + Math.abs(m[8]) * ez,
+    wy = Math.abs(m[1]) * ex + Math.abs(m[5]) * ey + Math.abs(m[9]) * ez,
+    wz = Math.abs(m[2]) * ex + Math.abs(m[6]) * ey + Math.abs(m[10]) * ez;
+  for (let i = 0; i < 16; i += 4) {
+    const nx = planes[i],
+      ny = planes[i + 1],
+      nz = planes[i + 2];
+    const r = Math.abs(nx) * wx + Math.abs(ny) * wy + Math.abs(nz) * wz;
+    if (nx * cx + ny * cy + nz * cz + planes[i + 3] < -(r + margin)) return false;
+  }
   return true;
+}
+
+/**
+ * Whether a mesh partitioned for one sun direction suits the current one (the
+ * faces kept for the depth pass depend on which side of each axis the sun is).
+ * @param {number[] | null} a @param {ArrayLike<number>} b
+ */
+function sameSun(a, b) {
+  return (
+    !!a &&
+    Math.sign(a[0]) === Math.sign(b[0]) &&
+    Math.sign(a[1]) === Math.sign(b[1]) &&
+    Math.sign(a[2]) === Math.sign(b[2])
+  );
 }
 
 const MAIN_VS = `#version 300 es
@@ -95,6 +141,7 @@ layout(location=1) in vec3 aNormal;
 layout(location=2) in vec4 aColor;
 layout(location=3) in float aMat;
 uniform mat4 uModel, uViewProj, uLightVP;
+uniform vec3 uTint;
 out vec3 vColor, vNormal, vWorld;
 out vec4 vLight;
 out float vAO, vMat;
@@ -102,7 +149,9 @@ void main() {
   vec4 w = uModel * vec4(aPos, 1.0);
   vWorld = w.xyz;
   vNormal = normalize(mat3(uModel) * aNormal);
-  vColor = aColor.rgb;
+  // Linear albedo per vertex: colours are flat across each face, so this matches
+  // converting per pixel at a fraction of the cost.
+  vColor = pow(aColor.rgb, vec3(2.2)) * uTint;
   vAO = aColor.a;
   vMat = aMat;
   vLight = uLightVP * w;
@@ -116,14 +165,13 @@ in vec3 vColor, vNormal, vWorld;
 in vec4 vLight;
 in float vAO, vMat;
 uniform sampler2DShadow uShadow;
-uniform vec3 uSunDir, uSunColor, uSky, uGround, uFog, uEye, uTint;
+uniform vec3 uSunDir, uSunColor, uSky, uGround, uFog, uEye;
 uniform float uFogNear, uFogFar, uRim, uFlash;
 uniform int uLights;
 uniform vec4 uLightPos[8];
 uniform vec3 uLightColor[8];
 out vec4 outColor;
 
-vec3 toLinear(vec3 c) { return pow(c, vec3(2.2)); }
 vec3 aces(vec3 x) { return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14), 0.0, 1.0); }
 
 float shadow() {
@@ -138,7 +186,7 @@ float shadow() {
 }
 
 void main() {
-  vec3 albedo = toLinear(vColor) * uTint;
+  vec3 albedo = vColor;
   vec3 n = normalize(vNormal);
   int mat = int(vMat + 0.5);
   vec3 col;
@@ -148,12 +196,15 @@ void main() {
     float ao = 0.35 + 0.65 * vAO;
     vec3 ambient = mix(uGround, uSky, n.y * 0.5 + 0.5) * ao;
     float ndl = max(dot(n, -uSunDir), 0.0);
-    vec3 light = ambient + uSunColor * ndl * shadow();
+    vec3 light = ambient;
+    // Faces turned away from the sun (most of what the camera sees) skip the shadow taps.
+    if (ndl > 0.0) light += uSunColor * ndl * shadow();
     for (int i = 0; i < 8; i++) {
       if (i >= uLights) break;
       vec3 d = uLightPos[i].xyz - vWorld;
       float dist = length(d);
-      float att = clamp(1.0 - dist / uLightPos[i].w, 0.0, 1.0);
+      if (dist >= uLightPos[i].w) continue;
+      float att = 1.0 - dist / uLightPos[i].w;
       light += uLightColor[i] * att * att * max(dot(n, d / dist), 0.0) * (0.6 + 0.4 * ao);
     }
     col = albedo * light;
@@ -255,12 +306,23 @@ function program(gl, vs, fs) {
 export class Mesh {
   /**
    * @param {WebGL2RenderingContext} gl
-   * @param {{data: ArrayBuffer, count: number}} geo
+   * @param {{data: ArrayBuffer, count: number, index?: Uint16Array | Uint32Array, vertices?: number, parts?: MeshPart[], sun?: number[] | null}} geo
+   *   With `index`, `count` counts indices and `vertices` the vertices. With `parts`
+   *   (see {@link partitionMesh}), each part is culled and drawn on its own.
    */
   constructor(gl, geo) {
+    /** Vertices to draw, or indices when indexed. */
     this.count = geo.count;
-    /** Bounding radius around the mesh origin (for culling). */
-    this.radius = meshRadius(geo);
+    /** Index type (0: not indexed) and bytes per index. */
+    this.indexType = 0;
+    this.indexBytes = 0;
+    this.indexBuffer = null;
+    /** Local bounding box, centre then half extents (for culling); null: never culled. */
+    this.box = meshBox(geo);
+    /** @type {MeshPart[] | null} */
+    this.parts = geo.parts ?? null;
+    /** Sun direction the parts' depth-pass ranges were chosen for. */
+    this.sun = geo.sun ?? null;
     this.vao = /** @type {WebGLVertexArrayObject} */ (gl.createVertexArray());
     this.buffer = gl.createBuffer();
     gl.bindVertexArray(this.vao);
@@ -274,13 +336,32 @@ export class Mesh {
     gl.vertexAttribPointer(2, 4, gl.UNSIGNED_BYTE, true, STRIDE, 16);
     gl.enableVertexAttribArray(3);
     gl.vertexAttribPointer(3, 1, gl.UNSIGNED_BYTE, false, STRIDE, 20);
+    if (geo.index) {
+      this.indexBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, geo.index, gl.STATIC_DRAW);
+      const wide = geo.index instanceof Uint32Array;
+      this.indexType = wide ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT;
+      this.indexBytes = wide ? 4 : 2;
+    }
     gl.bindVertexArray(null);
+  }
+
+  /**
+   * Draws `count` vertices (or indices) from `first`; the VAO must be bound.
+   * @param {WebGL2RenderingContext} gl @param {number} first @param {number} count
+   */
+  draw(gl, first, count) {
+    if (this.indexBytes)
+      gl.drawElements(gl.TRIANGLES, count, this.indexType, first * this.indexBytes);
+    else gl.drawArrays(gl.TRIANGLES, first, count);
   }
 
   /** @param {WebGL2RenderingContext} gl */
   dispose(gl) {
     gl.deleteVertexArray(this.vao);
     gl.deleteBuffer(this.buffer);
+    if (this.indexBuffer) gl.deleteBuffer(this.indexBuffer);
   }
 }
 
@@ -321,6 +402,8 @@ export class Sprite {
     gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 20, 12);
     gl.bindVertexArray(null);
     this.bright = 1;
+    /** Bounding box (centre, half extents) for culling; the model matrix is the identity. */
+    this.box = new Float32Array([x + w / 2, y + h / 2, z, w / 2, h / 2, 0]);
   }
 
   /** @param {WebGL2RenderingContext} gl */
@@ -370,6 +453,11 @@ export class Renderer {
     this.sky = program(gl, SKY_VS, SKY_FS);
     this.spriteProg = program(gl, SPRITE_VS, SPRITE_FS);
     this.skyVao = gl.createVertexArray();
+    // Sampler units never change: the shadow map on unit 0, sprite art on unit 1.
+    gl.useProgram(this.main.p);
+    gl.uniform1i(this.main.u.uShadow, 0);
+    gl.useProgram(this.spriteProg.p);
+    gl.uniform1i(this.spriteProg.u.uTex, 1);
     /** Render scale (dynamic resolution), 0.5–1. */
     this.scale = 1;
     // Phones get a lighter shadow map.
@@ -401,13 +489,30 @@ export class Renderer {
     /** Indices and distances of the nearest point lights, sorted by distance. */
     this.nearIdx = new Int32Array(8);
     this.nearDist = new Float64Array(8);
+    /** The canvas size in CSS pixels, kept up to date without forcing layouts. */
+    this.cssWidth = canvas.clientWidth;
+    this.cssHeight = canvas.clientHeight;
+    /** @type {ResizeObserver | null} */
+    this.observer = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      this.observer = new ResizeObserver(() => {
+        // Layout is fresh inside the callback: these reads cost nothing.
+        this.cssWidth = canvas.clientWidth;
+        this.cssHeight = canvas.clientHeight;
+      });
+      this.observer.observe(canvas);
+    }
     this.resize();
   }
 
   resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2) * this.scale;
-    const w = Math.max(1, Math.round(this.canvas.clientWidth * dpr));
-    const h = Math.max(1, Math.round(this.canvas.clientHeight * dpr));
+    // Reading clientWidth forces a layout whenever the HUD changed the page, so it
+    // is cached and refreshed by the resize observer (when there is one).
+    const cw = this.observer ? this.cssWidth : this.canvas.clientWidth;
+    const ch = this.observer ? this.cssHeight : this.canvas.clientHeight;
+    const w = Math.max(1, Math.round(cw * dpr));
+    const h = Math.max(1, Math.round(ch * dpr));
     if (w !== this.canvas.width || h !== this.canvas.height) {
       this.canvas.width = w;
       this.canvas.height = h;
@@ -456,14 +561,30 @@ export class Renderer {
     gl.useProgram(this.depth.p);
     gl.uniformMatrix4fv(this.depth.u.uLightVP, false, lightVP);
     const uDepthModel = this.depth.u.uModel;
+    const sunDir = lit.sunDir;
     /** @type {WebGLVertexArrayObject | null} */
     let vao = null;
+    /** @type {Float32Array | null} */
+    let model = null;
     for (let i = 0; i < items.length; i++) {
       const it = items[i];
-      if (it.noShadow || !visible(it, this.shadowPlanes, SHADOW_MARGIN)) continue;
-      gl.uniformMatrix4fv(uDepthModel, false, it.model);
-      if (it.mesh.vao !== vao) gl.bindVertexArray((vao = it.mesh.vao));
-      gl.drawArrays(gl.TRIANGLES, 0, it.mesh.count);
+      if (it.noShadow) continue;
+      const mesh = it.mesh;
+      if (!visible(it.model, mesh.box, this.shadowPlanes, SHADOW_MARGIN)) continue;
+      if (it.model !== model) gl.uniformMatrix4fv(uDepthModel, false, (model = it.model));
+      if (mesh.vao !== vao) gl.bindVertexArray((vao = mesh.vao));
+      const parts = mesh.parts;
+      if (!parts) {
+        mesh.draw(gl, 0, mesh.count);
+        continue;
+      }
+      const lean = sameSun(mesh.sun, sunDir);
+      for (let k = 0; k < parts.length; k++) {
+        const p = parts[k];
+        if (!visible(it.model, p.box, this.shadowPlanes, SHADOW_MARGIN)) continue;
+        if (!lean) mesh.draw(gl, p.first, p.total);
+        else if (p.shadowCount) mesh.draw(gl, p.shadowFirst, p.shadowCount);
+      }
     }
     gl.disable(gl.POLYGON_OFFSET_FILL);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -471,18 +592,6 @@ export class Renderer {
     gl.viewport(0, 0, this.width, this.height);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-    gl.depthMask(false);
-    gl.useProgram(this.sky.p);
-    const b = lit.backdrop;
-    gl.uniform3fv(this.sky.u.uTop, b.top);
-    gl.uniform3fv(this.sky.u.uMid, b.mid);
-    gl.uniform3fv(this.sky.u.uBottom, b.bottom);
-    gl.uniform2fv(this.sky.u.uSun, b.sun);
-    gl.uniform3fv(this.sky.u.uSunGlow, b.glow);
-    gl.bindVertexArray(this.skyVao);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-    gl.depthMask(true);
 
     const m = this.main;
     gl.useProgram(m.p);
@@ -500,19 +609,21 @@ export class Renderer {
     this.uploadLights(lit.lights, fx0, fy0);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.shadowTex);
-    gl.uniform1i(m.u.uShadow, 0);
     const uModel = m.u.uModel,
       uRim = m.u.uRim,
       uTint = m.u.uTint;
+    const planes = this.viewPlanes;
     vao = null;
+    model = null;
     let rim = NaN;
     let tr = NaN,
       tg = NaN,
       tb = NaN;
     for (let i = 0; i < items.length; i++) {
       const it = items[i];
-      if (!visible(it, this.viewPlanes, VIEW_MARGIN)) continue;
-      gl.uniformMatrix4fv(uModel, false, it.model);
+      const mesh = it.mesh;
+      if (!visible(it.model, mesh.box, planes, VIEW_MARGIN)) continue;
+      if (it.model !== model) gl.uniformMatrix4fv(uModel, false, (model = it.model));
       const r = it.rim ?? 0;
       if (r !== rim) gl.uniform1f(uRim, (rim = r));
       const t = it.tint ?? WHITE;
@@ -522,8 +633,17 @@ export class Renderer {
         tb = t[2];
         gl.uniform3fv(uTint, t);
       }
-      if (it.mesh.vao !== vao) gl.bindVertexArray((vao = it.mesh.vao));
-      gl.drawArrays(gl.TRIANGLES, 0, it.mesh.count);
+      if (mesh.vao !== vao) gl.bindVertexArray((vao = mesh.vao));
+      const parts = mesh.parts;
+      if (!parts) {
+        mesh.draw(gl, 0, mesh.count);
+        continue;
+      }
+      for (let k = 0; k < parts.length; k++) {
+        const p = parts[k];
+        if (p.count && visible(it.model, p.box, planes, VIEW_MARGIN))
+          mesh.draw(gl, p.first, p.count);
+      }
     }
 
     const sp = this.spriteProg;
@@ -533,14 +653,30 @@ export class Renderer {
     gl.uniform3fv(sp.u.uEye, camera.eye);
     gl.uniform1f(sp.u.uFogNear, lit.fogRange[0]);
     gl.uniform1f(sp.u.uFogFar, lit.fogRange[1]);
-    gl.uniform1i(sp.u.uTex, 1);
     gl.activeTexture(gl.TEXTURE1);
-    for (const s of sprites) {
-      gl.uniform1f(sp.u.uBright, s.bright);
+    let bright = NaN;
+    for (let i = 0; i < sprites.length; i++) {
+      const s = sprites[i];
+      if (!visible(IDENTITY, s.box, planes, 0.5)) continue;
+      if (s.bright !== bright) gl.uniform1f(sp.u.uBright, (bright = s.bright));
       gl.bindTexture(gl.TEXTURE_2D, s.texture);
       gl.bindVertexArray(s.vao);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
     }
+
+    // The backdrop last, only where nothing was drawn (it sits behind everything).
+    gl.depthMask(false);
+    gl.useProgram(this.sky.p);
+    const b = lit.backdrop;
+    gl.uniform3fv(this.sky.u.uTop, b.top);
+    gl.uniform3fv(this.sky.u.uMid, b.mid);
+    gl.uniform3fv(this.sky.u.uBottom, b.bottom);
+    gl.uniform2fv(this.sky.u.uSun, b.sun);
+    gl.uniform3fv(this.sky.u.uSunGlow, b.glow);
+    gl.bindVertexArray(this.skyVao);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.depthMask(true);
+
     gl.bindVertexArray(null);
   }
 

@@ -1,4 +1,4 @@
-import { MAT, STRIDE, rgb } from './voxels.js';
+import { MAT, STRIDE, indexVertices, rgb } from './voxels.js';
 
 /**
  * Smooth procedural geometry (rounded boxes, capsules, ellipsoids, lathes) written
@@ -155,7 +155,10 @@ export class MeshBuilder {
     return this;
   }
 
-  /** @returns {{data: ArrayBuffer, count: number}} */
+  /**
+   * Packs the vertices, merging shared corners into an index list.
+   * @returns {{data: ArrayBuffer, count: number, index: Uint16Array | Uint32Array, vertices: number}}
+   */
   build() {
     const count = this.mat.length;
     const buf = new ArrayBuffer(count * STRIDE);
@@ -170,9 +173,12 @@ export class MeshBuilder {
       i8[b + 12] = Math.round(this.nrm[i * 3] * 127);
       i8[b + 13] = Math.round(this.nrm[i * 3 + 1] * 127);
       i8[b + 14] = Math.round(this.nrm[i * 3 + 2] * 127);
-      u8.set(this.col.slice(i * 4, i * 4 + 4), b + 16);
+      u8[b + 16] = this.col[i * 4];
+      u8[b + 17] = this.col[i * 4 + 1];
+      u8[b + 18] = this.col[i * 4 + 2];
+      u8[b + 19] = this.col[i * 4 + 3];
       u8[b + 20] = this.mat[i];
     }
-    return { data: buf, count };
+    return indexVertices({ data: buf, count });
   }
 }
