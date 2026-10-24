@@ -11,13 +11,18 @@ import { MAT, rgb } from './voxels.js';
  * @typedef {Object} Look
  * @property {string} skin
  * @property {string} hair
- * @property {'short'|'quiff'|'long'|'bun'|'curly'|'bald'|'bob'|'ponytail'} hairStyle
+ * @property {'short'|'quiff'|'long'|'midlong'|'bun'|'curly'|'bald'|'bob'|'ponytail'} hairStyle
  * @property {string} jacket
  * @property {string} shirt
  * @property {string} legs Trousers or tights colour.
  * @property {string} shoes
  * @property {string} [tie]
  * @property {string} [skirt]
+ * @property {string} [dress] Dress colour: shows below the jacket and in its V, instead of a shirt.
+ * @property {string} [paws] Colour of cat paw prints scattered over the jacket.
+ * @property {boolean} [crop] Cropped trousers showing the ankles.
+ * @property {boolean} [sneakers] Low-top sneakers instead of town shoes.
+ * @property {boolean} [openCollar] Shirt worn open at the neck (no tie).
  * @property {boolean} [glasses]
  * @property {boolean} [beard]
  * @property {boolean} [earrings]
@@ -371,12 +376,71 @@ const hairline = (front, side, back, w0, w1) => /** @param {number} lon */ (lon)
 };
 
 /**
+ * Cat paw print lying on a loft surface (one main pad and four toe beans), each
+ * pad a slightly domed disc in the local tangent plane, lifted off the cloth.
+ * @param {MeshBuilder} b @param {Profile} P @param {number} a Ring angle (0 = front).
+ * @param {number} y Height on the profile. @param {number} size @param {number} tilt
+ * @param {string} color
+ */
+function pawPrint(b, P, a, y, size, tilt, color) {
+  const e = 1e-3;
+  /** @param {number} aa @param {number} yy */
+  const at = (aa, yy) => ringPoint(P.row(P.tAt(yy)), aa);
+  const speed = Math.hypot(...sub(at(a + e, y), at(a - e, y))) / (2 * e);
+  const pads = [
+    [0, -0.007, 0.0165, 0.0135, 0, 1],
+    [-0.0195, 0.0115, 0.0062, 0.008, 0.4, 0],
+    [-0.0072, 0.0215, 0.0062, 0.008, 0.12, 0],
+    [0.0072, 0.0215, 0.0062, 0.008, -0.12, 0],
+    [0.0195, 0.0115, 0.0062, 0.008, -0.4, 0],
+  ];
+  const ct = Math.cos(tilt),
+    st = Math.sin(tilt);
+  for (const [px, py, rx, ry, pr, main] of pads) {
+    const dx = (px * ct - py * st) * size,
+      dy = (px * st + py * ct) * size;
+    const ac = a + dx / speed,
+      yc = y + dy;
+    const C = at(ac, yc);
+    const Ta = unit(sub(at(ac + e, yc), at(ac - e, yc)));
+    const Ty = unit(sub(at(ac, yc + e), at(ac, yc - e)));
+    let N = unit(cross(Ty, Ta));
+    const r = P.row(P.tAt(yc));
+    const out = sub(C, [r[5], yc, r[3]]);
+    if (N[0] * out[0] + N[1] * out[1] + N[2] * out[2] < 0) N = [-N[0], -N[1], -N[2]];
+    const k = Ty[0] * N[0] + Ty[1] * N[1] + Ty[2] * N[2];
+    const U = unit([Ty[0] - N[0] * k, Ty[1] - N[1] * k, Ty[2] - N[2] * k]);
+    const rho = tilt + pr;
+    const cr = Math.cos(rho),
+      sr = Math.sin(rho);
+    surf(
+      b,
+      main ? 14 : 9,
+      2,
+      (u, v) => {
+        const ph = u * TAU;
+        // The main pad narrows towards the toes, like a rounded triangle.
+        const ex = rx * size * Math.cos(ph) * (main ? 1 - 0.2 * Math.sin(ph) : 1);
+        const ey = ry * size * Math.sin(ph);
+        const lx = (ex * cr - ey * sr) * v,
+          ly = (ex * sr + ey * cr) * v;
+        const h = 0.0026 + 0.0015 * (1 - v * v);
+        return [0, 1, 2].map((i) => C[i] + N[i] * h + Ta[i] * lx + U[i] * ly);
+      },
+      () => [C[0] - N[0] * 0.05, C[1] - N[1] * 0.05, C[2] - N[2] * 0.05],
+      color,
+    );
+  }
+}
+
+/**
  * @param {WebGL2RenderingContext} gl
  * @param {Look} look
  * @returns {Record<string, Part>}
  */
 export function buildCharacter(gl, look) {
   const female = Boolean(look.lips);
+  const skirted = Boolean(look.skirt || look.dress);
   const dark = '#1d1a24';
   const gloss = MAT.GLOSSY;
   const hair = look.hair;
@@ -556,6 +620,52 @@ export function buildCharacter(gl, look) {
             hair,
             { seg: 12, steps: 3, mat: gloss },
           );
+    } else if (style === 'midlong') {
+      // Shoulder-length cut: a full cap with a side sweep, tucked behind the ears,
+      // ends flicking out at the shoulders, warm highlights combed through.
+      const line = hairline(0.82, 0.2, -0.82, 0.58, 1.12);
+      /** @param {number[]} d @param {number} v */
+      const push = (d, v) => {
+        const lat = Math.asin(d[1]);
+        const back = Math.max(0, -d[2]);
+        return (
+          melt(v) *
+          (0.075 +
+            bump(d, dir(-0.4, 0.6, 0.7), 0.11, 0.05) +
+            bump(d, dir(0, 0.9, 0.2), 0.04, 0.2) +
+            0.1 * smooth(0.25, -0.5, lat) * Math.min(1, back * 1.6))
+        );
+      };
+      shell(b, hair, { nu: 44, nv: 18, lat: line, push: (d, _u, v) => push(d, v), mat: gloss });
+      const light = shade(hair, 0.2);
+      for (const l of [-2.5, -1.25, -0.62, 0.42, 1.0, 1.9, 2.75])
+        shell(b, light, {
+          nu: 3,
+          nv: 16,
+          lon: [l - 0.07, l + 0.07],
+          lat: line,
+          push: (d, _u, v) => push(d, v) + 0.012 * smooth(0, 0.15, v),
+          mat: gloss,
+        });
+      // Locks hanging behind the ears to the shoulders, flicking outwards.
+      for (const s of [-1, 1]) {
+        const L = profile([
+          [-0.03, 0.0, 0.0, -0.075, 2, s * 0.215],
+          [-0.018, 0.05, 0.062, -0.075, 2, s * 0.222],
+          [0.04, 0.046, 0.072, -0.08, 2, s * 0.2],
+          [0.15, 0.042, 0.085, -0.075, 2, s * 0.195],
+          [0.26, 0.03, 0.08, -0.06, 2, s * 0.185],
+        ]);
+        loft(b, L, hair, { seg: 12, steps: 3, mat: gloss });
+        loft(b, L, light, {
+          seg: 3,
+          steps: 3,
+          t0: 0.4,
+          dr: 0.003,
+          arc: () => [s * 1.25, s * 1.55],
+          mat: gloss,
+        });
+      }
     } else if (style === 'bun' || style === 'ponytail') {
       shell(b, hair, {
         nu: 36,
@@ -755,21 +865,44 @@ export function buildCharacter(gl, look) {
             { seg: 22, steps: 3, mat: gloss },
           ),
         )
-      : style === 'ponytail'
-        ? part(gl, (b) =>
-            tube(
-              b,
-              (t) => [0, 0.04 - t * 0.3, -0.11 - Math.sin(t * 2.4) * 0.07],
-              (t) => {
-                const r =
-                  0.05 * Math.sin(Math.min(1, t * 3 + 0.25) * Math.PI * 0.5) * (1 - 0.75 * t);
-                return [r, r * 0.85];
-              },
-              hair,
-              { nu: 12, nv: 12, ref: () => [1, 0, 0], mat: gloss },
-            ),
-          )
-        : null;
+      : style === 'midlong'
+        ? part(gl, (b) => {
+            // Shoulder-length back, flaring into a soft outward flick at the ends.
+            const H = profile([
+              [-0.3, 0.0, 0.0, -0.03],
+              [-0.292, 0.16, 0.06, -0.03],
+              [-0.262, 0.215, 0.08, -0.03],
+              [-0.18, 0.192, 0.08, -0.03],
+              [-0.05, 0.2, 0.085, -0.02],
+              [0.06, 0.18, 0.08, -0.02],
+            ]);
+            loft(b, H, hair, { seg: 24, steps: 3, mat: gloss });
+            const light = shade(hair, 0.2);
+            for (const a of [Math.PI - 0.95, Math.PI - 0.3, Math.PI + 0.4, Math.PI + 1.05])
+              loft(b, H, light, {
+                seg: 3,
+                steps: 3,
+                t0: 0.8,
+                dr: 0.003,
+                arc: () => [a - 0.09, a + 0.09],
+                mat: gloss,
+              });
+          })
+        : style === 'ponytail'
+          ? part(gl, (b) =>
+              tube(
+                b,
+                (t) => [0, 0.04 - t * 0.3, -0.11 - Math.sin(t * 2.4) * 0.07],
+                (t) => {
+                  const r =
+                    0.05 * Math.sin(Math.min(1, t * 3 + 0.25) * Math.PI * 0.5) * (1 - 0.75 * t);
+                  return [r, r * 0.85];
+                },
+                hair,
+                { nu: 12, nv: 12, ref: () => [1, 0, 0], mat: gloss },
+              ),
+            )
+          : null;
 
   // Torso: origin at the hip; tailored jacket open in a V over the shirt.
   const yb = female ? 0.27 : 0.255; // Button point, where the V closes.
@@ -813,7 +946,52 @@ export function buildCharacter(gl, look) {
     });
     // Shirt filling the V, set back inside the jacket.
     const ts = J.tAt(yb - 0.03);
-    loft(b, J, look.shirt, { seg: 12, steps: 3, t0: ts, dr: -0.01, arc: () => [-0.75, 0.75] });
+    if (look.dress) {
+      // Top of the dress in the V, with a soft scoop neckline showing the skin.
+      const dress = look.dress;
+      /** @param {number} y */
+      const scoop = (y) => 0.42 * smooth(0.4, 0.53, y) ** 0.7;
+      loft(b, J, look.skin, {
+        seg: 12,
+        steps: 3,
+        t0: J.tAt(0.38),
+        dr: -0.012,
+        arc: () => [-0.75, 0.75],
+      });
+      for (const s of [-1, 1])
+        loft(b, J, dress, {
+          seg: 8,
+          steps: 3,
+          t0: ts,
+          dr: -0.01,
+          arc: (r) => (s > 0 ? [scoop(r[0]), 0.75] : [-0.75, -scoop(r[0])]),
+        });
+    } else
+      loft(b, J, look.shirt, { seg: 12, steps: 3, t0: ts, dr: -0.01, arc: () => [-0.75, 0.75] });
+    if (look.openCollar) {
+      // Top button undone: a small V of skin at the throat, and a buttoned placket below.
+      loft(b, J, look.skin, {
+        seg: 8,
+        steps: 4,
+        t0: J.tAt(0.47),
+        dr: -0.0075,
+        arc: (r) => {
+          const w = 0.34 * smooth(0.47, 0.545, r[0]);
+          return [-w, w];
+        },
+      });
+      for (const y of [0.35, 0.42])
+        ell(
+          b,
+          ringPoint(J.row(J.tAt(y)), 0, -0.008),
+          [0.006, 0.006, 0.003],
+          shade(look.shirt, -0.18),
+          {
+            seg: 4,
+            lon: [-1.6, 1.6],
+          },
+        );
+    }
     // Lapels rolling along both edges of the V, widest at the chest.
     for (const s of [-1, 1])
       tube(
@@ -836,18 +1014,20 @@ export function buildCharacter(gl, look) {
         },
       );
     // Shirt collar points either side of the throat.
-    for (const s of [-1, 1])
-      tube(
-        b,
-        (t) => {
-          const y = lerp(0.545, 0.49, t);
-          const r = J.row(J.tAt(y));
-          return ringPoint(r, s * lerp(0.15, 0.4, t), -0.004);
-        },
-        (t) => [0.016 * (1 - 0.7 * t), 0.004],
-        shade(look.shirt, -0.04),
-        { nu: 6, nv: 5, ref: () => [0, 0, 1] },
-      );
+    const open = look.openCollar ? 1 : 0;
+    if (!look.dress)
+      for (const s of [-1, 1])
+        tube(
+          b,
+          (t) => {
+            const y = lerp(0.545, 0.49 - 0.02 * open, t);
+            const r = J.row(J.tAt(y));
+            return ringPoint(r, s * lerp(0.15 + 0.2 * open, 0.4 + 0.12 * open, t), -0.004);
+          },
+          (t) => [(0.016 + 0.004 * open) * (1 - 0.7 * t), 0.004],
+          shade(look.shirt, -0.04),
+          { nu: 6, nv: 5, ref: () => [0, 0, 1] },
+        );
     if (look.tie) {
       const tieZ = /** @param {number} y */ (y) => J.row(J.tAt(y))[2] + J.row(J.tAt(y))[3] - 0.004;
       ell(b, [0, 0.49, tieZ(0.49) + 0.008], [0.022, 0.02, 0.014], look.tie, { seg: 6, mat: gloss });
@@ -878,7 +1058,22 @@ export function buildCharacter(gl, look) {
       ell(b, p, [0.012, 0.012, 0.006], shade(look.jacket, -0.35), { seg: 5, lon: [-1.6, 1.6] });
     }
     // Hips in trousers (hidden under a skirt), and the neck.
-    if (!look.skirt) ell(b, [0, 0.03, 0], [0.17, 0.08, 0.108], look.legs, { seg: 8 });
+    if (!skirted) ell(b, [0, 0.03, 0], [0.17, 0.08, 0.108], look.legs, { seg: 8 });
+    // Cat paw prints scattered over the jacket, clear of the V and the button line.
+    if (look.paws)
+      for (const [a, y, tilt] of [
+        [-0.62, 0.1, 0.25],
+        [0.5, 0.2, -0.3],
+        [1.05, 0.08, 0.15],
+        [-1.05, 0.31, -0.2],
+        [0.92, 0.4, 0.35],
+        [-1.45, 0.14, 0.1],
+        [1.55, 0.27, -0.15],
+        [2.5, 0.2, 0.3],
+        [-2.55, 0.36, -0.25],
+        [3.05, 0.1, 0.1],
+      ])
+        pawPrint(b, J, a, y, 1.2, tilt, look.paws);
     loft(
       b,
       profile([
@@ -890,39 +1085,33 @@ export function buildCharacter(gl, look) {
     );
   });
 
-  const skirt = look.skirt
-    ? part(gl, (b) =>
-        loft(
-          b,
-          profile([
-            [-0.25, 0.2, 0.13],
-            [-0.24, 0.255, 0.17],
-            [-0.15, 0.24, 0.16],
-            [-0.04, 0.215, 0.145],
-            [0.05, 0.2, 0.136],
-          ]),
-          /** @type {string} */ (look.skirt),
-          { seg: 32, steps: 3 },
-        ),
-      )
+  const skirtColor = look.dress ?? look.skirt;
+  const skirt = skirtColor
+    ? part(gl, (b) => {
+        const S = profile([
+          [-0.25, 0.2, 0.13],
+          [-0.24, 0.255, 0.17],
+          [-0.15, 0.24, 0.16],
+          [-0.04, 0.215, 0.145],
+          [0.05, 0.2, 0.136],
+        ]);
+        loft(b, S, skirtColor, { seg: 32, steps: 3 });
+      })
     : null;
 
   // Arm: origin at the shoulder, hanging down; tapered sleeve, cuff, mitten hand.
   const arm = part(gl, (b) => {
     ell(b, [0, -0.035, 0], [0.066, 0.056, 0.068], look.jacket, { seg: 9 });
-    loft(
-      b,
-      profile([
-        [-0.358, 0.044, 0.046],
-        [-0.352, 0.055, 0.057],
-        [-0.3, 0.052, 0.054],
-        [-0.18, 0.056, 0.058],
-        [-0.06, 0.062, 0.064],
-        [-0.02, 0.062, 0.064],
-      ]),
-      look.jacket,
-      { seg: 16, steps: 2 },
-    );
+    const sleeve = profile([
+      [-0.358, 0.044, 0.046],
+      [-0.352, 0.055, 0.057],
+      [-0.3, 0.052, 0.054],
+      [-0.18, 0.056, 0.058],
+      [-0.06, 0.062, 0.064],
+      [-0.02, 0.062, 0.064],
+    ]);
+    loft(b, sleeve, look.jacket, { seg: 16, steps: 2 });
+    if (look.paws) pawPrint(b, sleeve, 0.35, -0.2, 0.85, 0.2, look.paws);
     loft(
       b,
       profile([
@@ -930,7 +1119,7 @@ export function buildCharacter(gl, look) {
         [-0.375, 0.046, 0.048],
         [-0.345, 0.046, 0.048],
       ]),
-      look.shirt,
+      look.dress ? look.skin : look.shirt,
       { seg: 14, steps: 2 },
     );
     // Mitten: palm and fingers in one rounded mass, thumb forward (shared by both arms).
@@ -943,7 +1132,7 @@ export function buildCharacter(gl, look) {
   const lightShoes = luma(look.shoes) > 0.6;
   const sole = lightShoes ? '#c9ccd4' : shade(look.shoes, -0.55);
   const leg = part(gl, (b) => {
-    if (look.skirt) {
+    if (skirted) {
       loft(
         b,
         profile([
@@ -969,12 +1158,21 @@ export function buildCharacter(gl, look) {
         mat: gloss,
       });
     } else {
+      const hem = look.crop
+        ? [
+            [-0.472, 0.052, 0.056],
+            [-0.462, 0.062, 0.066],
+            [-0.4, 0.064, 0.068],
+          ]
+        : [
+            [-0.545, 0.054, 0.058],
+            [-0.53, 0.07, 0.074],
+            [-0.42, 0.066, 0.07],
+          ];
       loft(
         b,
         profile([
-          [-0.545, 0.054, 0.058],
-          [-0.53, 0.07, 0.074],
-          [-0.42, 0.066, 0.07],
+          ...hem,
           [-0.24, 0.072, 0.077],
           [-0.05, 0.08, 0.084],
           [0.025, 0.07, 0.074],
@@ -983,24 +1181,107 @@ export function buildCharacter(gl, look) {
         look.legs,
         { seg: 16, steps: 3 },
       );
-      ell(b, [0, -0.588, 0.03], [0.072, 0.058, 0.112], look.shoes, {
-        seg: 10,
-        lat: [-0.2, Math.PI / 2],
-        mat: gloss,
-      });
-      ell(
-        b,
-        [0, -0.592, 0.085],
-        [0.068, 0.046, 0.062],
-        shade(look.shoes, lightShoes ? -0.06 : 0.1),
-        {
+      if (look.crop) {
+        // Turned-up hem showing the lighter reverse of the denim, then bare ankles.
+        loft(
+          b,
+          profile([
+            [-0.479, 0.057, 0.061],
+            [-0.473, 0.066, 0.07],
+            [-0.452, 0.067, 0.071],
+            [-0.444, 0.064, 0.068],
+          ]),
+          shade(look.legs, 0.2),
+          { seg: 16, steps: 2 },
+        );
+        loft(
+          b,
+          profile([
+            [-0.57, 0.034, 0.036],
+            [-0.5, 0.035, 0.038],
+            [-0.45, 0.04, 0.042],
+          ]),
+          look.skin,
+          { seg: 12, steps: 2 },
+        );
+      }
+      if (look.sneakers) {
+        // Low-top leather sneaker: white upper, cupsole, laces, side stripe, heel tab.
+        const up = look.shoes;
+        /** Upper surface height. @param {number} x @param {number} z */
+        const yUp = (x, z) =>
+          -0.586 + 0.052 * Math.sqrt(Math.max(0, 1 - (x / 0.066) ** 2 - ((z - 0.03) / 0.108) ** 2));
+        ell(b, [0, -0.586, 0.03], [0.066, 0.052, 0.108], up, {
+          seg: 12,
+          lat: [-0.25, Math.PI / 2],
+          mat: gloss,
+        });
+        ell(b, [0, -0.592, 0.088], [0.061, 0.037, 0.058], shade(up, -0.035), {
           seg: 8,
           lon: [-1.9, 1.9],
           lat: [-0.2, Math.PI / 2],
           mat: gloss,
-        },
-      );
-      b.roundedBox([0, -0.608, 0.032], [0.074, 0.013, 0.118], 0.011, sole, { seg: 3 });
+        });
+        // Padded collar around the ankle.
+        tube(
+          b,
+          (t) => {
+            const a = t * TAU;
+            return [Math.sin(a) * 0.045, -0.54 - 0.006 * Math.cos(a), -0.004 + Math.cos(a) * 0.05];
+          },
+          () => [0.009, 0.008],
+          up,
+          { nu: 6, nv: 16, ref: () => [0, 1, 0], mat: gloss },
+        );
+        b.roundedBox([0, -0.602, 0.032], [0.072, 0.016, 0.121], 0.014, '#f3f4f7', { seg: 4 });
+        b.roundedBox([0, -0.616, 0.032], [0.0725, 0.0055, 0.1215], 0.005, '#b9bec8', { seg: 3 });
+        for (let k = 0; k < 3; k++) {
+          const z = 0.05 + k * 0.02;
+          tube(
+            b,
+            (t) => {
+              const x = lerp(-0.021, 0.021, t);
+              return [x, yUp(x, z) + 0.003, z];
+            },
+            () => [0.004, 0.004],
+            '#d4d8e0',
+            { nu: 5, nv: 5, ref: () => [0, 0, 1] },
+          );
+        }
+        for (const s of [-1, 1])
+          tube(
+            b,
+            (t) => {
+              const z = lerp(-0.05, 0.075, t);
+              const y = lerp(-0.562, -0.597, t) + 0.006 * Math.sin(t * Math.PI);
+              const k = 1 - ((y + 0.586) / 0.052) ** 2 - ((z - 0.03) / 0.108) ** 2;
+              return [s * (0.066 * Math.sqrt(Math.max(0, k)) + 0.0015), y, z];
+            },
+            (t) => [0.0065 * (1 - 0.65 * t), 0.003],
+            '#22346e',
+            { nu: 5, nv: 10, ref: () => [1, 0, 0] },
+          );
+        b.roundedBox([0, -0.552, -0.062], [0.014, 0.02, 0.008], 0.007, '#c6f432', { seg: 3 });
+      } else {
+        ell(b, [0, -0.588, 0.03], [0.072, 0.058, 0.112], look.shoes, {
+          seg: 10,
+          lat: [-0.2, Math.PI / 2],
+          mat: gloss,
+        });
+        ell(
+          b,
+          [0, -0.592, 0.085],
+          [0.068, 0.046, 0.062],
+          shade(look.shoes, lightShoes ? -0.06 : 0.1),
+          {
+            seg: 8,
+            lon: [-1.9, 1.9],
+            lat: [-0.2, Math.PI / 2],
+            mat: gloss,
+          },
+        );
+        b.roundedBox([0, -0.608, 0.032], [0.074, 0.013, 0.118], 0.011, sole, { seg: 3 });
+      }
     }
   });
 
