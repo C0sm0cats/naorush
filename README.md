@@ -66,6 +66,7 @@ Badge aux bornes Chronotime : en cas de pépin, tu repars de là. Les ramettes d
 ## Accessibilité et confort
 
 - **Mode détente** : les obstacles repoussent mais ne coûtent pas de cœur.
+- **Vitesse du jeu** : normale, réduite (80 %) ou très réduite (65 %), hors défi du jour.
 - **Options** : volumes, secousses de l’écran, flashs, contraste élevé, vibrations, taille des boutons tactiles, touches personnalisables.
 - **Menus** : utilisables entièrement au clavier, à la manette ou au doigt. Sur mobile, on peut glisser d’un bouton à l’autre sans lever le doigt.
 - **Installation** : le jeu s’installe comme une application (PWA) et reste jouable hors ligne une fois chargé.

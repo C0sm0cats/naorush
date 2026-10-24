@@ -20,6 +20,7 @@ export const prefs = {
   vibrate: true,
   assist: false,
   pad: 'm',
+  speed: 1,
   ...load(PREFS_KEY, {}),
 };
 
@@ -75,6 +76,11 @@ export function setupOptions(audio, input, changed) {
     prefs.pad = padSelect.value;
     update();
   };
+  const speedSelect = /** @type {HTMLSelectElement} */ ($('optSpeed'));
+  speedSelect.onchange = () => {
+    prefs.speed = Number(speedSelect.value) || 1;
+    update();
+  };
 
   const renderKeys = () => {
     $('keyList').replaceChildren(
@@ -111,6 +117,7 @@ export function setupOptions(audio, input, changed) {
     field('volSfx').value = String(audio.getVolume('sfx'));
     for (const [id, k] of SWITCHES) field(id).checked = prefs[k];
     padSelect.value = prefs.pad;
+    /** @type {HTMLSelectElement} */ ($('optSpeed')).value = String(prefs.speed);
     renderKeys();
   };
 }

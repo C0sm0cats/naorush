@@ -797,7 +797,7 @@ function frame(now) {
       if (hitstop > 0) {
         hitstop -= dt;
         acc = 0;
-      } else acc += dt;
+      } else acc += dt * (challenge ? 1 : prefs.speed);
       while (acc >= DT && !pending && hitstop <= 0 && gameOverTimer <= 0) {
         step(sim, input.state());
         if (sim.doorOpen) view.doorT += DT;
