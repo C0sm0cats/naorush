@@ -544,6 +544,8 @@ let flash = 0;
 let wonTimer = 0;
 let idleTime = 0;
 let gameOverTimer = 0;
+/** Game overs this session (to suggest the relaxed mode). */
+let gameOvers = 0;
 /** Events from traps that run on their own, wherever the hero is. */
 const AMBIENT = new Set([
   'telegraph',
@@ -789,6 +791,12 @@ function frame(now) {
         acc -= DT;
       }
       if (gameOverTimer > 0 && (gameOverTimer -= dt) <= 0) {
+        // After a few game overs, point gently at the relaxed mode.
+        gameOvers++;
+        $('gameoverText').textContent =
+          gameOvers >= 3 && !prefs.assist && !challenge
+            ? 'Pas de panique : dans Options, le mode détente retire la perte de cœurs. Ta progression jusqu’au dernier badge est gardée.'
+            : 'Un café, une respiration, et on y retourne : ta progression jusqu’au dernier badge est gardée.';
         setIntensity(0.2);
         audio.music('gameover');
         show('gameover');
