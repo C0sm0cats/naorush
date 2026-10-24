@@ -51,11 +51,23 @@ Quand un directeur consulte PRIMO, sa garde tombe : c’est le moment de lui env
 | Lancer un compte rendu          | X       | X ou B       | CR     |
 | Pause                           | Échap   | Start        | ❚❚     |
 
-Les touches se changent dans **Options**, avec aussi un **mode détente** (les obstacles ne coûtent pas de cœur), les volumes, les secousses, les flashs, le contraste élevé, les vibrations et la taille des boutons tactiles. Sur mobile, on peut glisser d’un bouton à l’autre sans lever le doigt.
-
-Chaque jour, un **défi du jour** propose à tout le monde la même étape, le même héros et la même contrainte (un seul cœur, pas de CR au départ…) : de quoi comparer ses temps entre collègues, avec le bouton **Partager mon score**. Une fois l’enveloppe signée, une **étape bonus** se débloque : l’Intercontrat, un parcours d’escalade semé de tickets. Treize **trophées** attendent les joueurs les plus curieux (secrets, étapes sans faute, boss convaincus sans être touché…). Le jeu s’installe comme une application (PWA) et reste jouable hors ligne une fois chargé.
-
 Badge aux bornes Chronotime : en cas de pépin, tu repars de là. Les ramettes de papier rechargent les comptes rendus, les cafés rendent un cœur. Chaque piège prévient (une secousse, un voyant, une goutte) et se répète à l’identique au deuxième essai. La progression est sauvegardée à chaque étape.
+
+## Pour rejouer
+
+- **Défi du jour** : la même étape, le même héros et la même contrainte pour tout le monde (un seul cœur, pas de CR au départ, contre la montre). De quoi comparer ses temps entre collègues.
+- **Étape bonus** : l’Intercontrat, un parcours d’escalade semé de tickets, débloqué une fois l’enveloppe signée.
+- **Secrets** : deux par étape, un pour chaque héros.
+- **Trophées** : treize objectifs (étapes sans faute, boss convaincus sans être touché, tous les secrets…).
+- **Records** : meilleur temps par étape et par héros.
+- **Partager mon score** : partage natif sur mobile, texte prêt à coller dans Teams sur PC.
+
+## Accessibilité et confort
+
+- **Mode détente** : les obstacles repoussent mais ne coûtent pas de cœur.
+- **Options** : volumes, secousses de l’écran, flashs, contraste élevé, vibrations, taille des boutons tactiles, touches personnalisables.
+- **Menus** : utilisables entièrement au clavier, à la manette ou au doigt. Sur mobile, on peut glisser d’un bouton à l’autre sans lever le doigt.
+- **Installation** : le jeu s’installe comme une application (PWA) et reste jouable hors ligne une fois chargé.
 
 ## Sous le capot
 
