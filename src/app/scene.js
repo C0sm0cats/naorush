@@ -204,6 +204,8 @@ export class LevelView {
     this.ready = this.loadArtwork();
     this.doorT = 0;
     this.gallery = false;
+    /** Where the gallery line-up starts. */
+    this.galleryX = 1.4;
     /** Title screen: the hero poses for the camera. */
     this.showcase = false;
     /** End party: x where the cast dances (0 = no party). */
@@ -376,11 +378,19 @@ export class LevelView {
     if (this.gallery) {
       GALLERY.forEach((id, i) =>
         items.push(
-          ...poseCharacter(this.cast[id], 1.4 + i * 0.9, 3, 0.4, 1, idlePose(t + i), {
-            scale: CAST[id].scale,
-            turn: 0.35,
-            rim: 0.4,
-          }),
+          ...poseCharacter(
+            this.cast[id],
+            this.galleryX + i * (this.galleryX > 2 ? 0.8 : 0.9),
+            3,
+            0.4,
+            1,
+            idlePose(t + i),
+            {
+              scale: CAST[id].scale,
+              turn: 0.35,
+              rim: 0.4,
+            },
+          ),
         ),
       );
       return items;

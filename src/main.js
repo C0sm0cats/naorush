@@ -20,7 +20,7 @@ import { DT, HERO, createSim, step } from './game/sim.js';
  * play ⇄ pause / options / reading / dialogue / game over → stage won → … → credits.
  * The level keeps rendering behind every screen.
  *
- * @typedef {'loading'|'title'|'play'|'pause'|'options'|'reading'|'talk'|'won'|'gameover'|'credits'|'trophies'} Screen
+ * @typedef {'loading'|'title'|'play'|'pause'|'options'|'reading'|'talk'|'won'|'gameover'|'credits'|'trophies'|'cast'} Screen
  * @typedef {import('./data/levels/index.js').Line} Line
  */
 
@@ -96,6 +96,7 @@ const OVERLAYS = /** @type {const} */ ([
   'gameover',
   'credits',
   'trophies',
+  'cast',
 ]);
 /** @param {Screen} next */
 function show(next) {
@@ -319,6 +320,31 @@ $('trophiesBtn').onclick = () => {
   show('trophies');
 };
 $('trophiesClose').onclick = () => show('title');
+$('castBtn').onclick = () => {
+  $('castList').replaceChildren(
+    ...[
+      'kevin',
+      'charline',
+      'techServicesDirector',
+      'regionalDirector',
+      'mathis',
+      'intern',
+      'visio',
+    ].map((id) => {
+      const c = CAST[id];
+      const li = document.createElement('li');
+      const name = document.createElement('b');
+      name.textContent = c.title ? `${c.name} · ${c.title}` : c.name;
+      const bio = document.createElement('span');
+      bio.textContent = c.bio ?? '';
+      li.append(name, bio);
+      return li;
+    }),
+  );
+  audio.sfx('select');
+  show('cast');
+};
+$('castClose').onclick = () => show('title');
 $('bonusBtn').onclick = () => startFrom(CAMPAIGN);
 function closeOptions() {
   input.capture = null;
@@ -736,7 +762,7 @@ function menuInput() {
   if (!overlay) return false;
   if (input.pressed('pause')) {
     if (screen === 'options') closeOptions();
-    else if (screen === 'trophies') show('title');
+    else if (screen === 'trophies' || screen === 'cast') show('title');
     else if (screen === 'credits') toMenu();
     else return false;
     return true;
@@ -848,8 +874,12 @@ function frame(now) {
   particles.update(dt);
   // The title shows the chosen hero up close; the credits drift along the stage.
   const drift = screen === 'loading';
-  const focus = gallery
-    ? { x: 4.1, y: 1.6, facing: 0 }
+  view.gallery = gallery || screen === 'cast';
+  view.galleryX = screen === 'cast' ? 8.6 : 1.4;
+  const focus = view.gallery
+    ? screen === 'cast'
+      ? { x: 9.3, y: 1.6, facing: 0.001, visH: 5.4 }
+      : { x: 4.1, y: 1.6, facing: 0 }
     : screen === 'credits'
       ? { x: view.party - 3.2, y: 3, facing: 0.001 }
       : screen === 'title'

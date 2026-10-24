@@ -1,10 +1,11 @@
 /**
  * Character looks: the two heroes, a colleague and the two level bosses.
- * @type {Record<string, import('../gfx/characters.js').Look & {name: string, title?: string, scale: number}>}
+ * @type {Record<string, import('../gfx/characters.js').Look & {name: string, title?: string, scale: number, bio?: string}>}
  */
 export const CAST = {
   kevin: {
     name: 'Kévin',
+    bio: 'Le planning dans la tête, le Gantt dans le cœur. Ne laisse jamais un jalon derrière lui, et ses comptes rendus pèsent leur poids.',
     title: 'Directeur de Projets',
     scale: 1,
     skin: '#f2c7a1',
@@ -18,6 +19,7 @@ export const CAST = {
   },
   charline: {
     name: 'Charline',
+    bio: 'Toujours un client à rappeler et une solution à proposer. Plus rapide que son ombre, elle saute les obstacles comme les objections.',
     title: 'Business Manager',
     scale: 0.98,
     skin: '#f4cdb0',
@@ -33,6 +35,7 @@ export const CAST = {
   },
   mathis: {
     name: 'Mathis',
+    bio: 'Collègue dévoué, toujours en call. Un compte rendu bien envoyé et il file en réunion, ravi.',
     scale: 0.98,
     skin: '#e8b48f',
     hair: '#c79a3a',
@@ -46,6 +49,7 @@ export const CAST = {
   },
   techServicesDirector: {
     name: 'Julien',
+    bio: 'Architecte serein de Technologies & Services. Tout est redondé, supervisé, sécurisé : convaincre Julien, c’est mériter sa confiance.',
     title: 'Directeur Technologies & Services Pays de la Loire',
     scale: 1.06,
     skin: '#e9bc98',
@@ -61,6 +65,7 @@ export const CAST = {
   },
   regionalDirector: {
     name: 'Rodolphe',
+    bio: 'Le grand ordonnateur de la Région Ouest. Charismatique, généreux, il fait de chaque Power UP Tour un show inoubliable.',
     title: 'Directeur Région Ouest',
     scale: 1.1,
     skin: '#f3c9a6',
@@ -76,6 +81,7 @@ export const CAST = {
   },
   intern: {
     name: 'Stagiaire',
+    bio: 'Plein d’énergie et de dossiers. Une pause café et c’est reparti, avec le sourire.',
     scale: 0.94,
     skin: '#d9a17e',
     hair: '#2b2b2b',
@@ -87,6 +93,7 @@ export const CAST = {
   },
   visio: {
     name: 'Chef de projet en visio',
+    bio: 'Toujours connecté, jamais en retard d’une invitation. Son agenda est un chef-d’œuvre de Tetris.',
     scale: 1,
     skin: '#eec39a',
     hair: '#6b4a2e',

@@ -24,11 +24,11 @@ export class Camera {
   /**
    * @param {number} dt
    * @param {number} aspect
-   * @param {{x: number, y: number, facing: number}} focus Hero centre and facing.
+   * @param {{x: number, y: number, facing: number, visH?: number}} focus Hero centre and facing (visH: visible height override).
    * @param {{w: number, h: number}} bounds Level size in tiles.
    */
   update(dt, aspect, focus, bounds) {
-    const visH = focus.facing === 0 ? 3.2 : aspect >= 1 ? 8.2 : 7.4;
+    const visH = focus.visH ?? (focus.facing === 0 ? 3.2 : aspect >= 1 ? 8.2 : 7.4);
     const visW = visH * aspect;
     const dist = visH / 2 / Math.tan(FOV / 2);
     const lead = focus.facing * Math.min(2.5, visW * 0.12);

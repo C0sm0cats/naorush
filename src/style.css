@@ -1083,3 +1083,38 @@ body[data-pad='l'] .touch .big {
     opacity: 0;
   }
 }
+
+/* Cast: bios on the left, the whole cast in 3D on the right. */
+#cast {
+  place-items: center start;
+  padding-left: max(18px, 4vw);
+  background: linear-gradient(90deg, #0e1424dd, #0e142455 45%, transparent 70%);
+  backdrop-filter: none;
+}
+#cast .card {
+  width: min(440px, 46vw);
+  max-height: 92vh;
+  overflow: auto;
+}
+.cast-list {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+.cast-list li {
+  display: grid;
+  gap: 2px;
+}
+.cast-list b {
+  font-size: 15px;
+}
+.cast-list span {
+  color: #3a4560;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.btn-row {
+  grid-template-columns: repeat(3, 1fr);
+}
