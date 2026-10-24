@@ -76,7 +76,8 @@ export class Dialogue {
     const now = Math.floor(this.shown);
     if (now !== before) {
       $('talkText').textContent = line.text.slice(0, now);
-      if (now % 3 === 0 && line.text[now - 1] !== ' ') this.audio.sfx('talk');
+      if (now % 3 === 0 && line.text[now - 1] !== ' ')
+        this.audio.sfx('talk', { who: this.castId(line.who) || line.who });
     }
   }
 }
