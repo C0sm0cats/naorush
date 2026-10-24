@@ -558,7 +558,7 @@ const AMBIENT = new Set([
   'bossThrow',
 ]);
 /** Events that reuse another event's sound. @type {Record<string, string>} */
-const SFX_ALIAS = { throw: 'fire', archive: 'crack', switch: 'door' };
+const SFX_ALIAS = { throw: 'fire', archive: 'crack', switch: 'door', bonk: 'block', wake: 'talk' };
 /** Freeze time per event, in seconds. @type {Record<string, number>} */
 const HITSTOP = {
   hurt: 0.12,
