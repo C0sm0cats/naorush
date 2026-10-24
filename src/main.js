@@ -710,7 +710,12 @@ function onEvent(e) {
     case 'bossPhase':
       setIntensity(1);
       shake(0.8);
-      bubbles.line(boss, level.phaseLine ?? '');
+      // The finale (third phase) has its own line when the stage provides one.
+      bubbles.line(
+        boss,
+        (sim.things.find((t) => t.kind === 'boss')?.phase === 3 && level.finaleLine) ||
+          (level.phaseLine ?? ''),
+      );
       break;
     case 'consult':
       say(boss, 'consult');

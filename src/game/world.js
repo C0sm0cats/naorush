@@ -97,7 +97,7 @@ export const HERO_STATS = {
  * @property {number} [hp] Boss arguments left.
  * @property {number} [dy] Lift motion this step.
  * @property {number} [dir] Facing of fixed traps (+1 right, -1 left).
- * @property {number} [phase] Boss phase (1 or 2), trap phase offset.
+ * @property {number} [phase] Boss phase (1 to 3), trap phase offset.
  * @property {number} [step] Boss attack index.
  * @property {boolean} [hidden] Looks like ordinary floor until it gives way.
  * @property {string} [variant] Visual variant ('binders' for falling panels…).
