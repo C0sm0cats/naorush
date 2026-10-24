@@ -129,8 +129,8 @@ export function drawThing(view, items, sim, th, t) {
           : sim.hasKey
             ? {
                 ...idlePose(t + 1),
-                armR: 2.5 + Math.sin(t * 6) * 0.3,
-                armSpread: 0.6,
+                bob: Math.abs(Math.sin(t * 4)) * 1.2,
+                head: -0.12,
                 mood: 'happy',
               }
             : idlePose(t + 1);
