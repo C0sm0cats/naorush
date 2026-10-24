@@ -2307,6 +2307,124 @@ const artDirectory = {
   },
 };
 
+/** @param {Ctx} ctx @param {number} x @param {number} y @param {number} s @param {string} c */
+function note(ctx, x, y, s, c) {
+  at(ctx, x, y, -0.2, () => {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 13 * s, 9.5 * s, 0, 0, TAU);
+    ctx.fillStyle = c;
+    ctx.fill();
+  });
+  box(ctx, x + 9 * s, y - 52 * s, 5 * s, 52 * s, 2 * s, c);
+  poly(
+    ctx,
+    [x + 9 * s, y - 52 * s, x + 30 * s, y - 34 * s, x + 30 * s, y - 24 * s, x + 14 * s, y - 38 * s],
+    c,
+  );
+}
+
+const GOLD = '#f6c453';
+const GOLD_DEEP = '#c98a1e';
+const PLUM = '#2a1450';
+
+/** @type {Art} */
+const artConcert = {
+  w: 620,
+  h: 420,
+  draw(ctx) {
+    const cx = 340;
+    // Spotlight beams converging on the microphone.
+    for (const [sx, c] of /** @type {[number, string][]} */ ([
+      [40, C.pink],
+      [610, C.sky],
+      [330, GOLD],
+    ])) {
+      const g = ctx.createLinearGradient(sx, 0, cx, 340);
+      const [r, gg, b] = rgb(c);
+      g.addColorStop(0, `rgba(${r},${gg},${b},0.55)`);
+      g.addColorStop(1, `rgba(${r},${gg},${b},0.04)`);
+      poly(ctx, [sx - 14, 0, sx + 14, 0, cx + 110, 350, cx - 110, 350], g);
+      box(ctx, sx - 26, -10, 52, 26, 8, mix(c, C.navy, 0.35));
+      circle(ctx, sx, 14, 12, mix(c, '#ffffff', 0.6));
+    }
+    // Stage.
+    ctx.beginPath();
+    ctx.ellipse(cx, 352, 250, 46, 0, 0, TAU);
+    ctx.fillStyle = GOLD_DEEP;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(cx, 344, 250, 46, 0, 0, TAU);
+    ctx.fillStyle = mix(PLUM, C.navy, 0.3);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(cx, 344, 250, 46, 0, 0, TAU);
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = GOLD;
+    ctx.stroke();
+    glow(ctx, cx, 340, 170, GOLD, 0.35);
+    // Footlights.
+    for (let i = 0; i < 7; i++) {
+      const a = Math.PI * (0.18 + (i / 6) * 0.64);
+      circle(ctx, cx + Math.cos(a) * 236, 352 + Math.sin(a) * 38, 6, C.paper);
+    }
+    // Microphone stand.
+    ctx.beginPath();
+    ctx.ellipse(cx, 340, 58, 13, 0, 0, TAU);
+    ctx.fillStyle = C.navy;
+    ctx.fill();
+    box(ctx, cx - 7, 172, 14, 170, 7, mix(C.navy, '#ffffff', 0.25));
+    box(ctx, cx - 11, 236, 22, 18, 6, GOLD);
+    // Microphone: gold body, sparkling grille.
+    at(ctx, cx, 172, 0.22, () => {
+      box(ctx, -15, -92, 30, 100, 12, GOLD);
+      box(ctx, -15, -76, 30, 8, 3, GOLD_DEEP);
+      box(ctx, -19, -6, 38, 18, 6, mix(C.navy, '#ffffff', 0.25));
+      glow(ctx, 0, -116, 90, C.paper, 0.4);
+      circle(ctx, 0, -116, 38, mix(C.paper, PLUM, 0.15));
+      for (let i = -3; i <= 3; i++)
+        for (let j = -3; j <= 3; j++)
+          if (i * i + j * j < 11)
+            circle(ctx, i * 9.5, -116 + j * 9.5, 2.6, mix(PLUM, C.paper, 0.45));
+      box(ctx, -40, -86, 80, 10, 5, GOLD);
+    });
+    spark(ctx, cx + 76, 34, 18, C.paper);
+    spark(ctx, cx - 24, 52, 12, GOLD);
+    spark(ctx, cx + 92, 104, 9, C.paper);
+    // Hearts and notes floating up.
+    heart(ctx, 160, 120, 26, C.pink);
+    heart(ctx, 520, 190, 20, C.pink);
+    heart(ctx, 470, 70, 14, mix(C.pink, C.paper, 0.4));
+    heart(ctx, 210, 230, 12, mix(C.pink, C.paper, 0.4));
+    note(ctx, 90, 220, 1.1, GOLD);
+    note(ctx, 560, 300, 0.9, C.sky);
+    note(ctx, 470, 150, 0.8, GOLD);
+    // Golden ticket with its stub.
+    at(ctx, 120, 340, -0.14, () => {
+      const w = 236;
+      const h = 104;
+      box(ctx, -w / 2 + 6, -h / 2 + 8, w, h, 14, 'rgba(0,0,0,0.35)');
+      box(ctx, -w / 2, -h / 2, w, h, 14, GOLD);
+      const sx = w / 2 - 62;
+      path(ctx, [sx, -h / 2 + 10, sx, h / 2 - 10], 3, GOLD_DEEP, [2, 8]);
+      ctx.beginPath();
+      ctx.roundRect(-w / 2 + 14, -h / 2 + 10, sx - (-w / 2 + 14) - 10, h - 20, 8);
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = GOLD_DEEP;
+      ctx.stroke();
+      text(ctx, 'Admission', -w / 2 + 14 + (sx + w / 2 - 24) / 2, -4, 28, PLUM, {
+        align: 'center',
+        maxW: sx + w / 2 - 44,
+      });
+      text(ctx, '1 place', -w / 2 + 14 + (sx + w / 2 - 24) / 2, 30, 22, PLUM, {
+        weight: 700,
+        align: 'center',
+        maxW: sx + w / 2 - 44,
+      });
+      heart(ctx, sx + 31, -2, 15, C.pink);
+    });
+  },
+};
+
 // ---------------------------------------------------------------- catalogue
 
 /** @type {Record<string, Spec>} */
@@ -2802,6 +2920,33 @@ const SPECS = {
     tagBg: C.navy,
     tagFg: C.sun,
     art: artDirectory,
+  },
+  'celine-dion': {
+    title: 'Céline Dion · Billetterie CSE',
+    shape: 'portrait',
+    kicker: 'Billetterie CSE · Concert',
+    lines: ['Céline', 'Dion'],
+    colors: [GOLD],
+    shadow: C.pink,
+    titleSize: 165,
+    tagline: 'Places limitées :\nréservez vite !',
+    bg: [PLUM, mix(PLUM, C.navy, 0.75)],
+    ink: GOLD,
+    accent: C.pink,
+    tagBg: GOLD,
+    tagFg: PLUM,
+    art: artConcert,
+    extra(ctx, x, y) {
+      const cy = y + 58;
+      const mid = x + 324;
+      const w = measure(ctx, 'En concert', 44, 600) + 66;
+      text(ctx, 'En concert', mid, cy, 44, C.paper, { weight: 600, align: 'center', spacing: 3 });
+      path(ctx, [x + 10, cy - 15, mid - w / 2 - 16, cy - 15], 3, GOLD);
+      path(ctx, [mid + w / 2 + 16, cy - 15, x + 638, cy - 15], 3, GOLD);
+      spark(ctx, mid - w / 2 - 4, cy - 15, 9, GOLD);
+      spark(ctx, mid + w / 2 + 4, cy - 15, 9, GOLD);
+      return cy;
+    },
   },
 };
 

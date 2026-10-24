@@ -590,6 +590,7 @@ const SFX_ALIAS = {
   bonk: 'block',
   wake: 'talk',
   chairBump: 'bump',
+  concert: 'key',
 };
 /** Freeze time per event, in seconds. @type {Record<string, number>} */
 const HITSTOP = {
@@ -697,6 +698,9 @@ function onEvent(e) {
       break;
     case 'bump':
       say('colleague', 'bump');
+      break;
+    case 'concert':
+      say(heroId, 'celine', true);
       break;
     case 'invite':
       if (Math.random() < 0.4) say('visio', 'invite');
@@ -840,6 +844,8 @@ function frame(now) {
         const want = sim.hero.hearts <= 1 && sim.maxHearts > 1 ? 0.7 : 0.25;
         if (want !== musicLevel) setIntensity(want);
       }
+      // In front of the Céline Dion poster, Kévin has something to say.
+      if (view.posterAt(sim)?.id === 'celine-dion') say(heroId, 'celine');
       // The partner waiting at the exit reacts when you arrive.
       const exit = sim.things.find((t) => t.kind === 'exit');
       if (

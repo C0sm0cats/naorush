@@ -33,10 +33,11 @@ const IDS = [
   'adopt-tools',
   'gen-ai-hub',
   'annuaire',
+  'celine-dion',
 ];
 
 describe('POSTER_LIST', () => {
-  it('lists the 31 poster ids exactly once', () => {
+  it('lists the 32 poster ids exactly once', () => {
     const ids = POSTER_LIST.map((p) => p.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect([...ids].sort()).toEqual([...IDS].sort());

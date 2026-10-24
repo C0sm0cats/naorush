@@ -38,6 +38,8 @@ export const POSTER_HINTS = {
   'gen-ai-hub':
     'Astuce IA : les nacelles montent et descendent en rythme. Observe avant de sauter.',
   annuaire: 'Le binôme t’attend à la sortie de chaque étape.',
+  'celine-dion':
+    'Billetterie CSE : deux places dorées attendent quelqu’un, tout près, sur les armoires…',
   'espace-vip': 'Rodolphe, le Directeur Région Ouest, négocie ici. Vise pendant qu’il consulte.',
 };
 

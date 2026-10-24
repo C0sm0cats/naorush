@@ -28,6 +28,19 @@ export function drawThing(view, items, sim, th, t) {
     items.push({ mesh, model: chain(translation(x, y, z), ...extra) });
   const partner = sim.heroId === 'kevin' ? 'charline' : 'kevin';
   switch (th.kind) {
+    case 'concert':
+      // Two golden concert tickets, spinning and glowing.
+      items.push({
+        mesh: things.ticket,
+        model: chain(
+          translation(th.x, th.y + Math.sin(t * 3) * 0.1, 0.1),
+          rotationY(t * 3),
+          scaling(1.5, 1.5, 1.5),
+        ),
+        tint: [1.7, 1.3, 0.45],
+      });
+      items.push(view.glow(th.x, th.y + 0.6, 0.2, 0.06, [1.6, 1.3, 0.5]));
+      break;
     case 'ticket':
       at(things.ticket, th.x, th.y + Math.sin(t * 3 + th.x) * 0.08, 0, rotationY(t * 2.5 + th.x));
       break;

@@ -79,7 +79,7 @@ export const HERO_STATS = {
  *
  * @typedef {'ticket'|'checkpoint'|'reader'|'key'|'exit'|'panel'|'bottle'|'colleague'|'loose'
  *   |'ammo'|'cup'|'cr'|'lift'|'boss'|'kpi'|'wave'|'chair'|'drawer'|'sprinkler'|'printer'
- *   |'paper'|'crate'|'secret'|'switch'|'beamer'|'intern'|'vacuum'|'visio'|'invite'|'rack'|'zone'} ThingKind
+ *   |'paper'|'crate'|'secret'|'switch'|'beamer'|'concert'|'intern'|'vacuum'|'visio'|'invite'|'rack'|'zone'} ThingKind
  *
  * @typedef {Object} Thing
  * @property {ThingKind} kind

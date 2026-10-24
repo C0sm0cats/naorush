@@ -14,6 +14,7 @@ const EVENT_TEXT = {
   collapse: 'Le planning s’effondre !',
   bump: '« Je suis en call, là ! » — un CR (X) l’enverra en réunion.',
   block: 'Il est concentré : attends qu’il consulte PRIMO.',
+  concert: 'Deux places pour le concert de Céline Dion : réservées !',
   consult: 'Il consulte PRIMO… c’est le moment !',
   bossHit: 'Argument reçu !',
   parry: 'Slide KPI interceptée.',

@@ -100,6 +100,7 @@ export function createSim(def, heroId) {
       else if (c === 'S') start = { x: col + 0.2, y };
       else if (c === '*') thing('secret', col + 0.5, y);
       else if (c === 'k') thing('switch', col + 0.5, y);
+      else if (c === 'T') thing('concert', col + 0.5, y + 0.5);
       else if (c === 'J')
         thing('beamer', col + 0.5, y, { dir: -1, phase: (col * 0.41) % PERIOD.beamer });
       else if (c === '$') thing('ticket', col + 0.5, y + 0.5);
@@ -566,6 +567,13 @@ function stepThings(s) {
             hero.hearts++;
             emit(s, 'heart', t.x, t.y);
           }
+        }
+        break;
+      case 'concert':
+        // Concert tickets for Céline Dion: a side quest Kévin takes very seriously.
+        if (alive && touches(hero, t, 0.4, 0.5)) {
+          t.alive = false;
+          emit(s, 'concert', t.x, t.y);
         }
         break;
       case 'switch':

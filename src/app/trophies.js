@@ -23,6 +23,7 @@ export const TROPHIES = [
   { id: 'bonus', name: 'Départ en mission', text: 'Finir l’étape bonus Intercontrat.' },
   { id: 'pause', name: 'Pause méritée', text: 'Échapper aux bonbonnes de la salle de pause.' },
   { id: 'daily', name: 'Habitué du défi', text: 'Réussir le défi du jour trois jours différents.' },
+  { id: 'celine', name: 'Pour Céline', text: 'Réserver les places du concert de Céline Dion.' },
 ];
 
 const KEY = 'naorush.trophies';
@@ -75,6 +76,9 @@ export class Trophies {
    */
   event(e, sim, stageId) {
     switch (e.type) {
+      case 'concert':
+        this.unlock('celine');
+        break;
       case 'parry':
         this.count('parry', 15, 'parry');
         break;
