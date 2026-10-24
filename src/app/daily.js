@@ -21,7 +21,7 @@ function hash(text) {
 }
 
 /**
- * @param {number} stages Number of stages to pick from.
+ * @param {number | number[]} stages Number of stages to pick from, or the stage indices allowed.
  * @param {Date} [date]
  * @returns {Challenge}
  */
@@ -32,7 +32,7 @@ export function dailyChallenge(stages, date = new Date()) {
   const h = hash(`nao-${key}`);
   return {
     key,
-    stage: h % stages,
+    stage: Array.isArray(stages) ? stages[h % stages.length] : h % stages,
     hero: (h >>> 8) % 2 ? 'charline' : 'kevin',
     twist: TWISTS[(h >>> 12) % TWISTS.length],
   };

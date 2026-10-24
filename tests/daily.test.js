@@ -12,4 +12,9 @@ describe('daily challenge', () => {
     expect(a.stage).toBeGreaterThanOrEqual(0);
     expect(a.stage).toBeLessThan(5);
   });
+
+  it('only draws from the allowed stages', () => {
+    for (let i = 0; i < 30; i++)
+      expect([0, 1, 3]).toContain(dailyChallenge([0, 1, 3], new Date(2026, 9, 1 + i, 12)).stage);
+  });
 });
