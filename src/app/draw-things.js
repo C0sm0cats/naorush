@@ -94,12 +94,35 @@ export function drawThing(view, items, sim, th, t) {
       break;
     case 'exit':
       at(things.exit, th.x, th.y, -0.9);
-      items.push(
-        ...poseCharacter(view.cast[partner], th.x + 0.35, th.y, -0.4, -1, idlePose(t + 1), {
-          scale: CAST[partner].scale,
-          rim: 0.4,
-        }),
-      );
+      {
+        // The partner waits at the exit, and cheers when you make it.
+        const k = t * 7;
+        /** @type {Pose} */
+        const pose = sim.won
+          ? {
+              legL: 0,
+              legR: 0,
+              armL: 2.8 + Math.sin(k) * 0.2,
+              armR: 2.8 - Math.sin(k) * 0.2,
+              bob: Math.abs(Math.sin(k)) * 1.8,
+              mood: 'happy',
+            }
+          : sim.hasKey
+            ? {
+                ...idlePose(t + 1),
+                armR: 2.5 + Math.sin(t * 6) * 0.3,
+                armSpread: 0.6,
+                mood: 'happy',
+              }
+            : idlePose(t + 1);
+        items.push(
+          ...poseCharacter(view.cast[partner], th.x + 0.35, th.y, -0.4, -1, pose, {
+            scale: CAST[partner].scale,
+            rim: 0.4,
+            turn: sim.won ? 0.4 : 1,
+          }),
+        );
+      }
       break;
     case 'colleague': {
       const meeting = th.state === 'meeting';
