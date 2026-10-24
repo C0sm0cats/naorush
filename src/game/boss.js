@@ -1,4 +1,4 @@
-import { DT, GRAVITY, HERO, emit, hurt, knock, make } from './world.js';
+import { DT, GRAVITY, HERO, emit, hurt, knock, make, solid } from './world.js';
 
 /**
  * Boss duels. Both directors run a scripted sequence of telegraphed attacks,
@@ -165,8 +165,10 @@ export function stepBoss(s, b) {
           // still is never safe, stepping into the first batch's slots is.
           const off = ((flip + batch) % 2) * 1.5;
           for (let x = x0 + 0.5 + off; x <= x1 - 0.5; x += 3)
-            if (Math.abs(x - b.x) > 1.2)
+            if (Math.abs(x - b.x) > 1.2) {
               s.things.push(make('rack', x, floor, { state: 'warn', y0: floor }));
+              underPlatform(s, x, floor);
+            }
           if (batch) emit(s, 'telegraph', b.x, b.y + 2.3);
         }
         if (b.t > 3.3 && spent(s, 'rack')) nextAttack(s, b);
@@ -184,7 +186,7 @@ export function stepBoss(s, b) {
     case 'teleport':
       if (at(b, 0.55)) {
         // Fails over to the other side of the room, never onto the hero.
-        const x = b.x > mid ? x0 + 2 : x1 - 2;
+        const x = b.x > mid ? x0 + 4 : x1 - 4;
         if (Math.abs(hx - x) > 2) {
           b.x = x;
           emit(s, 'teleport', b.x, b.y + 1);
@@ -228,10 +230,10 @@ export function stepBoss(s, b) {
       // Arrows on the floor cover exactly the stretch he will run through,
       // then he crosses the stage. Past the arrow tips (or up high) is safe.
       const dir = b.dir ?? 1;
-      const target = dir > 0 ? x1 - 2 : x0 + 2;
+      const target = dir > 0 ? x1 - 4 : x0 + 4;
       if (at(b, DT)) {
         b.dir = b.x > mid ? -1 : 1;
-        const end = (b.dir ?? 1) > 0 ? x1 - 2 : x0 + 2;
+        const end = (b.dir ?? 1) > 0 ? x1 - 4 : x0 + 4;
         const from = Math.min(b.x, end) - 0.6;
         zone(s, from, floor, Math.abs(end - b.x) + 1.2, 'arrow', { dir: b.dir });
       }
@@ -307,16 +309,55 @@ export function stepBoss(s, b) {
   }
 }
 
+/**
+ * Where a rack dropped at `x` from height `y` comes to rest: on the first solid
+ * tile under any part of it (a platform above the arena floor stops it).
+ * @param {Sim} s @param {number} x @param {number} y
+ */
+function landing(s, x, y) {
+  const c0 = Math.floor(x - 0.45),
+    c1 = Math.floor(x + 0.45);
+  for (let r = Math.floor(y) - 1; r >= 0; r--)
+    for (let c = c0; c <= c1; c++) if (solid(s, c, r)) return r + 1;
+  return 0;
+}
+
+/**
+ * A load-balancer rack stopped by a platform would leave a shelter under it: the
+ * backup current runs under that platform instead, so standing still stays unsafe.
+ * @param {Sim} s @param {number} x @param {number} floor
+ */
+function underPlatform(s, x, floor) {
+  const top = landing(s, x, floor + 7);
+  // Only a platform with room to stand under it makes a shelter.
+  if (top - 1 - floor < HERO.h) return;
+  const r = top - 1;
+  let c0 = Math.floor(x - 0.45);
+  if (!solid(s, c0, r)) c0++;
+  let c1 = c0;
+  while (solid(s, c0 - 1, r)) c0--;
+  while (solid(s, c1 + 1, r)) c1++;
+  zone(s, c0, floor, c1 - c0 + 1, 'cable');
+  emit(s, 'cableWarn', (c0 + c1 + 1) / 2, floor);
+}
+
 /** Server racks lowered from the ceiling, and floor zones that light up. @param {Sim} s @param {Thing} t */
 export function stepHazard(s, t) {
   const hero = s.hero;
   const hx = hero.x + HERO.w / 2;
-  const floor = t.y0 ?? t.y;
   if (t.kind === 'rack') {
-    if (t.state === 'warn' && t.t > 0.9) {
-      Object.assign(t, { state: 'fall', y: floor + 7, vy: 0, t: 0 });
-      emit(s, 'rackDrop', t.x, floor + 6);
-    } else if (t.state === 'fall') {
+    // `y` stays on the arena floor until the drop, 7 tiles above it; `y0` is where
+    // the rack will land, so its warning shadow lies there and it only hurts on the way.
+    if (t.state === 'warn') {
+      t.y0 = landing(s, t.x, t.y + 7);
+      if (t.t > 0.9) {
+        Object.assign(t, { state: 'fall', y: t.y + 7, vy: 0, t: 0 });
+        emit(s, 'rackDrop', t.x, t.y - 1);
+      }
+      return;
+    }
+    const floor = t.y0 ?? t.y;
+    if (t.state === 'fall') {
       t.vy -= GRAVITY * DT;
       t.y = Math.max(floor, t.y + t.vy * DT);
       if (Math.abs(hx - t.x) < 0.5 + HERO.w / 2 && t.y < hero.y + HERO.h && t.y + 2 > hero.y)
@@ -328,6 +369,7 @@ export function stepHazard(s, t) {
     } else if (t.state === 'landed' && t.t > 0.7) t.alive = false;
     return;
   }
+  const floor = t.y0 ?? t.y;
   // Zones: warn, then hit whoever stands on that stretch of floor.
   const onFloor = hero.state !== 'dead' && hero.y < floor + 0.3;
   const inside = hero.x + HERO.w > t.x && hero.x < t.x + (t.w ?? 1);

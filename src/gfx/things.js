@@ -796,6 +796,294 @@ function exitDoor(open) {
   return b;
 }
 
+// ---- Boss duels: telegraphs, the consult window and the arena's show ----------------
+// Overlays are emissive white and tinted when drawn, so one model serves every colour.
+
+const WHITE = '#ffffff';
+
+/**
+ * Flat ring lying on the floor (y = 0) between radii r0 and r1, facing up.
+ * @param {MeshBuilder} b @param {number} r0 @param {number} r1 @param {string} color
+ * @param {number} [from] @param {number} [to] Angle range (radians).
+ * @param {number} [seg]
+ */
+function floorRing(b, r0, r1, color, from = 0, to = Math.PI * 2, seg = 48) {
+  b.grid(
+    seg,
+    1,
+    (u, v) => {
+      const a = from + (to - from) * u;
+      const r = v ? r1 : r0;
+      return { p: [Math.cos(a) * r, 0, Math.sin(a) * r], n: [0, 1, 0] };
+    },
+    rgb(color),
+    EMISSIVE,
+  );
+}
+
+/** A thin glowing ring on the floor, 1 tile across: halos, shock rings, markers. */
+function halo() {
+  const b = new MeshBuilder();
+  floorRing(b, 0.44, 0.5, WHITE);
+  return b;
+}
+
+/** A shock ring, 1 tile across and thin, to be scaled up as it sweeps the floor. */
+function shockRing() {
+  const b = new MeshBuilder();
+  floorRing(b, 0.47, 0.5, WHITE, 0, Math.PI * 2, 64);
+  return b;
+}
+
+/** One twelfth of the consult countdown ring (1 tile across), from angle 0. */
+function arc() {
+  const b = new MeshBuilder();
+  floorRing(b, 0.37, 0.5, WHITE, 0.05, (Math.PI * 2) / 12 - 0.05, 6);
+  return b;
+}
+
+/** Lock-on brackets around a 1 x 1 square on the floor, with a cross in the middle. */
+function reticle() {
+  const b = new MeshBuilder();
+  for (const sx of [-1, 1])
+    for (const sz of [-1, 1]) {
+      flatBox(b, [sx * 0.38, 0.006, sz * 0.5], [0.12, 0.006, 0.035], WHITE, EMISSIVE);
+      flatBox(b, [sx * 0.5, 0.006, sz * 0.38], [0.035, 0.006, 0.12], WHITE, EMISSIVE);
+    }
+  flatBox(b, [0, 0.006, 0], [0.09, 0.006, 0.02], WHITE, EMISSIVE);
+  flatBox(b, [0, 0.006, 0], [0.02, 0.006, 0.09], WHITE, EMISSIVE);
+  return b;
+}
+
+/**
+ * Corner brackets around a `w` x `h` frame standing in the screen plane, centred on
+ * the origin: the target over a director whose guard is down.
+ * @param {number} w @param {number} h
+ */
+function brackets(w, h) {
+  const b = new MeshBuilder();
+  const arm = 0.32,
+    th = 0.045;
+  for (const sx of [-1, 1])
+    for (const sy of [-1, 1]) {
+      flatBox(b, [sx * (w / 2 - arm / 2), sy * h * 0.5, 0], [arm / 2, th, 0.012], WHITE, EMISSIVE);
+      flatBox(b, [sx * w * 0.5, sy * (h / 2 - arm / 2), 0], [th, arm / 2, 0.012], WHITE, EMISSIVE);
+    }
+  return b;
+}
+
+/**
+ * A pool of stage light on the floor, 1 tile across (scaled to the zone): soft
+ * centre, brighter rim, so it reads as a spotlight rather than a painted mark.
+ */
+function lightPool() {
+  const b = new MeshBuilder();
+  floorRing(b, 0, 0.3, '#c8c8c8');
+  floorRing(b, 0.3, 0.44, '#9a9a9a');
+  floorRing(b, 0.44, 0.5, WHITE);
+  return b;
+}
+
+/**
+ * A live cable run on the floor, 1 tile long (scaled to the run) and 2.4 deep:
+ * three crackling zigzags.
+ */
+function bolts() {
+  const b = new MeshBuilder();
+  for (const z0 of [-0.75, 0, 0.75]) {
+    const n = 8;
+    for (let i = 0; i < n; i++) {
+      const xa = -0.5 + i / n,
+        xb = xa + 1 / n;
+      const za = z0 + (i % 2 ? 0.09 : -0.09),
+        zb = z0 + (i % 2 ? -0.09 : 0.09);
+      const len = Math.hypot(xb - xa, zb - za);
+      posed(b, rotY(-Math.atan2(zb - za, xb - xa)), [(xa + xb) / 2, 0.008, (za + zb) / 2], () =>
+        flatBox(b, [0, 0, 0], [len / 2 + 0.01, 0.006, 0.022], WHITE, EMISSIVE),
+      );
+    }
+  }
+  return b;
+}
+
+/**
+ * 5 x 7 pixel font of the arena signs (rows top to bottom). É keeps its accent
+ * in the two top rows over a shorter E.
+ * @type {Record<string, string[]>}
+ */
+const FONT = {
+  A: ['.###.', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
+  C: ['.###.', '#...#', '#....', '#....', '#....', '#...#', '.###.'],
+  D: ['####.', '#...#', '#...#', '#...#', '#...#', '#...#', '####.'],
+  E: ['#####', '#....', '#....', '####.', '#....', '#....', '#####'],
+  É: ['...#.', '..#..', '#####', '#....', '####.', '#....', '#####'],
+  F: ['#####', '#....', '#....', '####.', '#....', '#....', '#....'],
+  G: ['.###.', '#...#', '#....', '#.###', '#...#', '#...#', '.###.'],
+  H: ['#...#', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
+  I: ['.###.', '..#..', '..#..', '..#..', '..#..', '..#..', '.###.'],
+  J: ['..###', '...#.', '...#.', '...#.', '#..#.', '#..#.', '.##..'],
+  L: ['#....', '#....', '#....', '#....', '#....', '#....', '#####'],
+  N: ['#...#', '#...#', '##..#', '#.#.#', '#..##', '#...#', '#...#'],
+  O: ['.###.', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
+  P: ['####.', '#...#', '#...#', '####.', '#....', '#....', '#....'],
+  Q: ['.###.', '#...#', '#...#', '#...#', '#.#.#', '#..#.', '.##.#'],
+  R: ['####.', '#...#', '#...#', '####.', '#.#..', '#..#.', '#...#'],
+  S: ['.####', '#....', '#....', '.###.', '....#', '....#', '####.'],
+  T: ['#####', '..#..', '..#..', '..#..', '..#..', '..#..', '..#..'],
+  U: ['#...#', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
+  V: ['#...#', '#...#', '#...#', '#...#', '#...#', '.#.#.', '..#..'],
+  B: ['####.', '#...#', '#...#', '####.', '#...#', '#...#', '####.'],
+  K: ['#...#', '#..#.', '#.#..', '##...', '#.#..', '#..#.', '#...#'],
+  M: ['#...#', '##.##', '#.#.#', '#.#.#', '#...#', '#...#', '#...#'],
+  W: ['#...#', '#...#', '#...#', '#.#.#', '#.#.#', '#.#.#', '.#.#.'],
+  '&': ['.##..', '#..#.', '#.#..', '.#...', '#.#.#', '#..#.', '.##.#'],
+  '!': ['..#..', '..#..', '..#..', '..#..', '..#..', '.....', '..#..'],
+};
+
+/**
+ * A line of sign text centred on x = 0, bottom at y = `y`, facing +z: square LEDs,
+ * or round bulbs for a show marquee. Emissive white, tinted when drawn.
+ * @param {string} text @param {number} px Pixel pitch. @param {number} y @param {number} z
+ * @param {boolean} [bulbs]
+ */
+function signText(text, px, y, z, bulbs = false) {
+  const b = new MeshBuilder();
+  const width = text.length * 6 * px - px;
+  for (let i = 0; i < text.length; i++) {
+    const glyph = FONT[text[i]];
+    if (!glyph) continue;
+    const x0 = -width / 2 + i * 6 * px;
+    for (let r = 0; r < 7; r++)
+      for (let c = 0; c < 5; c++) {
+        if (glyph[r][c] !== '#') continue;
+        const p = [x0 + (c + 0.5) * px, y + (6.5 - r) * px, z];
+        if (bulbs)
+          b.ellipsoid(p, [px * 0.36, px * 0.36, px * 0.24], WHITE, { mat: EMISSIVE, seg: 3 });
+        else flatBox(b, p, [px * 0.4, px * 0.4, 0.006], WHITE, EMISSIVE);
+      }
+  }
+  return b;
+}
+
+/** Julien's supervision display: half width and height (7.6 x 1.8), origin at the bottom centre. */
+const SIGN_HW = 3.8,
+  SIGN_H = 1.8;
+
+/**
+ * Julien's supervision display, hung from the ceiling on two rods: dark glass and
+ * a thin lit bezel (the status LEDs and the text are drawn on top of it).
+ */
+function nocSign() {
+  const b = new MeshBuilder();
+  rb(b, [0, SIGN_H / 2, -0.06], [SIGN_HW, SIGN_H / 2, 0.06], 0.04, '#141c2b', GLOSSY, 3);
+  rb(
+    b,
+    [0, SIGN_H / 2, -0.005],
+    [SIGN_HW - 0.08, SIGN_H / 2 - 0.08, 0.008],
+    0.01,
+    '#070b14',
+    GLOSSY,
+    2,
+  );
+  for (const y of [0.05, SIGN_H - 0.05])
+    flatBox(b, [0, y, 0.004], [SIGN_HW - 0.12, 0.008, 0.004], '#3fd6ff', EMISSIVE);
+  for (const x of [-SIGN_HW + 0.9, SIGN_HW - 0.9])
+    rb(b, [x, SIGN_H + 1.3, -0.06], [0.025, 1.3, 0.025], 0.02, ALU, GLOSSY, 3);
+  return b;
+}
+
+/** The status LEDs along the bottom of Julien's display (tinted per phase). */
+function nocLeds() {
+  const b = new MeshBuilder();
+  for (let i = 0; i < 24; i++)
+    flatBox(b, [-SIGN_HW + 0.35 + i * 0.31, 0.15, 0.006], [0.05, 0.025, 0.004], WHITE, EMISSIVE);
+  return b;
+}
+
+/** Rodolphe's stage apron: 16 tiles wide from x = 0, 0.9 high, top at y = 0. */
+const APRON_W = 16,
+  APRON_H = 0.9;
+
+/**
+ * The LED fascia across the front of Rodolphe's stage: a navy board between two
+ * gold trims, facing the audience (the bulb text is drawn on top of it).
+ */
+function fascia() {
+  const b = new MeshBuilder();
+  const cx = APRON_W / 2;
+  rb(b, [cx, -APRON_H / 2, -0.02], [cx, APRON_H / 2, 0.02], 0.015, '#151a3d', MATTE, 2);
+  for (const y of [-0.05, -APRON_H + 0.05])
+    rb(b, [cx, y, 0.012], [cx, 0.035, 0.012], 0.01, '#d9a930', GLOSSY, 2);
+  return b;
+}
+
+/**
+ * Footlights along the front edge of Rodolphe's stage, 16 tiles from x = 0: every
+ * other bulb (`odd` picks the other half), with the dark housings on the even set.
+ * @param {number} odd
+ */
+function footlights(odd) {
+  const b = new MeshBuilder();
+  for (let i = 0; i < 32; i++) {
+    const x = 0.25 + i * 0.5;
+    if (!odd && i % 2 === 0)
+      rb(b, [x + 0.25, 0.03, 0], [0.24, 0.03, 0.06], 0.02, GRAPHITE, GLOSSY, 2);
+    if (i % 2 === odd)
+      b.ellipsoid([x, 0.07, 0.015], [0.06, 0.05, 0.045], WHITE, { mat: EMISSIVE, seg: 3 });
+  }
+  return b;
+}
+
+/** Captions of the arena signs, as the duel goes. */
+export const SIGN_TEXT = {
+  ts: 'TECHNOLOGIES & SERVICES',
+  backup: 'SITE DE SECOURS',
+  valid: 'DOSSIER VALIDÉ',
+  signed: 'ENVELOPPE SIGNÉE',
+  rodolphe: 'RODOLPHE',
+  west: 'RÉGION OUEST',
+  tour: 'TOURNÉE RÉGIONALE',
+  finale: 'GRAND FINAL',
+  energy: 'QUELLE ÉNERGIE !',
+};
+
+/** @param {WebGL2RenderingContext} gl */
+function bossModels(gl) {
+  /** @param {MeshBuilder} b */
+  const mesh = (b) => new Mesh(gl, b.build());
+  /** Julien's captions: small LEDs under his name. @param {string} text */
+  const led = (text) => mesh(signText(text, 0.05, 0.25, 0.012));
+  /** Rodolphe's captions: bulbs on the stage apron. @param {string} text */
+  const bulbs = (text) => mesh(signText(text, 0.1, -APRON_H / 2 - 0.35, 0.04, true));
+  return {
+    halo: mesh(halo()),
+    shock: mesh(shockRing()),
+    arc: mesh(arc()),
+    reticle: mesh(reticle()),
+    brackets: mesh(brackets(1.5, 2.6)),
+    pool: mesh(lightPool()),
+    bolts: mesh(bolts()),
+    nocSign: mesh(nocSign()),
+    nocLeds: mesh(nocLeds()),
+    nocName: mesh(signText('JULIEN', 0.12, 0.76, 0.012)),
+    fascia: mesh(fascia()),
+    footA: mesh(footlights(0)),
+    footB: mesh(footlights(1)),
+    caption: {
+      ts: led(SIGN_TEXT.ts),
+      backup: led(SIGN_TEXT.backup),
+      valid: led(SIGN_TEXT.valid),
+      signed: led(SIGN_TEXT.signed),
+      rodolphe: bulbs(SIGN_TEXT.rodolphe),
+      west: bulbs(SIGN_TEXT.west),
+      tour: bulbs(SIGN_TEXT.tour),
+      finale: bulbs(SIGN_TEXT.finale),
+      energy: bulbs(SIGN_TEXT.energy),
+      signedShow: bulbs(SIGN_TEXT.signed),
+    },
+  };
+}
+
 /**
  * @param {WebGL2RenderingContext} gl
  */
@@ -822,5 +1110,6 @@ export function buildThings(gl) {
     concert: mesh(concertTickets()),
     valve: mesh(valve(false)),
     valveOn: mesh(valve(true)),
+    boss: bossModels(gl),
   };
 }
