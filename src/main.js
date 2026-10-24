@@ -6,7 +6,7 @@ import { Particles } from './app/fx.js';
 import { Hud } from './app/hud.js';
 import { Input } from './app/input.js';
 import { clearFloor, renderBonus, renderCast, renderTrophies } from './app/menus.js';
-import { applyPrefs, prefs, setupOptions } from './app/options.js';
+import { applyPrefs, prefs, reducedMotion, setupOptions } from './app/options.js';
 import { load, store } from './app/storage.js';
 import { DynamicResolution, bossLights, fightFocus } from './app/staging.js';
 import { Trophies } from './app/trophies.js';
@@ -103,6 +103,19 @@ const OVERLAYS = /** @type {const} */ ([
   'cast',
   'posters',
 ]);
+/** Where focus lands when a screen opens, so keyboards, pads and screen readers start there. */
+const FIRST_FOCUS = /** @type {Partial<Record<Screen, string>>} */ ({
+  title: 'play',
+  gameover: 'goResume',
+  pause: 'resume',
+  options: 'volMusic',
+  trophies: 'trophiesClose',
+  cast: 'castClose',
+  posters: 'postersClose',
+  credits: 'creditsClose',
+  reading: 'readerClose',
+  talk: 'talkNext',
+});
 /** @param {Screen} next */
 function show(next) {
   screen = next;
@@ -110,13 +123,11 @@ function show(next) {
   // Focus never lingers on a hidden screen's button: Enter or Space would press it.
   /** @type {HTMLElement | null} */ (document.activeElement)?.blur();
   for (const id of OVERLAYS) $(id).hidden = (id === 'reader' ? 'reading' : id) !== next;
+  $('loading').setAttribute('aria-hidden', String(next !== 'loading'));
   input.clear();
-  if (next === 'title') $('play').focus();
-  if (next === 'won') $($('next').hidden ? 'menu' : 'next').focus();
-  if (next === 'gameover') $('goResume').focus();
-  if (next === 'pause') $('resume').focus();
-  if (next === 'posters') $('postersClose').focus();
-  if (next === 'cast') $('castClose').focus();
+  const first = next === 'won' ? ($('next').hidden ? 'menu' : 'next') : FIRST_FOCUS[next];
+  // Long lists (cast, trophies) stay scrolled to the top.
+  if (first) $(first).focus({ preventScroll: true });
 }
 
 /** Little lines shown while a stage loads. */
@@ -173,13 +184,13 @@ async function beginStage(i, before = []) {
   banner.classList.remove('show');
   void banner.offsetWidth;
   banner.classList.add('show');
-  audio.music(level.music);
-  // A quiet bed of room sound under the music: office hum, servers, wind…
-  audio.ambience(level.id === 'copil' ? 'copil' : level.theme);
+  // The stage's music and a quiet bed of room sound under it: office hum, servers, wind…
+  audio.stage(level);
   setIntensity(0.2);
-  // While the intro plays, the camera glides from the exit back to the start.
-  flyover = { t: 0, from: Math.max(sim.hero.x, sim.w - 12) };
-  camera.snap(flyover.from, 6);
+  // While the intro plays, the camera glides from the exit back to the start
+  // (unless the system asks for less motion).
+  flyover = reducedMotion ? null : { t: 0, from: Math.max(sim.hero.x, sim.w - 12) };
+  if (flyover) camera.snap(flyover.from, 6);
   talk([...before, ...level.intro], () => {
     flyover = null;
     show('play');
@@ -228,13 +239,27 @@ function bubbleAnchor(who) {
 }
 
 // ---- Title, options, menus -----------------------------------------------------
-for (const card of document.querySelectorAll('.hero-card')) {
+const heroCards = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('.hero-card')]);
+/** Radio group: only the chosen hero is in the tab order. */
+function markHero() {
+  for (const c of heroCards) {
+    c.setAttribute('aria-checked', String(c.dataset.hero === heroId));
+    c.tabIndex = c.dataset.hero === heroId ? 0 : -1;
+  }
+}
+for (const card of heroCards) {
   card.addEventListener('click', () => {
-    heroId = /** @type {'kevin'|'charline'} */ (/** @type {HTMLElement} */ (card).dataset.hero);
-    for (const c of document.querySelectorAll('.hero-card'))
-      c.setAttribute('aria-checked', String(c === card));
+    heroId = /** @type {'kevin'|'charline'} */ (card.dataset.hero);
+    markHero();
     audio.sfx('select');
     loadStage(stage).then(showcase);
+  });
+  // Left and right switch heroes, like any radio group.
+  card.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const other = heroCards[1 - heroCards.indexOf(card)];
+    other.click();
+    other.focus();
   });
 }
 
@@ -262,8 +287,7 @@ $('dailyBtn').onclick = () => {
   challenge = today();
   updateContinue();
   heroId = challenge.hero;
-  for (const c of document.querySelectorAll('.hero-card'))
-    c.setAttribute('aria-checked', String(/** @type {HTMLElement} */ (c).dataset.hero === heroId));
+  markHero();
   audio.sfx('confirm');
   beginStage(challenge.stage);
 };
@@ -299,7 +323,7 @@ $('resume').onclick = () => {
   show('play');
 };
 $('goResume').onclick = () => {
-  audio.music(level.music);
+  audio.stage(level);
   show('play');
 };
 $('quit').onclick = $('menu').onclick = $('goMenu').onclick = $('creditsClose').onclick = toMenu;
@@ -323,6 +347,8 @@ const syncMute = () => {
 muteBtn.onclick = () => {
   audio.setMuted(!audio.muted);
   syncMute();
+  // In play, Space and Enter belong to the hero, not to this button.
+  if (screen === 'play') muteBtn.blur();
 };
 syncMute();
 const refreshOptions = setupOptions(audio, input, () => (sim.assist = prefs.assist && !challenge));
@@ -690,7 +716,7 @@ function onEvent(e) {
       say(boss, 'consult');
       break;
     case 'bossDone':
-      audio.music(level.music);
+      audio.stage(level);
       setIntensity(0.3);
       pending = { lines: level.outro, then: () => show('play') };
       break;
@@ -767,16 +793,16 @@ function flyoverFocus(dt) {
 
 /**
  * Menus with keyboard and gamepad: up/down move between buttons, confirm presses the
- * focused one, Escape (or Start) backs out. Returns true when it handled the input.
+ * focused one, Escape (or Start, or B) backs out. Returns true when it handled the input.
  */
 function menuInput() {
   const overlay = screen === 'title' ? $('title') : screen === 'reading' ? $('reader') : $(screen);
   if (!overlay) return false;
-  if (input.pressed('pause')) {
+  if (input.pressed('pause') || input.pressed('back')) {
     if (screen === 'options') closeOptions();
     else if (screen === 'trophies' || screen === 'cast') show('title');
     else if (screen === 'posters') show('cast');
-    else if (screen === 'credits') toMenu();
+    else if (screen === 'credits' || screen === 'gameover' || screen === 'won') toMenu();
     else return false;
     return true;
   }
@@ -824,10 +850,10 @@ function frame(now) {
         acc -= DT;
       }
       if (gameOverTimer > 0 && (gameOverTimer -= dt) <= 0) {
-        // After a few game overs, point gently at the relaxed mode.
+        // After a couple of game overs, point gently at the relaxed mode.
         gameOvers++;
         $('gameoverText').textContent =
-          gameOvers >= 3 && !prefs.assist && !challenge
+          gameOvers >= 2 && !prefs.assist && !challenge
             ? 'Pas de panique : dans Options, le mode détente retire la perte de cœurs. Ta progression jusqu’au dernier badge est gardée.'
             : 'Un café, une respiration, et on y retourne : ta progression jusqu’au dernier badge est gardée.';
         setIntensity(0.2);
@@ -869,7 +895,11 @@ function frame(now) {
     }
   } else {
     acc = 0;
-    if ((screen === 'pause' || screen === 'reading') && input.pressed('pause')) show('play');
+    if (
+      (screen === 'pause' || screen === 'reading') &&
+      (input.pressed('pause') || input.pressed('back'))
+    )
+      show('play');
     else if (screen !== 'talk' && menuInput()) {
       /* handled */
     } else if (screen === 'title' && input.pressed('confirm')) startFrom(0);

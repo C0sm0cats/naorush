@@ -2,6 +2,7 @@ import { CAST } from '../data/cast.js';
 import { load, store } from './storage.js';
 import { POSTER_HINTS, posterTitle } from '../data/inetum.js';
 import { HERO } from '../game/sim.js';
+import { prefs } from './options.js';
 
 /** @param {string} id */
 const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
@@ -66,13 +67,17 @@ export class Hud {
   clearToast() {
     this.toastTime = 0;
     this.toastEl.classList.remove('show');
+    document.body.style.setProperty('--toast-h', '0px');
   }
 
   /** @param {string} text */
   toast(text) {
     this.toastEl.textContent = text;
     this.toastEl.classList.add('show');
-    this.toastTime = 2.8;
+    // Long tips stay long enough to read (about 14 characters a second), slower games longer.
+    this.toastTime = Math.max(2.8, text.length / 14) / prefs.speed;
+    // On touch screens the hint sits under the toast: tell it how far down to go.
+    document.body.style.setProperty('--toast-h', `${this.toastEl.offsetHeight + 8}px`);
   }
 
   /** Stage-specific wording. @param {{keyLabel: string, bottle: boolean}} stage */
@@ -110,6 +115,8 @@ export class Hud {
     const max = sim.maxHearts;
     if (sim.hero.hearts !== this.lastHearts) {
       this.lastHearts = sim.hero.hearts;
+      const n = sim.hero.hearts;
+      this.hearts.setAttribute('aria-label', `${n} ${n > 1 ? 'cœurs' : 'cœur'} sur ${max}`);
       this.hearts.classList.toggle('low', sim.hero.hearts === 1 && max > 1);
       this.hearts.replaceChildren(
         ...Array.from({ length: max }, (_, i) => {
@@ -148,7 +155,7 @@ export class Hud {
       this.bossName.textContent = `${CAST[sim.boss.id].name} · ${CAST[sim.boss.id].title}`;
       this.bossHp.style.width = `${(100 * (boss?.hp ?? 0)) / sim.boss.hp}%`;
     }
-    if (this.toastTime > 0 && (this.toastTime -= dt) <= 0) this.toastEl.classList.remove('show');
+    if (this.toastTime > 0 && (this.toastTime -= dt) <= 0) this.clearToast();
     // Contextual hint: read a whiteboard, or what a poster means in play.
     const hint = near.tip
       ? near.tip

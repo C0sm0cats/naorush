@@ -75,14 +75,24 @@ export class Input {
         done(e.code === 'Escape' ? '' : e.code);
         return;
       }
+      document.body.classList.remove('padnav');
       const k = this.actionFor(e.code);
       if (!k) return;
-      // On a focused menu button, Enter and Space press the button as usual.
+      // On a focused menu button, Enter and Space press the button as usual
+      // (in play they stay game keys, even if the mute button kept focus).
       const target = /** @type {HTMLElement | null} */ (e.target);
-      if ((k === 'confirm' || k === 'jump') && target?.closest?.('button, input, select, summary'))
+      if (
+        (k === 'confirm' || k === 'jump') &&
+        document.body.dataset.screen !== 'play' &&
+        target?.closest?.('button, input, select, summary')
+      ) {
+        // A held key presses a button once, not on every auto-repeat.
+        if (e.repeat) e.preventDefault();
         return;
-      // Sliders and lists keep their own arrow keys.
+      }
+      // Sliders keep their left/right arrows, lists all four.
       if ((k === 'left' || k === 'right') && target?.closest?.('input, select')) return;
+      if ((k === 'up' || k === 'down') && target?.closest?.('select')) return;
       e.preventDefault();
       if (!e.repeat) this.taps.add(k);
       this.held.add(k);
@@ -92,6 +102,8 @@ export class Input {
       if (k) this.held.delete(k);
     });
     addEventListener('blur', () => this.held.clear());
+    // The gamepad focus ring only shows until the mouse or a finger takes over.
+    addEventListener('pointerdown', () => document.body.classList.remove('padnav'));
     this.bindTouch();
   }
 
@@ -172,7 +184,7 @@ export class Input {
     }
   }
 
-  /** Standard-mapping gamepads: stick or d-pad, A jump, X fire, Start pause. */
+  /** Standard-mapping gamepads: stick or d-pad, A jump, X or Y fire, B back, Start pause. */
   pollGamepad() {
     const pad = [...(navigator.getGamepads?.() ?? [])].find(Boolean);
     if (!pad) return;
@@ -185,13 +197,18 @@ export class Input {
     if (ay < -0.5 || b(12)) now.add('up');
     if (ay > 0.5 || b(13)) now.add('down');
     if (b(0)) now.add('jump');
-    if (b(2) || b(1)) now.add('fire');
+    if (b(2) || b(3)) now.add('fire');
+    if (b(1)) now.add('back');
     if (b(9)) now.add('pause');
     if (b(0)) now.add('confirm');
     // Buttons still held across a screen change are ignored until released.
     for (const k of this.padBlocked) if (!now.has(k)) this.padBlocked.delete(k);
     for (const k of this.padBlocked) now.delete(k);
-    for (const k of now) if (!this.padHeld.has(k)) this.taps.add(k);
+    for (const k of now)
+      if (!this.padHeld.has(k)) {
+        this.taps.add(k);
+        document.body.classList.add('padnav');
+      }
     for (const k of this.padHeld) if (!now.has(k)) this.held.delete(k);
     for (const k of now) this.held.add(k);
     this.padHeld = now;

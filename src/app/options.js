@@ -13,10 +13,13 @@ const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 /** @param {string} id */
 const field = (id) => /** @type {HTMLInputElement} */ ($(id));
 
+/** The system asks for less motion: no shake, flashes or camera glides by default. */
+export const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 export const prefs = {
-  shake: true,
-  flash: true,
-  contrast: false,
+  shake: !reducedMotion,
+  flash: !reducedMotion,
+  contrast: matchMedia('(prefers-contrast: more)').matches,
   vibrate: true,
   assist: false,
   pad: 'm',

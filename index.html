@@ -34,12 +34,14 @@
 
     <header class="hud">
       <div class="hud-left">
-        <div class="hearts" id="hearts" aria-label="Cœurs"></div>
+        <div class="hearts" id="hearts" role="img" aria-label="Cœurs"></div>
         <div class="pill" title="Tickets Swile">
-          <span class="icon ticket"></span><b id="tickets">0</b>
+          <span class="icon ticket"></span><span class="sr-only">Tickets Swile :</span
+          ><b id="tickets">0</b>
         </div>
         <div class="pill" title="Comptes rendus">
-          <span class="icon cr"></span><b id="ammo">0</b>
+          <span class="icon cr"></span><span class="sr-only">Comptes rendus :</span
+          ><b id="ammo">0</b>
         </div>
         <div class="pill key" id="key" title="Objet clé de l’étape"></div>
       </div>
@@ -74,7 +76,13 @@
             <b>Kévin</b><small>Directeur de Projets</small
             ><em>4 cœurs · s’accroche plus haut · ses CR cassent les cartons</em>
           </button>
-          <button class="hero-card pink" data-hero="charline" role="radio" aria-checked="false">
+          <button
+            class="hero-card pink"
+            data-hero="charline"
+            role="radio"
+            aria-checked="false"
+            tabindex="-1"
+          >
             <b>Charline</b><small>Business Manager</small
             ><em>Plus rapide · double saut · CR plus rapides</em>
           </button>
@@ -97,14 +105,22 @@
             <li><kbd>↓</kbd> lâcher le rebord</li>
             <li><kbd>X</kbd> lancer un compte rendu</li>
             <li><kbd>Échap</kbd> pause</li>
+            <li>Mode détente et vitesse réduite dans Options</li>
           </ul>
         </details>
       </div>
     </section>
 
-    <section class="screen" id="pause" hidden>
+    <section
+      class="screen"
+      id="pause"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="pauseTitle"
+      hidden
+    >
       <div class="card small">
-        <h2>Pause café</h2>
+        <h2 id="pauseTitle">Pause café</h2>
         <p class="lead" id="pauseInfo"></p>
         <p class="keys-hint">
           <kbd>←</kbd><kbd>→</kbd> courir · <kbd>Espace</kbd> sauter · <kbd>↑</kbd> grimper ·
@@ -117,21 +133,22 @@
       </div>
     </section>
 
-    <section class="screen" id="options" hidden>
+    <section
+      class="screen"
+      id="options"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="optionsTitle"
+      hidden
+    >
       <div class="card options">
-        <h2>Options</h2>
+        <h2 id="optionsTitle">Options</h2>
         <label>Musique <input type="range" id="volMusic" min="0" max="1" step="0.05" /></label>
         <label>Bruitages <input type="range" id="volSfx" min="0" max="1" step="0.05" /></label>
         <label class="check"
           ><input type="checkbox" id="optAssist" /> Mode détente : les obstacles ne coûtent pas de
           cœur</label
         >
-        <label class="check"><input type="checkbox" id="optShake" /> Secousses de l’écran</label>
-        <label class="check"
-          ><input type="checkbox" id="optFlash" /> Flashs rouges quand on est touché</label
-        >
-        <label class="check"><input type="checkbox" id="optContrast" /> Contraste élevé</label>
-        <label class="check"><input type="checkbox" id="optVibrate" /> Vibrations (mobile)</label>
         <label
           >Vitesse du jeu
           <select id="optSpeed">
@@ -140,6 +157,12 @@
             <option value="0.65">Très réduite (65 %)</option>
           </select></label
         >
+        <label class="check"><input type="checkbox" id="optShake" /> Secousses de l’écran</label>
+        <label class="check"
+          ><input type="checkbox" id="optFlash" /> Flashs rouges quand on est touché</label
+        >
+        <label class="check"><input type="checkbox" id="optContrast" /> Contraste élevé</label>
+        <label class="check"><input type="checkbox" id="optVibrate" /> Vibrations (mobile)</label>
         <label
           >Boutons tactiles
           <select id="optPad">
@@ -157,10 +180,17 @@
       </div>
     </section>
 
-    <section class="screen" id="gameover" hidden>
+    <section
+      class="screen"
+      id="gameover"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="gameoverTitle"
+      hidden
+    >
       <div class="card small">
         <p class="kicker">Plus de cœurs</p>
-        <h2>Pause forcée</h2>
+        <h2 id="gameoverTitle">Pause forcée</h2>
         <p class="lead" id="gameoverText">
           Un café, une respiration, et on y retourne : ta progression jusqu’au dernier badge est
           gardée.
@@ -172,16 +202,30 @@
       </div>
     </section>
 
-    <section class="screen cast" id="cast" hidden>
+    <section
+      class="screen cast"
+      id="cast"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="castTitle"
+      hidden
+    >
       <div class="card">
-        <h2>Distribution</h2>
+        <h2 id="castTitle">Distribution</h2>
         <ul class="cast-list" id="castList"></ul>
         <button class="ghost" id="postersBtn">Voir les affiches</button>
         <button class="go" id="castClose">Fermer</button>
       </div>
     </section>
 
-    <section class="screen posters" id="posters" hidden>
+    <section
+      class="screen posters"
+      id="posters"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Affiches"
+      hidden
+    >
       <figure>
         <img id="posterImg" alt="" />
         <figcaption id="posterCaption"></figcaption>
@@ -193,15 +237,29 @@
       </div>
     </section>
 
-    <section class="screen" id="trophies" hidden>
+    <section
+      class="screen"
+      id="trophies"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="trophiesTitle"
+      hidden
+    >
       <div class="card">
-        <h2>Trophées</h2>
+        <h2 id="trophiesTitle">Trophées</h2>
         <ul class="trophy-list" id="trophyList"></ul>
         <button class="go" id="trophiesClose">Fermer</button>
       </div>
     </section>
 
-    <section class="screen credits" id="credits" hidden>
+    <section
+      class="screen credits"
+      id="credits"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Générique"
+      hidden
+    >
       <div class="roll" id="creditsRoll"></div>
       <div class="credits-actions">
         <button class="go" id="creditsShare">Partager mon score</button>
@@ -212,15 +270,23 @@
     <div class="bark" id="bark" aria-live="polite"></div>
     <div class="fade" id="fade"></div>
 
-    <section class="talk" id="talk" hidden>
+    <section class="talk" id="talk" role="dialog" aria-label="Dialogue" hidden>
       <div class="talk-box">
         <div class="talk-who" id="talkWho"><b id="talkName"></b><small id="talkTitle"></small></div>
-        <p id="talkText"></p>
+        <p id="talkText" aria-hidden="true"></p>
+        <p class="sr-only" id="talkLive" aria-live="polite"></p>
         <button class="talk-next" id="talkNext" aria-label="Suite">▶</button>
       </div>
     </section>
 
-    <section class="screen" id="won" hidden>
+    <section
+      class="screen"
+      id="won"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="wonTitle"
+      hidden
+    >
       <div class="card">
         <p class="kicker" id="wonKicker">Étape terminée</p>
         <h2 id="wonTitle">Bon de commande livré !</h2>
@@ -233,7 +299,14 @@
       </div>
     </section>
 
-    <section class="screen reader" id="reader" hidden>
+    <section
+      class="screen reader"
+      id="reader"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Tableau blanc"
+      hidden
+    >
       <img id="readerImg" alt="Tableau blanc" />
       <button class="go" id="readerClose">Fermer</button>
     </section>

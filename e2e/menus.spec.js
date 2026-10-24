@@ -183,3 +183,64 @@ test('poster gallery navigates and wraps', async ({ page, isMobile }) => {
   await page.keyboard.press('Escape');
   await expect(page.locator('body')).toHaveAttribute('data-screen', 'title');
 });
+
+test('after clicking mute, Space stays a game key', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'keyboard only');
+  await toPlay(page);
+  await page.locator('#muteBtn').click();
+  await expect(page.locator('#muteBtn')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#muteBtn')).not.toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(page.locator('#muteBtn')).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('options open focused, and arrows change a list without leaving it', async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, 'keyboard only');
+  await toTitle(page);
+  await openOptions(page);
+  await expect(page.locator('#volMusic')).toBeFocused();
+  await page.locator('#optSpeed').focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('#optSpeed')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('body')).toHaveAttribute('data-screen', 'title');
+});
+
+test('the hero cards behave as a radio group', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'keyboard only');
+  await toTitle(page);
+  const kevin = page.locator('.hero-card[data-hero="kevin"]');
+  const charline = page.locator('.hero-card[data-hero="charline"]');
+  await expect(charline).toHaveAttribute('tabindex', '-1');
+  await kevin.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(charline).toHaveAttribute('aria-checked', 'true');
+  await expect(charline).toBeFocused();
+  await expect(kevin).toHaveAttribute('tabindex', '-1');
+  await page.keyboard.press('ArrowLeft');
+  await expect(kevin).toHaveAttribute('aria-checked', 'true');
+});
+
+test('landscape phones keep every close button on screen', async ({ page }) => {
+  await page.setViewportSize({ width: 863, height: 360 });
+  await toTitle(page);
+  /** @param {string} id */
+  const inView = async (id) => {
+    const box = await page.locator(id).boundingBox();
+    expect(box && box.y >= 0 && box.y + box.height <= 360).toBe(true);
+  };
+  await openOptions(page);
+  await inView('#optionsClose');
+  await page.locator('#optionsClose').click();
+  await page.locator('#trophiesBtn').click();
+  await expect(page.locator('#trophiesClose')).toBeFocused();
+  await inView('#trophiesClose');
+  await page.locator('#trophiesClose').click();
+  await page.locator('#castBtn').click();
+  await page.locator('#postersBtn').click();
+  await expect(page.locator('#posterImg')).toHaveAttribute('src', /^data:image/);
+  for (const id of ['#posterPrev', '#postersClose', '#posterNext']) await inView(id);
+});

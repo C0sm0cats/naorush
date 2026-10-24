@@ -40,10 +40,13 @@ export class Dialogue {
     const line = this.lines[this.i];
     const id = this.castId(line.who);
     const who = id ? CAST[id] : null;
-    $('talkName').textContent = who?.name ?? (line.who === 'narrator' ? 'NAO Rush' : 'Astuce');
+    const name = who?.name ?? (line.who === 'narrator' ? 'NAO Rush' : 'Astuce');
+    $('talkName').textContent = name;
     $('talkTitle').textContent = who?.title ?? '';
     $('talkWho').dataset.who = id || line.who;
     $('talkText').textContent = '';
+    // Screen readers get the whole line at once, not the typewriter.
+    $('talkLive').textContent = `${name} : ${line.text}`;
   }
 
   /** Completes the current line, or moves to the next one. */

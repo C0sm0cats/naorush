@@ -33,6 +33,15 @@
 [hidden] {
   display: none !important;
 }
+/* Read by screen readers, invisible on screen. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 html,
 body {
   margin: 0;
@@ -225,8 +234,8 @@ body:not([data-screen='play']) .touch {
   pointer-events: auto;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border: 0;
   border-radius: 50%;
   background: var(--glass-grad);
@@ -281,7 +290,7 @@ body:not([data-screen='play']) .touch {
   display: block;
   margin-bottom: 2px;
   color: var(--lime);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 1.6px;
   text-transform: uppercase;
@@ -293,7 +302,7 @@ body:not([data-screen='play']) .touch {
 .toast {
   position: fixed;
   left: 50%;
-  top: 64px;
+  top: calc(max(12px, env(safe-area-inset-top)) + 54px);
   transform: translate(-50%, -10px);
   opacity: 0;
   max-width: min(560px, 90vw);
@@ -316,7 +325,7 @@ body:not([data-screen='play']) .touch {
   transform: translate(-50%, 0);
 }
 body.boss .toast {
-  top: 112px;
+  top: calc(max(12px, env(safe-area-inset-top)) + 102px);
 }
 
 /* Screens */
@@ -326,7 +335,8 @@ body.boss .toast {
   display: grid;
   place-items: center;
   align-items: safe center;
-  padding: 18px;
+  padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right))
+    max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
   background: linear-gradient(90deg, #0e1424e6, #0e142466 70%, transparent);
   overflow: auto;
 }
@@ -337,7 +347,7 @@ body.boss .toast {
 }
 .title {
   place-items: center start;
-  padding-left: max(18px, 6vw);
+  padding-left: max(18px, 6vw, env(safe-area-inset-left));
 }
 body:not([data-screen='title']) .title {
   display: none;
@@ -376,7 +386,7 @@ body:not([data-screen='title']) .title {
   margin: 0;
   color: var(--soft);
   font-weight: 900;
-  font-size: 11.5px;
+  font-size: 12px;
   letter-spacing: 2px;
   text-transform: uppercase;
 }
@@ -451,11 +461,11 @@ h2 {
     0 4px 0 var(--deep);
 }
 .hero-card.pink {
-  --accent: var(--sky);
+  --accent: #fff;
   --deep: #8f1a4a;
   background:
     radial-gradient(circle at 100% 0, #ffffff2e, transparent 55%),
-    linear-gradient(160deg, #f0558f, #d6336c 55%, var(--deep));
+    linear-gradient(160deg, #c42a66, #b0235a 55%, var(--deep));
 }
 .hero-card::before {
   content: '';
@@ -489,8 +499,8 @@ h2 {
   font-weight: 900;
   box-shadow: 0 2px 0 var(--lime-edge);
 }
+/* The ring and tick mark the chosen hero; the other stays readable. */
 .hero-card[aria-checked='false'] {
-  opacity: 0.62;
   filter: saturate(0.7);
 }
 .hero-card b {
@@ -499,7 +509,7 @@ h2 {
   letter-spacing: -0.4px;
 }
 .hero-card small {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 1px;
   text-transform: uppercase;
@@ -522,11 +532,13 @@ h2 {
 .go,
 .ghost {
   width: 100%;
+  min-height: 44px;
   padding: 15px;
   border: 0;
   border-radius: 16px;
-  font: 900 18px system-ui;
   font-family: inherit;
+  font-size: 18px;
+  font-weight: 900;
   letter-spacing: 0.2px;
   cursor: pointer;
 }
@@ -576,7 +588,8 @@ h2 {
 .ghost:focus-visible,
 .hero-card:focus-visible,
 .keyrow:focus-visible,
-.talk-next:focus-visible {
+.talk-next:focus-visible,
+.padnav :is(.go, .ghost, .hero-card, .keyrow, .talk-next, .icon-btn):focus {
   outline: 3px solid var(--pink);
   outline-offset: 3px;
 }
@@ -618,6 +631,7 @@ h2 {
   color: #3a4560;
 }
 .controls summary {
+  padding: 12px 0;
   cursor: pointer;
   font-weight: 800;
   font-size: 14px;
@@ -630,7 +644,7 @@ h2 {
 .controls ul {
   display: grid;
   gap: 7px;
-  margin: 10px 0 0;
+  margin: 0;
   padding: 12px 14px;
   border-radius: 14px;
   background: #141a2c0a;
@@ -645,8 +659,9 @@ kbd {
   border-radius: 7px;
   background: linear-gradient(180deg, #2b3a5e, var(--ink-2));
   color: #fff;
-  font: 800 12.5px system-ui;
   font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
   text-align: center;
   box-shadow: 0 2px 0 var(--ink);
 }
@@ -795,7 +810,7 @@ body[data-screen='loading'] .stage {
   font-weight: 700;
 }
 .talk-who[data-who='charline'] {
-  background: linear-gradient(180deg, #f0558f, #d6336c);
+  background: linear-gradient(180deg, #c42a66, #b8255d);
 }
 .talk-who[data-who='techServicesDirector'] {
   background: var(--ink-2);
@@ -805,7 +820,7 @@ body[data-screen='loading'] .stage {
     0 4px 10px #0003;
 }
 .talk-who[data-who='regionalDirector'] {
-  background: linear-gradient(180deg, #db7640, #c4622d);
+  background: linear-gradient(180deg, #b0532a, #a84e22);
 }
 .talk-who[data-who='hint'] {
   background: var(--lime);
@@ -832,8 +847,8 @@ body[data-screen='loading'] .stage {
   bottom: 14px;
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   padding: 0 0 0 2px;
   border: 0;
   border-radius: 50%;
@@ -871,7 +886,7 @@ body[data-screen='loading'] .stage {
   border-radius: 999px;
   background: var(--glass-grad);
   box-shadow: inset 0 0 0 1px #ff4f9a80;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 1.4px;
   text-transform: uppercase;
@@ -1021,8 +1036,17 @@ body:not([data-screen='play']) .bossbar {
 .options {
   display: grid;
   gap: 10px;
-  max-height: 92vh;
+  max-height: calc(100dvh - 36px);
   overflow: auto;
+}
+/* Close buttons stay in reach on short landscape screens. */
+#optionsClose,
+#trophiesClose,
+#castClose,
+.credits-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
 }
 .options h2 {
   margin-bottom: 4px;
@@ -1071,7 +1095,8 @@ body:not([data-screen='play']) .bossbar {
   color-scheme: light;
 }
 .options input:focus-visible,
-.options select:focus-visible {
+.options select:focus-visible,
+.padnav .options :is(input, select):focus {
   outline: 3px solid var(--pink);
   outline-offset: 2px;
 }
@@ -1094,6 +1119,7 @@ body:not([data-screen='play']) .bossbar {
   margin-bottom: 8px;
 }
 .keyrow {
+  min-height: 44px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1106,8 +1132,9 @@ body:not([data-screen='play']) .bossbar {
   box-shadow:
     inset 0 0 0 1.5px #141a2c1a,
     0 2px 0 #141a2c12;
-  font: 700 14px system-ui;
   font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
 }
 .keyrow kbd {
@@ -1157,7 +1184,7 @@ body:not([data-screen='play']) .bossbar {
 /* The credits leave room for the party on the right. */
 #credits {
   place-items: center start;
-  padding-left: max(18px, 6vw);
+  padding-left: max(18px, 6vw, env(safe-area-inset-left));
   background: linear-gradient(90deg, #0e1424ee, #0e142488 55%, transparent 80%);
   backdrop-filter: none;
 }
@@ -1206,7 +1233,7 @@ body:not([data-screen='play']) .bossbar {
   border-radius: 14px;
   background: #141a2c0a;
   box-shadow: inset 0 0 0 1.5px #141a2c12;
-  color: var(--soft);
+  color: var(--muted);
 }
 .trophy-list li::before {
   content: '?';
@@ -1249,7 +1276,7 @@ body:not([data-screen='play']) .bossbar {
 /* Cast: bios on the left, the whole cast in 3D on the right. */
 #cast {
   place-items: center start;
-  padding-left: max(18px, 4vw);
+  padding-left: max(18px, 4vw, env(safe-area-inset-left));
   background: linear-gradient(90deg, #0e1424dd, #0e142455 45%, transparent 70%);
   backdrop-filter: none;
 }
@@ -1306,7 +1333,8 @@ body:not([data-screen='play']) .bossbar {
 }
 .posters img {
   max-width: 92vw;
-  max-height: 76vh;
+  /* Leaves room for the caption and the buttons, even on landscape phones. */
+  max-height: min(76vh, calc(100dvh - 150px));
   border-radius: 12px;
   box-shadow:
     0 0 0 4px var(--paper),
@@ -1352,9 +1380,13 @@ body:not([data-screen='play']) .bossbar {
   .touch {
     display: flex;
   }
+  /* The hint sits under the HUD, and under the toast while one shows. */
   .hint {
     bottom: auto;
-    top: 60px;
+    top: calc(max(12px, env(safe-area-inset-top)) + 54px + var(--toast-h, 0px));
+  }
+  body.boss .hint {
+    top: calc(max(12px, env(safe-area-inset-top)) + 102px + var(--toast-h, 0px));
   }
 }
 .pad {
@@ -1366,6 +1398,10 @@ body:not([data-screen='play']) .bossbar {
 .touch .pad {
   touch-action: none;
 }
+/* A clear gap between the hands, so ▶ is never pressed for CR. */
+.touch .pad + .pad {
+  margin-left: 24px;
+}
 .touch button {
   width: 62px;
   height: 62px;
@@ -1373,8 +1409,9 @@ body:not([data-screen='play']) .bossbar {
   border-radius: 20px;
   background: linear-gradient(180deg, #2b3a5e99, #0e1424b3);
   color: #fff;
-  font: 900 18px system-ui;
   font-family: inherit;
+  font-size: 18px;
+  font-weight: 900;
   text-shadow: 0 1px 2px #0008;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -1523,8 +1560,11 @@ body[data-pad='l'] .touch .big {
     place-items: center;
     padding-left: 18px;
   }
+  #cast {
+    place-items: center;
+  }
   #cast .card {
-    width: min(440px, 62vw);
+    width: 100%;
     padding: 22px 14px 16px;
   }
   #cast .card::before {
@@ -1539,17 +1579,17 @@ body[data-pad='l'] .touch .big {
 /* Small screens: compact touch pads. */
 @media (max-width: 480px) {
   .touch button {
-    width: 52px;
-    height: 52px;
+    width: 48px;
+    height: 48px;
     border-radius: 16px;
     font-size: 16px;
   }
   .touch .big {
-    width: 72px;
-    height: 72px;
+    width: 68px;
+    height: 68px;
   }
   .pad {
-    gap: 7px;
+    gap: 6px;
   }
   .touch {
     padding-left: 10px;
@@ -1608,7 +1648,7 @@ body[data-pad='l'] .touch .big {
   }
   .title .card .kicker {
     padding: 3px 9px;
-    font-size: 10px;
+    font-size: 12px;
   }
   .title h1 {
     font-size: 34px;
@@ -1730,11 +1770,6 @@ body[data-pad='l'] .touch .big {
     height: 13px;
     clip-path: path('M7 13 L1 6.6 A3.6 3.6 0 0 1 7 2.2 A3.6 3.6 0 0 1 13 6.6 Z');
   }
-  .icon-btn {
-    width: 32px;
-    height: 32px;
-    font-size: 11px;
-  }
   .key:not(.have) {
     display: none;
   }
@@ -1750,9 +1785,6 @@ body[data-pad='l'] .touch .big {
   }
   .talk-who small {
     display: none;
-  }
-  .hero-card em {
-    font-size: 11px;
   }
   .hero-card small {
     letter-spacing: 0.4px;
@@ -1818,6 +1850,22 @@ body.contrast .bossbar b {
   outline: 2px solid #fff;
   backdrop-filter: none;
 }
+body.contrast .hero-card,
+body.contrast .talk-who {
+  background: #000;
+  color: #fff;
+  opacity: 1;
+  filter: none;
+}
+body.contrast .hero-card small,
+body.contrast .hint b {
+  color: #fff;
+}
+body.contrast .stage {
+  padding: 12px 20px;
+  border-radius: 16px;
+  background: #000e;
+}
 body.contrast .key.have {
   background: var(--gold);
   color: #000;
@@ -1840,4 +1888,16 @@ body[data-screen='options'] .bark,
 body[data-screen='gameover'] .bark,
 body[data-screen='won'] .bark {
   visibility: hidden;
+}
+
+/* Windows high contrast: keep every control outlined. */
+@media (forced-colors: active) {
+  .go,
+  .ghost,
+  .hero-card,
+  .keyrow,
+  .icon-btn,
+  .touch button {
+    border: 2px solid ButtonText;
+  }
 }

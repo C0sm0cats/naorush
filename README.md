@@ -48,8 +48,9 @@ Quand un directeur consulte PRIMO, sa garde tombe : c’est le moment de lui env
 | Sauter, s’accrocher à un rebord | Espace  | A            | SAUT   |
 | Grimper, lire un tableau blanc  | ↑       | Haut         | ▲      |
 | Lâcher le rebord                | ↓       | Bas          | ▼      |
-| Lancer un compte rendu          | X       | X ou B       | CR     |
+| Lancer un compte rendu          | X       | X ou Y       | CR     |
 | Pause                           | Échap   | Start        | ❚❚     |
+| Retour dans les menus           | Échap   | B            | Fermer |
 
 Badge aux bornes Chronotime : en cas de pépin, tu repars de là. Les ramettes de papier rechargent les comptes rendus, les cafés rendent un cœur. Chaque piège prévient (une secousse, un voyant, une goutte) et se répète à l’identique au deuxième essai. La progression est sauvegardée à chaque étape.
 
