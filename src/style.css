@@ -1201,3 +1201,9 @@ body[data-pad='l'] .touch .big {
   font-weight: 600;
   text-align: center;
 }
+.key {
+  max-width: 42vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

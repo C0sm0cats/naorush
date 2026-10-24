@@ -8,7 +8,7 @@ export const LCP7 = {
   music: 'office',
   name: 'Open space LCP7',
   subtitle: 'La Chapelle-sur-Erdre · lundi, 8 h 47',
-  keyLabel: 'BC',
+  keyLabel: 'Bon de commande',
   rooms: [
     'Bureau du Directeur de Projets',
     'Couloir des fauteuils',
