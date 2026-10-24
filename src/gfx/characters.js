@@ -37,7 +37,7 @@ import { MAT, rgb } from './voxels.js';
  * @property {string} [backpack] Backpack colour: straps over the shoulders, the pack on the back.
  * @property {string} [stripe] Sneaker side stripe colour (navy by default).
  *
- * @typedef {{mesh: Mesh, upright?: boolean}} Part
+ * @typedef {{mesh: Mesh, upright?: boolean, pivot?: number[]}} Part
  */
 
 // Joint positions (model space, feet at y = 0, facing +z).
@@ -47,6 +47,23 @@ const SHOULDER_Y = 0.48; // above the hip
 const SHOULDER_X = 0.235;
 const NECK_Y = 0.52;
 const EYE_Y = 0.27; // Eye centre, in head space.
+const FLIP_Y = 0.9; // Body centre a somersault turns around.
+
+/** Cat paw prints on the jacket: ring angle (0 = front), height, tilt. */
+const JACKET_PAWS = [
+  [-0.62, 0.1, 0.25],
+  [0.5, 0.2, -0.3],
+  [1.05, 0.08, 0.15],
+  [-1.05, 0.31, -0.2],
+  [0.92, 0.4, 0.35],
+  [-1.45, 0.14, 0.1],
+  [1.55, 0.27, -0.15],
+  [2.5, 0.2, 0.3],
+  [-2.55, 0.36, -0.25],
+  [3.05, 0.1, 0.1],
+];
+/** Back of the jacket hem that flares with movement: half-width around the back. */
+const TAILS_ARC = 1.25;
 
 /**
  * @param {string} hex
@@ -1324,19 +1341,7 @@ export function buildCharacter(gl, look) {
     if (!skirted) ell(b, [0, 0.03, 0], [0.17, 0.08, 0.108], look.legs, { seg: 8 });
     // Cat paw prints scattered over the jacket, clear of the V and the button line.
     if (look.paws)
-      for (const [a, y, tilt] of [
-        [-0.62, 0.1, 0.25],
-        [0.5, 0.2, -0.3],
-        [1.05, 0.08, 0.15],
-        [-1.05, 0.31, -0.2],
-        [0.92, 0.4, 0.35],
-        [-1.45, 0.14, 0.1],
-        [1.55, 0.27, -0.15],
-        [2.5, 0.2, 0.3],
-        [-2.55, 0.36, -0.25],
-        [3.05, 0.1, 0.1],
-      ])
-        pawPrint(b, J, a, y, 1.2, tilt, look.paws);
+      for (const [a, y, tilt] of JACKET_PAWS) pawPrint(b, J, a, y, 1.2, tilt, look.paws);
     loft(
       b,
       profile([
@@ -1347,6 +1352,31 @@ export function buildCharacter(gl, look) {
       { seg: 12, steps: 1 },
     );
   });
+
+  // Coat tails: the back of the jacket hem as its own layer, a hair outside the
+  // jacket, so it can flare out behind with movement (side vents open). The paw
+  // prints it covers are drawn on it too: they stay on the jacket.
+  const tailsTop = 0.15;
+  const tails = look.cardigan
+    ? null
+    : part(gl, (b) => {
+        const T = profile(jacketKeys.map(([y, rx, rz, ...k]) => [y, rx + 0.005, rz + 0.005, ...k]));
+        /** @param {number} a */
+        const behind = (a) => Math.abs((((a % TAU) + TAU) % TAU) - Math.PI) < TAILS_ARC - 0.12;
+        loft(b, T, look.jacket, {
+          seg: 18,
+          steps: 3,
+          t1: T.tAt(tailsTop),
+          arc: () => [Math.PI - TAILS_ARC, Math.PI + TAILS_ARC],
+        });
+        if (look.paws)
+          for (const [a, y, tilt] of JACKET_PAWS)
+            if (y + 0.04 < tailsTop && behind(a)) pawPrint(b, T, a, y, 1.2, tilt, look.paws);
+      });
+  if (tails) {
+    const r = J.row(J.tAt(tailsTop));
+    tails.pivot = [0, tailsTop, r[3] - r[2]];
+  }
 
   const skirtColor = look.dress ?? look.skirt;
   const skirt = skirtColor
@@ -1651,6 +1681,7 @@ export function buildCharacter(gl, look) {
     mouthFocus,
   };
   if (longHair) parts.hair = longHair;
+  if (tails) parts.tails = tails;
   if (skirt) parts.skirt = skirt;
   if (prop) parts.prop = prop;
   return parts;
@@ -1669,6 +1700,9 @@ export function buildCharacter(gl, look) {
  * @property {number} [squash] Vertical squash (−0.2..0.2).
  * @property {number} [blink] Eyelids, 0 = open, 1 = closed.
  * @property {'neutral'|'happy'|'ouch'|'focus'} [mood] Facial expression.
+ * @property {number} [hair] Long hair swing (radians, + = streams back).
+ * @property {number} [hem] Jacket tails and skirt flare (+ = out behind, − = swung forward).
+ * @property {number} [flip] Somersault angle around the body centre (+ = forward).
  */
 
 const MOOD_NAMES = { neutral: 'Neutral', happy: 'Happy', ouch: 'Ouch', focus: 'Focus' };
@@ -1791,6 +1825,12 @@ export function poseCharacter(parts, x, y, z, facing, pose, o = {}, out = [], po
     ROOT,
   );
   multiply(ROOT, translation(0, (pose.bob ?? 0) / 16, 0, F1), ROOT);
+  const flip = pose.flip ?? 0;
+  if (flip) {
+    multiply(ROOT, translation(0, FLIP_Y, 0, F1), ROOT);
+    multiply(ROOT, rotationX(flip, F1), ROOT);
+    multiply(ROOT, translation(0, -FLIP_Y, 0, F1), ROOT);
+  }
   mul3(ROOT, translation(0, HIP_Y, 0, F1), rotationX(lean, F2), TORSO);
   mul3(TORSO, translation(0, NECK_Y, 0, F1), rotationX(pose.head ?? 0, F2), HEAD);
   /** Appends the next part and returns its model matrix. @param {string} name @param {true} [face] */
@@ -1842,14 +1882,40 @@ export function poseCharacter(parts, x, y, z, facing, pose, o = {}, out = [], po
     part('brow' + name, true).set(HEAD);
     part('mouth' + name, true).set(HEAD);
   }
-  if (parts.hair)
+  const hem = pose.hem ?? 0;
+  // Secondary motion: the hair hangs against the lean and swings (never forward
+  // into the neck); the coat tails shear out behind; the skirt hangs a little
+  // against the lean, swings with the hem and flares.
+  if (parts.hair) {
+    const swing = 0.08 - lean * 0.5;
     mul3(
       TORSO,
       translation(0, NECK_Y + 0.28, -0.1, F1),
-      rotationX(0.08 - lean * 0.5, F2),
+      rotationX(Math.max(swing - 0.12, Math.min(0.9, swing + (pose.hair ?? 0))), F2),
       part('hair'),
     );
-  if (parts.skirt) multiply(TORSO, translation(0, 0.06, 0, F1), part('skirt'));
+  }
+  const tails = parts.tails;
+  if (tails?.pivot && hem > 0.02) {
+    const [px, py, pz] = tails.pivot;
+    const m = multiply(TORSO, translation(px, py, pz, F1), part('tails'));
+    // z += k·y below the pivot: the hem moves out behind, the higher cloth less.
+    const k = Math.min(hem, 1) * 0.8;
+    scaling(1, 1 - k * 0.12, 1, F2);
+    F2[6] = k;
+    multiply(m, F2, m);
+    multiply(m, translation(-px, -py, -pz, F1), m);
+  }
+  if (parts.skirt) {
+    const sk = mul3(
+      TORSO,
+      translation(0, 0.06, 0, F1),
+      rotationX(Math.max(-0.3, Math.min(0.35, hem * 0.22)) - Math.max(0, lean) * 0.45, F2),
+      part('skirt'),
+    );
+    const flare = 1 + Math.min(1, Math.abs(hem)) * 0.1;
+    multiply(sk, scaling(flare, 1 - (flare - 1) * 0.4, flare, F1), sk);
+  }
   // The prop is held in the right hand.
   if (parts.prop) {
     const p = multiply(armR, translation(0, -0.43, 0.06, F1), part('prop'));

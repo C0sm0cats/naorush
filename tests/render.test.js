@@ -125,4 +125,89 @@ describe('rendering', () => {
           ).not.toThrow();
     }
   });
+
+  it('reuses one idle pose instead of allocating every frame', () => {
+    const a = idlePose(1);
+    a.mood = 'happy';
+    a.armR = 2;
+    const b = idlePose(2);
+    expect(b).toBe(a);
+    // Every field is rewritten, so a caller's tweak never leaks into the next one.
+    expect(b.mood).toBe('neutral');
+    expect(Math.abs(b.armR)).toBeLessThan(0.2);
+    const out = /** @type {any} */ ({});
+    expect(idlePose(1, out)).toBe(out);
+    expect(out.flip).toBe(0);
+  });
+
+  it('keeps every hero pose finite and grounded in character', () => {
+    /** @param {any} p */
+    const finite = (p) =>
+      Object.values(p).every((v) => typeof v === 'string' || v === undefined || Number.isFinite(v));
+    for (const id of /** @type {const} */ (['kevin', 'charline'])) {
+      const sim = createSim(LEVELS[0], id);
+      const h = sim.hero;
+      /** @type {[string, Partial<typeof h>, number][]} */
+      const cases = [
+        ['ground', { vx: 0 }, 0.2],
+        ['ground', { vx: 0 }, 9],
+        ['ground', { vx: 0 }, 13],
+        ['ground', { vx: 6, run: 1.3 }, 0],
+        ['ground', { vx: -5, facing: 1 }, 0],
+        ['air', { vy: 10 }, 0],
+        ['air', { vy: -12 }, 0],
+        ['air', { vy: 3, invuln: 1.3 }, 0],
+        ['air', { vy: 4, airJumps: 0 }, 0],
+        ['hang', { stateTime: 0.3 }, 0],
+        ['climb', { stateTime: 0.2 }, 0],
+        ['dead', { stateTime: 0.1 }, 0],
+        ['dead', { stateTime: 0.9 }, 0],
+      ];
+      for (const [state, set, still] of cases) {
+        Object.assign(h, { state, vx: 0, vy: 0, invuln: 0, airJumps: sim.stats.airJumps }, set);
+        expect(finite(heroPose(sim, 1.7, still))).toBe(true);
+      }
+      h.state = 'ground';
+      sim.won = true;
+      // Victory: both arms up (no wave, no salute).
+      for (const t of [0, 0.3, 0.7]) {
+        const p = heroPose(sim, t, 0);
+        expect(Math.min(p.armL, p.armR)).toBeGreaterThan(2.3);
+        expect(Math.abs(p.armL - p.armR)).toBeLessThan(0.05);
+      }
+    }
+  });
+
+  it('flips Charline once on her double jump and lands the flip upright', () => {
+    const sim = createSim(LEVELS[0], 'charline');
+    const h = sim.hero;
+    Object.assign(h, { state: 'air', airJumps: 0 });
+    const v0 = sim.stats.jump * 0.9;
+    h.vy = v0;
+    expect(heroPose(sim, 0, 0).flip ?? 0).toBeCloseTo(0);
+    h.vy = 0;
+    expect(heroPose(sim, 0, 0).flip ?? 0).toBeGreaterThan(Math.PI);
+    h.vy = -4.01;
+    expect(heroPose(sim, 0, 0).flip ?? 0).toBe(0);
+    // Kévin has no double jump: never flips.
+    const k = createSim(LEVELS[0], 'kevin');
+    Object.assign(k.hero, { state: 'air', airJumps: 0, vy: 2 });
+    expect(heroPose(k, 0, 0).flip ?? 0).toBe(0);
+  });
+
+  it('gives each boss his own body language', () => {
+    const sim = createSim(LEVELS[2], 'kevin');
+    const boss = /** @type {any} */ (sim.things.find((t) => t.kind === 'boss'));
+    for (const state of ['intro', 'convinced', 'hit', 'phase']) {
+      const b = { ...boss, state, t: 0.8 };
+      const julien = bossPose(b, 0, 1, 'techServicesDirector').pose;
+      const rodolphe = bossPose(b, 0, 1, 'regionalDirector').pose;
+      expect(julien).not.toEqual(rodolphe);
+    }
+    // Without an id, a signature move gives the boss away for the rest of the duel.
+    const b = { ...boss, state: 'fan', t: 0.2, hp: 4 };
+    bossPose(b, 0, 1);
+    b.state = 'convinced';
+    expect(bossPose(b, 0, 1).pose).toEqual(bossPose(b, 0, 1, 'regionalDirector').pose);
+  });
 });
