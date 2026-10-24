@@ -1,4 +1,4 @@
-import { Audio } from './app/audio.js';
+import { Audio, eventSfx } from './app/audio.js';
 import { Camera } from './app/camera.js';
 import { applyTwist, dailyChallenge } from './app/daily.js';
 import { Bubbles, Dialogue } from './app/dialogue.js';
@@ -8,7 +8,8 @@ import { Input } from './app/input.js';
 import { clearFloor, renderBonus, renderCast, renderTrophies } from './app/menus.js';
 import { applyPrefs, prefs, reducedMotion, setupOptions } from './app/options.js';
 import { load, store } from './app/storage.js';
-import { DynamicResolution, bossLights, fightFocus } from './app/staging.js';
+import { DynamicResolution, bossLighting, fightFocus, withLights } from './app/staging.js';
+import { findSpot, heroRegion, title } from './app/title.js';
 import { Trophies } from './app/trophies.js';
 import { LevelView, boardUrl } from './app/scene.js';
 import { PROLOGUE } from './data/barks.js';
@@ -16,6 +17,7 @@ import { CAST } from './data/cast.js';
 import { CAMPAIGN, LEVELS, ROOM_W } from './data/levels/index.js';
 import { POSTER_LIST, renderPoster } from './gfx/posters.js';
 import { Renderer } from './gfx/renderer.js';
+import { PATTERNS } from './game/boss.js';
 import { DT, HERO, TILE, createSim, step, tileAt } from './game/sim.js';
 
 /**
@@ -48,7 +50,7 @@ const audio = new Audio();
 const resolution = new DynamicResolution();
 const trophies = new Trophies((t) => {
   hud.toast(`Trophée débloqué : ${t.name}`);
-  audio.sfx('secret');
+  audio.sfx('trophy');
 });
 const SAVE_KEY = 'naorush.stage';
 const BEST_KEY = 'naorush.best';
@@ -185,7 +187,7 @@ async function beginStage(i, before = []) {
   void banner.offsetWidth;
   banner.classList.add('show');
   // The stage's music and a quiet bed of room sound under it: office hum, servers, wind…
-  audio.stage(level);
+  audio.stage(level, heroId);
   setIntensity(0.2);
   // While the intro plays, the camera glides from the exit back to the start
   // (unless the system asks for less motion).
@@ -218,7 +220,11 @@ function talk(lines, done) {
 }
 
 /** @param {string} who @param {string} moment @param {boolean} [force] */
-const say = (who, moment, force) => bubbles.say(who, moment, force);
+const say = (who, moment, force) => {
+  const before = bubbles.time;
+  bubbles.say(who, moment, force);
+  if (bubbles.time > before) audio.sfx('bubble', { who: who === 'partner' ? partnerOf() : who });
+};
 
 /** Where a speech bubble sits: above the hero, the partner at the exit, or the boss. @param {string} who */
 function bubbleAnchor(who) {
@@ -282,21 +288,25 @@ function updateContinue() {
 
 /** Today's challenge while it is being played. @type {import('./app/daily.js').Challenge | null} */
 let challenge = null;
-const today = () => dailyChallenge(CAMPAIGN);
-$('dailyBtn').onclick = () => {
-  challenge = today();
-  updateContinue();
-  heroId = challenge.hero;
-  markHero();
-  audio.sfx('confirm');
-  beginStage(challenge.stage);
-};
+// Boss stages stay out of the daily draw: no spoiling Julien or Rodolphe on a fresh save.
+const DAILY_STAGES = LEVELS.slice(0, CAMPAIGN).flatMap((l, i) => (l.boss ? [] : [i]));
+const today = () => dailyChallenge(DAILY_STAGES);
+$('dailyBtn').onclick = () =>
+  leaveTitle(() => {
+    challenge = today();
+    updateContinue();
+    heroId = challenge.hero;
+    markHero();
+    beginStage(challenge.stage);
+  });
 /** @param {number} i */
 const startFrom = (i) => {
-  challenge = null;
-  audio.sfx('confirm');
-  if (i === 0) for (const k of Object.keys(runStages)) delete runStages[Number(k)];
-  beginStage(i, i === 0 && screen === 'title' ? PROLOGUE : []);
+  const prologue = i === 0 && screen === 'title' ? PROLOGUE : [];
+  leaveTitle(() => {
+    challenge = null;
+    if (i === 0) for (const k of Object.keys(runStages)) delete runStages[Number(k)];
+    beginStage(i, prologue);
+  });
 };
 const toMenu = () => {
   view.party = 0;
@@ -323,12 +333,15 @@ $('resume').onclick = () => {
   show('play');
 };
 $('goResume').onclick = () => {
-  audio.stage(level);
+  audio.stage(level, heroId);
   show('play');
 };
 $('quit').onclick = $('menu').onclick = $('goMenu').onclick = $('creditsClose').onclick = toMenu;
 $('pauseBtn').onclick = () => screen === 'play' && pause();
-$('readerClose').onclick = () => show('play');
+$('readerClose').onclick = () => {
+  audio.sfx('back');
+  show('play');
+};
 $('talk').onclick = () => screen === 'talk' && dialogue.advance();
 function pause() {
   $('pauseInfo').textContent =
@@ -363,7 +376,10 @@ $('trophiesBtn').onclick = () => {
   audio.sfx('select');
   show('trophies');
 };
-$('trophiesClose').onclick = () => show('title');
+$('trophiesClose').onclick = () => {
+  audio.sfx('back');
+  show('title');
+};
 /** Where the cast lines up on the loaded stage. */
 let castX = 8.6;
 $('castBtn').onclick = () => {
@@ -372,7 +388,10 @@ $('castBtn').onclick = () => {
   audio.sfx('select');
   show('cast');
 };
-$('castClose').onclick = () => show('title');
+$('castClose').onclick = () => {
+  audio.sfx('back');
+  show('title');
+};
 
 // Poster gallery: every Inetum poster of the game, full screen.
 let posterIndex = 0;
@@ -380,6 +399,7 @@ let posterIndex = 0;
 const posterUrls = {};
 /** @param {number} step */
 function showPoster(step) {
+  if (step) audio.sfx('page');
   posterIndex = (posterIndex + step + POSTER_LIST.length) % POSTER_LIST.length;
   const p = POSTER_LIST[posterIndex];
   posterUrls[p.id] ??= /** @type {HTMLCanvasElement} */ (renderPoster(p.id)).toDataURL(
@@ -398,8 +418,12 @@ $('postersBtn').onclick = () => {
 };
 $('posterPrev').onclick = () => showPoster(-1);
 $('posterNext').onclick = () => showPoster(1);
-$('postersClose').onclick = () => show('cast');
+$('postersClose').onclick = () => {
+  audio.sfx('back');
+  show('cast');
+};
 function closeOptions() {
+  audio.sfx('back');
   input.capture = null;
   show(optionsFrom === 'pause' || optionsFrom === 'gameover' ? optionsFrom : 'title');
 }
@@ -515,6 +539,9 @@ function stageWon() {
   setIntensity(0.2);
   audio.music('win');
   audio.sfx('win');
+  // The gold lines get their own flourish once the jingle has played.
+  if (record) audio.sfx('record', { delay: 1.3 });
+  else if (allSecrets || !sim.deaths) audio.sfx('gold', { delay: 1.3 });
   show('won');
 }
 
@@ -526,7 +553,7 @@ function credits() {
     ['Les NAO sont sauvées !', 'h'],
     [`${hero.name}, ${hero.title}, a fait signer l’enveloppe.`],
     [
-      `${run.tickets} tickets Swile · ${run.secrets} secrets · ${clock(run.time)} · ${run.deaths} retours au badge`,
+      `${run.tickets} tickets Swile · ${run.secrets} ${run.secrets > 1 ? 'secrets' : 'secret'} · ${clock(run.time)} · ${run.deaths} ${run.deaths > 1 ? 'retours' : 'retour'} au badge`,
     ],
     ['Avec', 'h'],
     ['Kévin · Directeur de Projets'],
@@ -613,16 +640,6 @@ const AMBIENT = new Set([
   'wake',
   'chairBump',
 ]);
-/** Events that reuse another event's sound. @type {Record<string, string>} */
-const SFX_ALIAS = {
-  throw: 'fire',
-  archive: 'crack',
-  switch: 'door',
-  bonk: 'block',
-  wake: 'talk',
-  chairBump: 'bump',
-  concert: 'key',
-};
 /** Freeze time per event, in seconds. @type {Record<string, number>} */
 const HITSTOP = {
   hurt: 0.12,
@@ -638,6 +655,7 @@ const HITSTOP = {
 let hitstop = 0;
 let dustTimer = 0;
 let stepTimer = 0;
+let consultTick = 0;
 /** Lines to say once the current frame's events are handled. @type {{lines: Line[], then: () => void} | null} */
 let pending = null;
 const QUIPS = new Set([
@@ -668,7 +686,9 @@ function onEvent(e) {
   trophies.event(e, sim, level.id);
   view.event(e, sim.time);
   particles.emit(e.type, e.x, e.y);
-  audio.sfx(SFX_ALIAS[e.type] ?? e.type);
+  // Rodolphe's third phase is his grand finale: it gets its own sting.
+  const finale = e.type === 'bossPhase' && sim.things.find((t) => t.kind === 'boss')?.phase === 3;
+  audio.sfx(finale ? 'finale' : eventSfx(e));
   // A few frames of freeze sell the impact.
   hitstop = Math.max(hitstop, HITSTOP[e.type] ?? 0);
   const boss = level.boss?.id ?? '';
@@ -712,7 +732,8 @@ function onEvent(e) {
       pending = { lines: level.bossIntro ?? [], then: () => show('play') };
       break;
     case 'bossPhase':
-      setIntensity(1);
+      // The boss's last phase brings in the finale layer (Rodolphe has three phases).
+      setIntensity(boss === 'regionalDirector' && !finale ? 0.9 : 1);
       shake(0.8);
       // The finale (third phase) has its own line when the stage provides one.
       bubbles.line(
@@ -725,7 +746,7 @@ function onEvent(e) {
       say(boss, 'consult');
       break;
     case 'bossDone':
-      audio.stage(level);
+      audio.stage(level, heroId);
       setIntensity(0.3);
       pending = { lines: level.outro, then: () => show('play') };
       break;
@@ -768,15 +789,48 @@ function tipAt() {
   return tip ? (touch ? tip.touch : tip.keys) : undefined;
 }
 
-/** Where the hero poses behind the title card. */
-const SHOWCASE = { x: 6.6, y: 3 };
-const SHOWCASE_LIGHT = {
-  pos: [SHOWCASE.x + 0.8, SHOWCASE.y + 2.2, 2],
-  radius: 5,
-  color: [0.9, 0.85, 0.8],
-};
-/** Puts the hero in the title-screen spot (the run restarts from S anyway). */
-const showcase = () => Object.assign(sim.hero, { x: SHOWCASE.x, y: SHOWCASE.y, facing: -1, vx: 0 });
+/** Puts the heroes on a clear stretch of floor for the title (the run restarts from S anyway). */
+function showcase() {
+  const spot = findSpot(level, sim);
+  title.place(spot);
+  Object.assign(sim.hero, { x: spot.x - HERO.w / 2, y: spot.y, facing: -1, vx: 0 });
+}
+title.still = reducedMotion;
+/** The heroes stand in whatever part of the screen the title menu leaves free. */
+function frameTitle() {
+  const panel = document.querySelector('.title-panel')?.getBoundingClientRect();
+  const brand = document.querySelector('.title-brand')?.getBoundingClientRect();
+  if (!panel || !brand || panel.width === 0) return;
+  title.region = heroRegion(innerWidth, innerHeight, panel, brand);
+}
+new ResizeObserver(frameTitle).observe($('title'));
+addEventListener('resize', frameTitle);
+/** Frames left to draw behind the loading screen before the title shows. */
+let titleWarmup = 0;
+/** The title, and the menus opened from it, keep the heroes posing behind. */
+const titleScene = () =>
+  !view.gallery &&
+  (titleWarmup > 0 ||
+    screen === 'title' ||
+    screen === 'trophies' ||
+    (screen === 'options' && optionsFrom === 'title'));
+/**
+ * Leaving the title: the menu steps aside for a moment, then the stage starts.
+ * @param {() => void} go
+ */
+function leaveTitle(go) {
+  if (document.body.classList.contains('title-out')) return;
+  audio.sfx('confirm');
+  if (screen !== 'title' || reducedMotion) return go();
+  document.body.classList.add('title-out');
+  setTimeout(() => {
+    const fade = $('fade');
+    fade.classList.remove('on');
+    void fade.offsetWidth;
+    fade.classList.add('on');
+    go();
+  }, 300);
+}
 
 /** Current music intensity (dynamic layers). */
 let musicLevel = 0.2;
@@ -823,9 +877,11 @@ function menuInput() {
     showPoster(input.pressed('right') ? 1 : -1);
     return true;
   }
-  const step = input.pressed('down') ? 1 : input.pressed('up') ? -1 : 0;
+  // Every press counts, even several within one slow frame.
+  const step = input.presses('down') - input.presses('up');
   if (step && buttons.length) {
-    buttons[(at + step + buttons.length) % buttons.length].focus();
+    const n = buttons.length;
+    buttons[(((at + step) % n) + n) % n].focus();
     audio.sfx('menuMove');
     return true;
   }
@@ -858,6 +914,17 @@ function frame(now) {
         for (const e of sim.events) onEvent(e);
         acc -= DT;
       }
+      // PRIMO countdown: a clock ticks through the last second of the consult window.
+      const chief =
+        sim.bossActive && sim.boss ? sim.things.find((t) => t.kind === 'boss') : undefined;
+      if (chief?.state === 'consult' && sim.boss) {
+        const length = PATTERNS[sim.boss.id].consult[(chief.phase ?? 1) - 1] ?? 1;
+        const slot = Math.ceil((length - (chief.t ?? 0)) / 0.25);
+        if (slot > 0 && slot <= 4 && slot !== consultTick) {
+          consultTick = slot;
+          audio.sfx('consultTick', { pitch: 1 + (4 - slot) * 0.06 });
+        }
+      } else consultTick = 0;
       if (gameOverTimer > 0 && (gameOverTimer -= dt) <= 0) {
         // After a couple of game overs, point gently at the relaxed mode.
         gameOvers++;
@@ -889,6 +956,7 @@ function frame(now) {
       const exit = sim.things.find((t) => t.kind === 'exit');
       if (
         exit &&
+        !fighting() &&
         sim.time > 4 &&
         Math.abs(sim.hero.x - exit.x) < 4 &&
         Math.abs(sim.hero.y - exit.y) < 2
@@ -907,9 +975,10 @@ function frame(now) {
     if (
       (screen === 'pause' || screen === 'reading') &&
       (input.pressed('pause') || input.pressed('back'))
-    )
+    ) {
+      audio.sfx(screen === 'pause' ? 'resume' : 'back');
       show('play');
-    else if (screen !== 'talk' && menuInput()) {
+    } else if (screen !== 'talk' && menuInput()) {
       /* handled */
     } else if (screen === 'title' && input.pressed('confirm')) startFrom(0);
     else if (screen === 'talk') {
@@ -926,7 +995,7 @@ function frame(now) {
     // Soft footsteps while running.
     if (h.state === 'ground' && Math.abs(h.vx) > 2.5 && (stepTimer -= dt) <= 0) {
       stepTimer = 0.27 * (sim.stats.run / Math.max(2.5, Math.abs(h.vx)));
-      audio.sfx('step');
+      audio.sfx('step', sim.onLift ? { floor: 'metal' } : undefined);
     }
     if (h.state === 'ground' && Math.abs(h.vx) > 4 && (dustTimer -= dt) <= 0) {
       dustTimer = 0.09;
@@ -957,23 +1026,34 @@ function frame(now) {
       : { x: 4.1, y: 1.6, facing: 0 }
     : screen === 'credits'
       ? { x: view.party - 3.2, y: 3, facing: 0.001 }
-      : screen === 'title'
-        ? { x: SHOWCASE.x - 0.8 + Math.sin(t * 0.25) * 0.15, y: SHOWCASE.y - 1.4, facing: 0 }
-        : drift
-          ? { x: 10 + Math.sin(t * 0.07) * 8, y: 3, facing: 1 }
-          : flyover && screen === 'talk'
-            ? flyoverFocus(dt)
-            : (fightFocus(sim, touchLift) ?? {
-                x: h.x + HERO.w / 2,
-                y: h.y - touchLift,
-                facing: h.facing,
-              });
-  const cam = camera.update(dt, renderer.width / renderer.height, focus, { w: sim.w, h: sim.h });
-  view.showcase = screen === 'title';
-  // A soft key light on the hero posing behind the title card.
-  const extra = view.showcase ? [SHOWCASE_LIGHT] : bossLights(level, sim, t);
-  const lit = extra.length ? { ...lighting, lights: [...extra, ...lighting.lights] } : lighting;
+      : drift
+        ? { x: 10 + Math.sin(t * 0.07) * 8, y: 3, facing: 1 }
+        : flyover && screen === 'talk'
+          ? flyoverFocus(dt)
+          : (fightFocus(sim, touchLift, renderer.width / renderer.height) ?? {
+              x: h.x + HERO.w / 2,
+              y: h.y - touchLift,
+              facing: h.facing,
+            });
+  view.showcase = titleScene();
+  if (screen !== 'title') document.body.classList.remove('title-out');
+  // On the title, its own camera frames both heroes beside the menu.
+  const cam = view.showcase
+    ? title.camera(renderer.width / renderer.height, t)
+    : camera.update(dt, renderer.width / renderer.height, focus, {
+        w: sim.w,
+        h: sim.h,
+        sky: level.theme === 'rooftop' ? 4 : 0,
+      });
+  // Key, rim and fill lights on the heroes posing behind the title menu.
+  const lit = view.showcase
+    ? withLights(lighting, title.lights(t, heroId))
+    : bossLighting(level, sim, t, lighting);
   renderer.render(cam, lit, view.items(sim, t, particles.list), view.sprites, { flash });
+  if (titleWarmup > 0 && --titleWarmup === 0) {
+    audio.music('title');
+    show('title');
+  }
   if (screen === 'play' || screen === 'talk') {
     const poster = view.posterAt(sim);
     hud.update(
@@ -1001,10 +1081,11 @@ if (params.has('sounds')) import('./app/soundtest.js').then((m) => m.mountSoundT
 
 view.ready.then(() => {
   showcase();
-  camera.snap(SHOWCASE.x, SHOWCASE.y + 1);
+  camera.snap(sim.hero.x, sim.hero.y + 1);
   updateContinue();
-  audio.music('title');
-  show('title');
+  // The first frames of a stage are slow (shaders, uploads): draw them behind the
+  // loading screen, so the title arrives smoothly.
+  titleWarmup = 3;
 });
 requestAnimationFrame(frame);
 
