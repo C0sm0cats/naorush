@@ -1,0 +1,136 @@
+// Side-stage themes: intercontrat, café pause, seminar.
+
+import { MAJOR, DORIAN, MIXOLYDIAN, chords, bars } from '../util.js';
+/** @typedef {import('../types.js').Track} Track */
+
+/** @satisfies {Record<string, Track>} */
+export const INTERLUDE_SONGS = {
+  intercontrat: {
+    bpm: 112,
+    root: 43,
+    lead: 24,
+    scale: MIXOLYDIAN,
+    wave: 'triangle',
+    cutoff: 3200,
+    mallet: true,
+    swing: 0.28,
+    chords: chords('0 10 5 0 0 10 5 7'),
+    melody: bars('7.4.2.4. 6.5.3.1. 3.5.7.5. 4-2-0--- 7.9.b.9. 8.6.5.3. 5.3.5.7. 8.4.1.4.'),
+    bass: '1.5.1.5.',
+    bassWave: 'pluck',
+    kick: '1..1..1.',
+    snare: '..1...1.',
+    hat: '.1.1.1.1',
+    comp: true,
+    echo: 0.15,
+    form: [
+      {},
+      {
+        chords: chords('5 5 0 0 5 5 10 7'),
+        melody: bars('7-5-3-5- 7.8.7.5. 4-2-4-7- 9------- a-9-7-5- 3.5.7.a. 8-6-3-1- 8---b---'),
+        bass: '1.3.5.3w',
+        hat: '.1.1.111',
+      },
+      {
+        counter: bars('2---4--- 1---3--- 3---5--- 2---4--- 4---2--- 3---1--- 5---3--- 4---1---'),
+        bass: '1.5.1.5w',
+      },
+      {
+        chords: chords('9m 5 10 7'),
+        melody: bars('5------- 3---7--- 6---3--- 4---8---'),
+        bass: '1...5...',
+        kick: '1.......',
+        snare: '........',
+        thin: true,
+      },
+    ],
+  },
+  // Bonus: the break room, Friday 10:30. Laid-back bossa: Rhodes chords, clave, shaker.
+  cafe: {
+    bpm: 100,
+    root: 41,
+    lead: 24,
+    scale: MAJOR,
+    wave: 'triangle',
+    cutoff: 2400,
+    sev: true,
+    rhodes: true,
+    shaker: true,
+    chords: chords('0 9m 2m 7 4m 9m 2m 7'),
+    melody: bars('6--4-2-- 5-4-2-0- 1--3-5-- 4---3-2- 2--4-6-- 5-7-5-4- 3--1-5-- 4-------'),
+    bass: '1..51..5',
+    kick: '1..11..1',
+    snare: '........',
+    hat: '11111111',
+    rim: '1..1..1...1..1..',
+    stab: '1..1...1..1..1..',
+    echo: 0.2,
+    form: [
+      {},
+      {
+        chords: chords('5 4m 2m 0 5 4m 2m 7'),
+        melody: bars('7-5-3-2- 2-4-6-8- 7--5-3-- 2------- 9-7-5-3- 8-6-4-2- 5-3-1-3- 4---6-8-'),
+        bass: '1..51.3w',
+      },
+      {
+        counter: bars('2------- 0------- 1---3--- 6---3--- 4------- 5---7--- 3---1--- 4---6---'),
+        bass: '1..51..w',
+      },
+      {
+        chords: chords('5 5m 0 7'),
+        melody: bars('9------- 7---3--- 6---4--- 3---1---'),
+        bass: '1---5---',
+        kick: '1.......',
+        rim: '1.....1.....1...',
+        thin: true,
+      },
+    ],
+  },
+  // Bonus: the annual seminar, evening at the congress centre. Disco-funk gala: four on
+  // the floor, slap octaves, string pad and seventh-chord stabs.
+  seminar: {
+    bpm: 118,
+    root: 45,
+    lead: 24,
+    scale: DORIAN,
+    wave: 'sawtooth',
+    det: 6,
+    cutoff: 2200,
+    sev: true,
+    chords: chords('0m 5 0m 5 3 10 7m 5'),
+    melody: bars('7..6..4. 5.3.0... 2.4.6.7. 8-7-5--- 9..6..4. 8.6.3.1. 4.6.8.6. 5---3---'),
+    bass: '12121212',
+    bassWave: 'slap',
+    kick: '1.1.1.1.',
+    snare: '........',
+    hat: '.o.o.o.o',
+    clap: '....1.......1...',
+    stab: '..1...1.',
+    pad: true,
+    echo: 0.3,
+    leadWave: 'triangle',
+    form: [
+      {},
+      {
+        chords: chords('3 10 5 0m 3 10 5 5'),
+        melody: bars('9-9-7-6- 6-8-a--- a-9-7-5- 7------- 9.9.b.9. a.8.6.8. 7.5.3.5. 7---a---'),
+        bass: '12151215',
+        stab: '..1..11.',
+      },
+      {
+        counter: bars('4---2--- 3---5--- 6---4--- 5---3--- 2---6--- 1---3--- 4---1--- 3---0---'),
+        bass: '1212121w',
+      },
+      {
+        chords: chords('3 10 5 5'),
+        melody: bars('6------- 8---6--- 5---7--- a---7---'),
+        bass: '1-------',
+        kick: '1.......',
+        clap: '................',
+        hat: '.1.1.1.1',
+        stab: '1.......',
+        thin: true,
+      },
+    ],
+  },
+};
