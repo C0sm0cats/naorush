@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { TitleStage, heroRegion } from '../src/app/title.js';
+import { TitleStage, findSpot, heroRegion } from '../src/app/title.js';
 import { CAST } from '../src/data/cast.js';
+import { LEVELS } from '../src/data/levels/index.js';
+import { createSim } from '../src/game/sim.js';
 import { DrawPool, buildCharacter } from '../src/gfx/characters.js';
 
 /** A WebGL2 stand-in: every method is a no-op, every constant is 0. */
@@ -88,5 +90,25 @@ describe('title staging', () => {
     // The rim light now takes Charline's pink.
     const rim = stage.lights(2, 'charline')[1].color;
     expect(rim[0]).toBeGreaterThan(rim[1]);
+  });
+
+  it('finds every stage a clear spot: floor below, no car, prop or character behind', () => {
+    for (const level of LEVELS) {
+      const sim = createSim(level, 'kevin');
+      const { x, y } = findSpot(level, sim);
+      // Both heroes (about 0.8 wide, the second 0.95 to the right) and a margin.
+      const lo = x - 0.9;
+      const hi = x + 1.85;
+      for (const th of sim.things)
+        if (th.kind !== 'secret' && th.y > y - 1 && th.y < y + 3)
+          expect(Math.abs(th.x - (lo + hi) / 2), `${level.id}: ${th.kind}`).toBeGreaterThan(
+            (hi - lo) / 2 + 0.4,
+          );
+      const row = level.map[sim.h - 1 - y];
+      for (let c = Math.floor(lo); c <= Math.floor(hi); c++) {
+        expect(' S'.includes(row[c]), `${level.id} column ${c}: ${row[c]}`).toBe(true);
+        expect([1, 6], `${level.id} floor ${c}`).toContain(sim.tiles[c + (y - 1) * sim.w]);
+      }
+    }
   });
 });

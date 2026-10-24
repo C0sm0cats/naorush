@@ -56,6 +56,8 @@ export class Input {
     this.held = new Set();
     /** @type {Set<string>} */
     this.taps = new Set();
+    /** Presses per action this frame: on a slow frame, two quick presses still count twice. @type {Map<string, number>} */
+    this.counts = new Map();
     /** Keyboard keys held down since the last clear(). @type {Set<string>} */
     this.keys = new Set();
     /** Custom bindings: action → key code. @type {Record<string, string>} */
@@ -99,7 +101,7 @@ export class Input {
       // line) stays ignored until it is pressed again.
       if (e.repeat && !this.keys.has(e.code)) return;
       this.keys.add(e.code);
-      if (!e.repeat) this.taps.add(k);
+      if (!e.repeat) this.tap(k);
       this.held.add(k);
     });
     addEventListener('keyup', (/** @type {KeyboardEvent} */ e) => {
@@ -153,7 +155,7 @@ export class Input {
         const el = /** @type {HTMLElement} */ (b);
         const k = el.dataset.key ?? '';
         const on = down.has(el);
-        if (on && !el.classList.contains('down')) this.taps.add(k);
+        if (on && !el.classList.contains('down')) this.tap(k);
         el.classList.toggle('down', on);
         if (on) this.held.add(k);
       }
@@ -216,7 +218,7 @@ export class Input {
     for (const k of this.padBlocked) now.delete(k);
     for (const k of now)
       if (!this.padHeld.has(k)) {
-        this.taps.add(k);
+        this.tap(k);
         document.body.classList.add('padnav');
       }
     for (const k of this.padHeld) if (!now.has(k)) this.held.delete(k);
@@ -242,14 +244,27 @@ export class Input {
     return this.taps.has(action);
   }
 
+  /** How many times an action was pressed this frame. @param {string} action */
+  presses(action) {
+    return this.counts.get(action) ?? 0;
+  }
+
+  /** @param {string} action */
+  tap(action) {
+    this.taps.add(action);
+    this.counts.set(action, this.presses(action) + 1);
+  }
+
   /** Call once per rendered frame, after reading taps. */
   endFrame() {
     this.taps.clear();
+    this.counts.clear();
   }
 
   clear() {
     this.held.clear();
     this.taps.clear();
+    this.counts.clear();
     this.keys.clear();
     this.padBlocked = new Set(this.padHeld);
   }

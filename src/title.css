@@ -28,7 +28,6 @@ body:not([data-screen='title']) .title {
     linear-gradient(90deg, #0e1424f0 0%, #0e1424c4 30%, #0e142440 50%, transparent 62%),
     radial-gradient(ellipse 70% 90% at 70% 52%, transparent 50%, #0e142499 100%),
     linear-gradient(180deg, #0e142466, transparent 22% 80%, #0e142480);
-  animation: fx-in 1.2s ease-out both;
 }
 .title-beam {
   position: absolute;
@@ -207,21 +206,6 @@ body:not([data-screen='title']) .title {
     linear-gradient(90deg, transparent, var(--sky)) 100% 100% / 82% 0.075em no-repeat;
   border-radius: 0.04em;
   animation: lines 1.4s ease-in-out infinite;
-}
-/* A glint sweeps across Rush now and then. */
-.logo-rush::after {
-  content: attr(data-text);
-  position: absolute;
-  inset: 0;
-  padding: inherit;
-  background: linear-gradient(105deg, transparent 38%, #fffc 48%, transparent 58%) 160% 0 / 260%
-    100% no-repeat;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  -webkit-text-stroke: 0;
-  text-shadow: none;
-  animation: glint 7s ease-in-out 1.4s infinite;
 }
 .title .lead {
   max-width: 34em;
@@ -450,11 +434,6 @@ body.title-out .title-fx::after {
 }
 
 /* ---- Keyframes ---------------------------------------------------------------- */
-@keyframes fx-in {
-  from {
-    opacity: 0;
-  }
-}
 @keyframes rise-in {
   from {
     opacity: 0;
@@ -488,15 +467,6 @@ body.title-out .title-fx::after {
   50% {
     transform: translateX(-0.08em);
     opacity: 0.7;
-  }
-}
-@keyframes glint {
-  0%,
-  70% {
-    background-position: 160% 0;
-  }
-  100% {
-    background-position: -60% 0;
   }
 }
 @keyframes beam {
@@ -817,7 +787,7 @@ body.title-out .title-fx::after {
 }
 
 /* ---- Accessibility ------------------------------------------------------------ */
-/* Less motion: nothing drifts, glints or bounces (pseudo-elements included). */
+/* Less motion: nothing drifts, glows or bounces (pseudo-elements included). */
 @media (prefers-reduced-motion: reduce) {
   .title *,
   .title *::before,
@@ -850,7 +820,6 @@ body.contrast .title .lead {
 body.contrast .logo-rush {
   background: none;
 }
-body.contrast .logo-rush::after,
 body.contrast .logo-rush::before {
   display: none;
 }
@@ -870,7 +839,6 @@ body.contrast .hero-card small {
     text-shadow: none;
     background: none;
   }
-  .logo-rush::after,
   .logo-rush::before,
   .title-fx {
     display: none;
