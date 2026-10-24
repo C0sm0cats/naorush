@@ -88,13 +88,21 @@ const fight = async (attack) => {
     const state = await page.evaluate(() => {
       const nao = /** @type {any} */ (globalThis).__nao;
       if (nao.screen === 'talk') document.getElementById('talk')?.click();
-      Object.assign(nao.sim.hero, { invuln: 99, hearts: 9 });
+      nao.sim.assist = true;
+      nao.sim.hero.hearts = 9;
       return nao.sim.things.find((/** @type {any} */ t) => t.kind === 'boss')?.state;
     });
     if (state === attack) break;
     await page.waitForTimeout(400);
   }
-  await page.waitForTimeout(700);
+  // Wait for the hero to stop blinking after a hit.
+  await page.waitForFunction(
+    () => /** @type {any} */ (globalThis).__nao.sim.hero.invuln <= 0,
+    null,
+    {
+      timeout: 30000,
+    },
+  );
 };
 await fight('rackDrop');
 await shot('boss-julien');

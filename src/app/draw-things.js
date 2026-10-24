@@ -133,7 +133,7 @@ export function drawThing(view, items, sim, th, t) {
           -0.2,
           meeting ? 1 : Math.sign(th.vx) || 1,
           pose,
-          { scale: CAST.maview.scale, rim: 0.3, turn: meeting ? 0.4 : 1 },
+          { scale: CAST.mathis.scale, rim: 0.3, turn: meeting ? 0.4 : 1 },
         ),
       );
       break;
