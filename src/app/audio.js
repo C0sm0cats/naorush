@@ -50,7 +50,8 @@ const TICK_MS = 25;
  * @property {string[]} melody one pattern per bar: scale degree (base 36), '.' rest, '-' hold
  * @property {OscillatorType} wave
  * @property {number} cutoff
- * @property {string} bass 1 root, 2 octave, 3 third, 4 fourth, 5 fifth, b flat seventh
+ * @property {string} bass 1 root, 2 octave, 3 third, 4 fourth, 5 fifth, b flat seventh,
+ *   w chromatic approach to the next bar's root
  * @property {'triangle'|'saw'|'slap'} [bassWave]
  * @property {string} kick
  * @property {string} snare
@@ -68,6 +69,39 @@ const TICK_MS = 25;
  * @property {number} [echo] melody echo send 0..1
  * @property {OscillatorType} [leadWave] intensity-1 arpeggio wave
  * @property {boolean} [once] plays once instead of looping
+ * @property {Section[]} [form] song form; each section lasts as long as its melody (default: once)
+ */
+/**
+ * One song section; unset fields inherit the track's own (A section) values.
+ * @typedef {object} Section
+ * @property {[number, boolean][]} [chords]
+ * @property {string[]} [melody]
+ * @property {string[]} [counter] countermelody, melody syntax, one octave below the melody
+ * @property {string} [bass]
+ * @property {string} [kick]
+ * @property {string} [snare]
+ * @property {string} [hat]
+ * @property {string} [clap]
+ * @property {string} [stab]
+ * @property {boolean} [thin] breakdown: the drive layer drops its kicks and claps
+ */
+/**
+ * One compiled bar of a song form.
+ * @typedef {object} Bar
+ * @property {[number, boolean]} chord
+ * @property {string} mel
+ * @property {string} counter
+ * @property {string} bass
+ * @property {string} kick
+ * @property {string} snare
+ * @property {string} hat
+ * @property {string} clap
+ * @property {string} stab
+ * @property {boolean} thin
+ * @property {number} sec section index in the form
+ * @property {boolean} start first bar of its section
+ * @property {boolean} fill last bar of its section (drum fill)
+ * @property {number} next chord offset of the following bar (wraps at the loop point)
  */
 /**
  * @typedef {'title'|'parking'|'office'|'datacenter'|'copil'|'rooftop'|'bossJulien'|'bossRodolphe'|'win'|'gameover'|'credits'} TrackName
@@ -76,6 +110,7 @@ const TICK_MS = 25;
  * @typedef {object} Run
  * @property {TrackName} name
  * @property {Track} def
+ * @property {Bar[]} bars
  * @property {GainNode} bus
  * @property {GainNode} base
  * @property {GainNode} drive
@@ -104,6 +139,13 @@ const dbToGain = (db) => 10 ** (db / 20);
 /** @param {number} x */
 const clamp01 = (x) => Math.min(1, Math.max(0, Number.isFinite(x) ? x : 0));
 
+/** @param {string[]} a @param {Record<number, string>} edits bar index -> replacement */
+const vary = (a, edits) => a.map((x, k) => edits[k] ?? x);
+
+const PARKING_A = bars('7---4-5- 5---4-2- 2--4--7- 6---5-4- 7---9-a- b--a--9- a---9-8- 8-------');
+
+// Looping tracks follow an A (8 bars) / B (8 bars) / A' (countermelody) / bridge (4 bars) form;
+// every bridge ends on a dominant-ish chord that resolves into bar 1 at the loop point.
 /** @type {Record<TrackName, Track>} */
 const SONGS = {
   title: {
@@ -122,6 +164,29 @@ const SONGS = {
     comp: true,
     bells: true,
     echo: 0.25,
+    form: [
+      {},
+      {
+        chords: chords('5 7 4m 9m 5 7 0 7'),
+        melody: bars('a-9-7-5- b-a-8-6- 9---b-9- 7-6-5--- a-9-a-c- b---8-6- 7-9-b-9- 8---6-4-'),
+        bass: '1.3.5.3w',
+        kick: '1..11...',
+        snare: '..1...1.',
+      },
+      {
+        counter: bars('9------- 9---7--- 7---5--- 6---8--- 7---9--- 7---c--- a---c--- b---8---'),
+        bass: '1.5.1.5w',
+      },
+      {
+        chords: chords('5 9m 5 7'),
+        melody: bars('7------- c---9--- a---7--- 8---6---'),
+        bass: '1-------',
+        kick: '1.......',
+        snare: '........',
+        hat: '...1...1',
+        thin: true,
+      },
+    ],
   },
   parking: {
     bpm: 100,
@@ -132,7 +197,7 @@ const SONGS = {
     det: 9,
     cutoff: 1900,
     chords: chords('0m 8 3 10 0m 8 10 7'),
-    melody: bars('7---4-5- 5---4-2- 2--4--7- 6---5-4- 7---9-a- b--a--9- a---9-8- 8-------'),
+    melody: PARKING_A,
     bass: '11121112',
     bassWave: 'saw',
     kick: '1...1...',
@@ -142,6 +207,29 @@ const SONGS = {
     padWave: 'sawtooth',
     echo: 0.45,
     leadWave: 'triangle',
+    form: [
+      {},
+      {
+        chords: chords('8 10 7m 0m 8 10 7 7'),
+        melody: bars('9---7--- a---8-6- 8---6-4- 7------- c---9--- a---8-a- b---8--- 8---4---'),
+        bass: '1.5.2.5w',
+        kick: '1..1..1.',
+        hat: '.1.11.1.',
+      },
+      {
+        melody: vary(PARKING_A, { 1: '5---7-4-', 3: '6---a-8-', 5: 'c---9-a-', 6: 'a---8-7-' }),
+        counter: bars('2---4--- 5---2--- 4---6--- 6---3--- 4---2--- 5---7--- 6---8--- 8---4---'),
+        bass: '1112111w',
+      },
+      {
+        chords: chords('0m 8 5m 7'),
+        melody: bars('4------- 5---2--- 3---5--- 4---1---'),
+        bass: '1-------',
+        kick: '........',
+        snare: '........',
+        thin: true,
+      },
+    ],
   },
   office: {
     bpm: 120,
@@ -158,6 +246,29 @@ const SONGS = {
     hat: '11111111',
     comp: true,
     echo: 0.15,
+    form: [
+      {},
+      {
+        chords: chords('9m 5 0 7 9m 5 7 7'),
+        melody: bars('5.75.97. 3.53.75. 7.97.b9. b.a.8.6. 9.7.5.7. a.7.5.3. 4.64.86. 4.6.8.6.'),
+        bass: '1..51.5w',
+        kick: '1..1..1.',
+        hat: '1o1o1o1o',
+      },
+      {
+        counter: bars('7---4--- 5---3--- 4---2--- 6---4--- 7---9--- 7---5--- 6---8--- 9---7---'),
+        bass: '1..21.2w',
+      },
+      {
+        chords: chords('5 7 9m 7'),
+        melody: bars('7---5--- 6---4--- 5---9--- 8---6---'),
+        bass: '1...5...',
+        kick: '1...1...',
+        snare: '........',
+        hat: '.1.1.1.1',
+        thin: true,
+      },
+    ],
   },
   datacenter: {
     bpm: 124,
@@ -177,6 +288,30 @@ const SONGS = {
     pad: true,
     hum: true,
     echo: 0.3,
+    form: [
+      {},
+      {
+        chords: chords('5m 0m 8 10 5m 0m 8 7m'),
+        melody: bars('3...5.3. 4...2.0. 5...2.0. 6...3.1. 3.5.7.5. 4.2.4.7. 5.4.2.0. 4...1...'),
+        bass: '1.1.5.2.',
+        kick: '1..1.1..',
+        snare: '....1...',
+        hat: '.1.1.111',
+      },
+      {
+        chords: chords('8 10 7m 10'),
+        melody: bars('0------- 1---3--- 4---6--- 6---3---'),
+        bass: '1-------',
+        kick: '........',
+        snare: '........',
+        hat: '...1...1',
+        thin: true,
+      },
+      {
+        counter: bars('2---0--- 0---2--- 2---4--- 3---1--- 2---4--- 5---2--- 4---2--- 1---3---'),
+        bass: '1.1.1.2w',
+      },
+    ],
   },
   copil: {
     bpm: 116,
@@ -188,7 +323,7 @@ const SONGS = {
     chords: chords('0m 5 0m 5 3 5 0m 7m'),
     melody: bars(
       '7..7..5.4.2.4... 5..5..4.3.4.5... 7..7..9.7.5.4... 5.4.3.2.3...0... ' +
-        '2..2..4.5.4.2... 3..3..5.7.5.3... 4.5.7.9.a.9.7.5. 8...7...4...1...',
+        '2..2..4.6.4.2... 3..3..5.7.5.3... 4.5.7.9.a.9.7.5. 8...7...4...1...',
     ),
     bass: '1..21.2.1.b.1.2.',
     bassWave: 'slap',
@@ -198,6 +333,33 @@ const SONGS = {
     clap: '............1...',
     comp: true,
     echo: 0.12,
+    form: [
+      {},
+      {
+        chords: chords('10 5 7m 0m 10 5 2m 7m'),
+        melody: bars(
+          'a...a.8.6...8... 7..7..5.3...5... 4..4..6.8.6.4... 7...4...2..3.4.. ' +
+            '6..6..8.a.8.6... 5..5..7.a.7.5... 8..8..a.5...3... 4...6...8...b...',
+        ),
+        bass: '1..2..1.5.3.1.2w',
+        kick: '1.....1.1.1.....',
+        hat: '1.1o1.1.1.1o1.1o',
+      },
+      {
+        counter: bars('4---2--- 5---3--- 4---7--- 5---3--- 4---6--- 5---7--- 4---2--- 1---4---'),
+        bass: '1..21.2.1.b.1.2w',
+      },
+      {
+        chords: chords('3 5 10 5'),
+        melody: bars('2-------4------- 3-------5------- 6-------8------- 7-------5---3---'),
+        bass: '1.......1.....5.',
+        kick: '1...............',
+        snare: '............1...',
+        hat: '..1...1...1...1.',
+        clap: '................',
+        thin: true,
+      },
+    ],
   },
   rooftop: {
     bpm: 132,
@@ -216,6 +378,27 @@ const SONGS = {
     pad: true,
     bells: true,
     echo: 0.25,
+    form: [
+      {},
+      {
+        chords: chords('5 7 4m 9m 5 7 0 7'),
+        melody: bars('a.9.7.5. b.a.8.6. 9.b.9.6. c.b.9.7. a.c.e.c. b.8.6.8. 7.9.b.9. 8.6.4.6.'),
+        bass: '1.2.5.2w',
+        hat: '.o.o.o.o',
+      },
+      {
+        counter: bars('7---9--- 6---8--- 5---7--- 5---3--- 4---7--- 4---6--- 5---9--- a---7---'),
+        bass: '1.1.5.1w',
+      },
+      {
+        chords: chords('9m 5 0 7'),
+        melody: bars('7------- 5---7--- 4---7--- 6---8---'),
+        bass: '1---5---',
+        kick: '........',
+        snare: '........',
+        thin: true,
+      },
+    ],
   },
   bossJulien: {
     bpm: 140,
@@ -237,6 +420,31 @@ const SONGS = {
     padWave: 'sawtooth',
     echo: 0.2,
     leadWave: 'triangle',
+    form: [
+      {},
+      {
+        chords: chords('5m 7 0m 8 5m 7 8 7'),
+        melody: bars(
+          '7.5.3.5.7...3... 6.4.1.4.6...8... 7.4.2.4.7.9.7.4. 5.2.0.2.5...9... ' +
+            '3.5.7.9.a.9.7.5. 4.6.8.6.4...1... 5.7.9.7.5.4.2.0. 1...4...6...8...',
+        ),
+        bass: '12151215',
+        kick: '1.1.1.11',
+        hat: '11111111',
+      },
+      {
+        counter: bars('4---2--- 0---2--- 2---0--- 5---2--- 3---5--- 7---5--- 6---4--- 4---1---'),
+        bass: '1111111w',
+      },
+      {
+        chords: chords('8 8 7 7'),
+        melody: bars('5------- 7---9--- 6------- 4---8---'),
+        bass: '11111111',
+        snare: '........',
+        hat: '11111111',
+        thin: true,
+      },
+    ],
   },
   bossRodolphe: {
     bpm: 138,
@@ -247,7 +455,7 @@ const SONGS = {
     det: 10,
     cutoff: 2600,
     chords: chords('0m 0m 8 10 5m 8 7 7'),
-    melody: bars('7---4--- 7-9-a-9- 7---5--- 6-8-9-8- a---7--- c-b-a-9- b---8--- 9-8-b---'),
+    melody: bars('7---4--- 7-9-b-9- 7---5--- 6-8-a-8- a---7--- c-b-9-a- b---8--- 8-7-8-b-'),
     bass: '1.1.1.12',
     bassWave: 'saw',
     kick: '1.1...1.',
@@ -257,6 +465,30 @@ const SONGS = {
     pad: true,
     big: true,
     echo: 0.3,
+    form: [
+      {},
+      {
+        chords: chords('8 10 0m 3 8 5m 7 7'),
+        melody: bars('e-d-c--- d---a--- b-c-b-9- b---9--- c-b-c-e- e---c-a- b---8--- 8-9-8-7-'),
+        bass: '1.1.5.12',
+        kick: '1...1...',
+        snare: '..1...1.',
+        stab: '1.....1.',
+      },
+      {
+        counter: bars('9---b--- b---9--- 9---7--- 8---6--- 7---5--- 7---9--- b---8--- 8---b---'),
+        bass: '1.1.1.1w',
+      },
+      {
+        chords: chords('8 8 7 7'),
+        melody: bars('c------- e---c--- b------- 8---b---'),
+        bass: '1-------',
+        kick: '1.......',
+        snare: '........',
+        stab: '1.......',
+        thin: true,
+      },
+    ],
   },
   win: {
     bpm: 128,
@@ -309,11 +541,69 @@ const SONGS = {
     comp: true,
     bells: true,
     echo: 0.3,
+    form: [
+      {},
+      {
+        chords: chords('5 7 4m 9m 5 7 0 7'),
+        melody: bars('7-5-3-5- 8---6-4- 6---4-2- 5---7--- a-9-7-5- 8---4-6- 7---9--- 8-6-4---'),
+        bass: '1.2.5.3w',
+      },
+      {
+        counter: bars('2---4--- 1---4--- 2---0--- 4---6--- 5---3--- 4---2--- 3---5--- 6---4---'),
+        bass: '1..5.1.w',
+      },
+      {
+        chords: chords('9m 5 2m 7'),
+        melody: bars('9------- 7---a--- 8---5--- 6---8---'),
+        bass: '1...5...',
+        kick: '1.......',
+        snare: '........',
+        thin: true,
+      },
+    ],
   },
 };
 
+/**
+ * Flattens a track's form into one entry per bar.
+ * @param {Track} def
+ * @returns {Bar[]}
+ */
+function compile(def) {
+  /** @type {Bar[]} */
+  const out = [];
+  (def.form ?? [{}]).forEach((sec, si) => {
+    const melody = sec.melody ?? def.melody;
+    const ch = sec.chords ?? def.chords;
+    const n = Math.max(melody.length, ch.length);
+    for (let k = 0; k < n; k++) {
+      out.push({
+        chord: ch[k % ch.length],
+        mel: melody[k % melody.length],
+        counter: sec.counter ? sec.counter[k % sec.counter.length] : '',
+        bass: sec.bass ?? def.bass,
+        kick: sec.kick ?? def.kick,
+        snare: sec.snare ?? def.snare,
+        hat: sec.hat ?? def.hat,
+        clap: sec.clap ?? def.clap ?? '',
+        stab: sec.stab ?? def.stab ?? '',
+        thin: !!sec.thin,
+        sec: si,
+        start: k === 0,
+        fill: k === n - 1,
+        next: 0,
+      });
+    }
+  });
+  out.forEach((b, k) => (b.next = out[(k + 1) % out.length].chord[0]));
+  return out;
+}
+
 /** Every playable track name, in display order. */
 export const TRACKS = /** @type {TrackName[]} */ (Object.keys(SONGS));
+const BARS = /** @type {Record<TrackName, Bar[]>} */ (
+  Object.fromEntries(TRACKS.map((n) => [n, compile(SONGS[n])]))
+);
 
 /** @type {Record<string, (v: Voice) => void>} */
 const SFX = {
@@ -1223,10 +1513,24 @@ export class Audio {
       tone.connect(bus);
       nodes.push(delay, fb, tone, send);
     }
+    const bars = BARS[name];
     /** @type {Run} */
-    const run = { name, def, bus, base, drive, lead, wet, nodes, timer: null, step: 0, next: now };
+    const run = {
+      name,
+      def,
+      bars,
+      bus,
+      base,
+      drive,
+      lead,
+      wet,
+      nodes,
+      timer: null,
+      step: 0,
+      next: now,
+    };
     run.next = now + 0.08;
-    const total = Math.max(def.melody.length, def.chords.length) * 16;
+    const total = bars.length * 16;
     run.timer = setInterval(() => {
       while (run.next < ctx.currentTime + LOOKAHEAD) {
         if (def.once && run.step >= total) {
@@ -1362,16 +1666,30 @@ export class Audio {
     const t = run.next;
     const s16 = 60 / def.bpm / 4;
     const s = run.step % total;
-    const bar = Math.floor(s / 16);
+    const bar = run.bars[Math.floor(s / 16)];
     const i = s % 16;
-    const lastBar = bar === total / 16 - 1;
-    const [off, minor] = def.chords[bar % def.chords.length];
+    const [off, minor] = bar.chord;
     const third = minor ? 3 : 4;
     const base = def.root + off;
+    const loop = !def.once;
     /** char of an 8- or 16-step pattern at this sixteenth, '.' between eighths */
     const at = (/** @type {string} */ p) =>
       p.length === 16 ? p[i] : i % 2 ? '.' : (p[i / 2] ?? '.');
     const unit = (/** @type {string} */ p) => (p.length === 16 ? s16 : s16 * 2);
+    /** Note starting here: [char, held steps, next char] or null. */
+    const onset = (/** @type {string} */ p) => {
+      const c = at(p);
+      if (c === '.' || c === '-') return null;
+      const k = p.length === 16 ? i : i / 2;
+      let holds = 0;
+      while (p[k + 1 + holds] === '-') holds++;
+      return /** @type {[string, number, string | undefined]} */ ([c, holds, p[k + 1]]);
+    };
+    /** Scale degree (base 36) to MIDI note. */
+    const degree = (/** @type {string} */ c, /** @type {number} */ oct) => {
+      const deg = parseInt(c, 36);
+      return def.root + oct + def.scale[deg % 7] + 12 * Math.floor(deg / 7);
+    };
     const [driveT, leadT] = this.#layerTargets();
     const driveOn = driveT > 0 || run.drive.gain.value > 0.001;
     const leadOn = leadT > 0 || run.lead.gain.value > 0.001;
@@ -1382,16 +1700,12 @@ export class Audio {
     const lead = this.#voice(run.lead);
 
     // Melody
-    const mbar = def.melody[bar % def.melody.length];
-    const m = at(mbar);
-    if (m !== '.' && m !== '-') {
-      const k = mbar.length === 16 ? i : i / 2;
-      let holds = 0;
-      while (mbar[k + 1 + holds] === '-') holds++;
-      const len = holds ? holds + 0.9 : mbar[k + 1] === '.' ? 1.8 : 0.9;
-      const deg = parseInt(m, 36);
-      const note = def.root + def.lead + def.scale[deg % 7] + 12 * Math.floor(deg / 7);
-      const d = unit(mbar) * len;
+    const m = onset(bar.mel);
+    if (m) {
+      const [c, holds, after] = m;
+      const len = holds ? holds + 0.9 : after === '.' ? 1.8 : 0.9;
+      const note = degree(c, def.lead);
+      const d = unit(bar.mel) * len;
       const level = def.det ? 0.08 : 0.12;
       wet.tone({
         f: mtof(note),
@@ -1406,16 +1720,23 @@ export class Audio {
       if (def.bells) wet.tone({ f: mtof(note + 12), t, d: d * 0.8, v: 0.035, a: 0.005 });
     }
 
+    // Countermelody: soft triangle line under the melody
+    const cm = bar.counter ? onset(bar.counter) : null;
+    if (cm) {
+      const [c, holds] = cm;
+      const d = unit(bar.counter) * (holds ? holds + 0.9 : 0.9);
+      const f = mtof(degree(c, def.lead - 12));
+      v.tone({ f, t, d, type: 'triangle', v: 0.05, a: 0.03, pan: -0.25 });
+    }
+
     // Bass
-    const b = at(def.bass);
-    if (b !== '.' && b !== '-') {
+    const b = onset(bar.bass);
+    if (b) {
+      const [c, holds] = b;
       /** @type {Record<string, number>} */
       const shifts = { 1: 0, 2: 12, 3: third, 4: 5, 5: 7, b: 10 };
-      const k = def.bass.length === 16 ? i : i / 2;
-      let holds = 0;
-      while (def.bass[k + 1 + holds] === '-') holds++;
-      const d = unit(def.bass) * (holds ? holds + 0.9 : 0.9);
-      const f = mtof(base + (shifts[b] ?? 0));
+      const d = unit(bar.bass) * (holds ? holds + 0.9 : 0.9);
+      const f = mtof(c === 'w' ? def.root + bar.next - 1 : base + (shifts[c] ?? 0));
       if (def.bassWave === 'saw') {
         v.tone({ f, t, d, type: 'sawtooth', v: 0.3, lp: 900, lpTo: 300, q: 3, a: 0.005 });
       } else if (def.bassWave === 'slap') {
@@ -1432,7 +1753,10 @@ export class Audio {
     // Harmony
     const triad = [0, third, 7];
     if (def.arp && (def.arp === 16 || i % 2 === 0)) {
-      const seq = [0, third, 7, 12, 7, third, 12, 7 + 12];
+      const seq =
+        bar.sec % 2
+          ? [12, 7, third, 7, 12, 7 + 12, 12, third + 12]
+          : [0, third, 7, 12, 7, third, 12, 7 + 12];
       const k = seq[(def.arp === 16 ? i : i / 2) % 8];
       wet.tone({
         f: mtof(base + 24 + k),
@@ -1471,7 +1795,7 @@ export class Audio {
         v.tone({ f: mtof(base + 24 + k), t, d: s16 * 3, type: 'triangle', v: 0.05, a: 0.01 });
       }
     }
-    if (def.stab && at(def.stab) === '1') {
+    if (at(bar.stab) === '1') {
       for (const k of [0, third, 7, 12]) {
         const f = mtof(base + 24 + k);
         v.tone({ f, t, d: 0.22, type: 'sawtooth', v: 0.04, lp: 2600, lpTo: 700, det: 12 });
@@ -1483,8 +1807,18 @@ export class Audio {
       to.tone({ f: def.big ? 130 : 150, to: 42, t, d: def.big ? 0.28 : 0.18, v: g, a: 0.003 });
       to.noise({ t, d: 0.015, type: 'highpass', f: 3000, v: 0.05 });
     };
-    if (at(def.kick) === '1') kick(v, 0.75);
-    if (at(def.snare) === '1') {
+    // Crash on every section change, including the loop point
+    if (loop && bar.start && i === 0 && run.step > 0) {
+      v.noise({ t, d: 1.4, type: 'highpass', f: 6000, v: 0.07, a: 0.002 });
+      v.noise({ t, d: 0.45, type: 'bandpass', f: 3500, q: 0.8, v: 0.05 });
+    }
+    if (at(bar.kick) === '1') kick(v, 0.75);
+    if (loop && bar.fill && i >= 12) {
+      // Section-end fill: four rising snare/tom hits on the last beat
+      const g = 0.13 + (i - 12) * 0.05;
+      v.noise({ t, d: def.big ? 0.16 : 0.09, type: 'highpass', f: 1500, v: g });
+      v.tone({ f: 260 - (i - 12) * 30, to: 110, t, d: 0.1, type: 'triangle', v: g, a: 0.003 });
+    } else if (at(bar.snare) === '1') {
       if (def.big) {
         v.noise({ t, d: 0.35, type: 'bandpass', f: 1800, q: 0.6, v: 0.35 });
         v.tone({ f: 180, to: 140, t, d: 0.12, type: 'triangle', v: 0.3 });
@@ -1494,31 +1828,40 @@ export class Audio {
         v.tone({ f: 220, t, d: 0.07, type: 'triangle', v: 0.2 });
       }
     }
-    if (def.clap && at(def.clap) === '1') this.#clap(v, t, 0.14);
-    const h = at(def.hat);
+    if (at(bar.clap) === '1') this.#clap(v, t, 0.14);
+    const h = at(bar.hat);
     if (h === '1' || h === 'o') {
       const d = h === 'o' ? 0.16 : 0.04;
       v.noise({ t, d, type: 'highpass', f: 7000, v: i % 4 ? 0.1 : 0.14 });
     }
 
-    // Drive layer: sixteenth hats, extra kicks, claps, a fill on the last bar
-    if (driveOn && !def.once) {
+    // Drive layer: sixteenth hats, extra kicks, claps, a fill at each section end
+    if (driveOn && loop) {
       drive.noise({ t, d: 0.03, type: 'highpass', f: 8000, v: i % 2 ? 0.05 : 0.08, pan: 0.25 });
-      if (i === 10 || (i === 14 && bar % 2)) kick(drive, 0.5);
-      if (i === 4 || i === 12) this.#clap(drive, t, 0.1);
-      if (lastBar && i >= 12) {
+      if (!bar.thin) {
+        if (i === 10 || (i === 14 && s % 32 >= 16)) kick(drive, 0.5);
+        if (i === 4 || i === 12) this.#clap(drive, t, 0.1);
+      }
+      if (bar.fill && bar.sec % 2 === 0 && i >= 12) {
         drive.tone({ f: [220, 180, 150, 120][i - 12], to: 70, t, d: 0.16, v: 0.3, a: 0.003 });
+      } else if (bar.fill && i >= 8) {
+        const g = 0.06 + (i - 8) * 0.025;
+        drive.noise({ t, d: 0.07, type: 'bandpass', f: 1800 + (i - 8) * 150, q: 0.8, v: g });
       }
     }
 
-    // Lead layer: sparkling counter arpeggio
-    if (leadOn && !def.once) {
-      const seq = [12, 7, third + 12, 7, 19, 12, third + 12, 7];
+    // Lead layer: sparkling counter arpeggio, a different figure in each section
+    if (leadOn && loop && (!bar.thin || i % 2 === 0)) {
+      const seq = [
+        [12, 7, third + 12, 7, 19, 12, third + 12, 7],
+        [0, 7, 12, third + 12, 19, third + 12, 12, 7],
+        [19, third + 12, 12, 7, 12, third + 12, 19, 12],
+      ][bar.sec % 3];
       const note = base + 36 + seq[i % 8] - (i >= 8 ? 12 : 0);
       lead.tone({
         f: mtof(note),
         t,
-        d: s16 * 0.9,
+        d: s16 * (bar.thin ? 1.8 : 0.9),
         type: def.leadWave ?? 'square',
         v: 0.045,
         lp: 3200,
