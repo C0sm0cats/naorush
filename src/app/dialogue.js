@@ -87,6 +87,40 @@ function toScreen(vp, x, y) {
   return [(p.x * 0.5 + 0.5) * innerWidth, (0.5 - p.y * 0.5) * innerHeight];
 }
 
+/**
+ * Deals a moment's lines in shuffled rounds: every line comes up once per round,
+ * and a new round never opens with the line that closed the previous one.
+ */
+export class ShuffleBag {
+  /** @param {() => number} [random] */
+  constructor(random = Math.random) {
+    this.random = random;
+    /** Indices still to deal, per key. @type {Map<string, number[]>} */
+    this.bags = new Map();
+    /** Last index dealt, per key. @type {Map<string, number>} */
+    this.last = new Map();
+  }
+
+  /** @param {string} key @param {number} n How many lines there are. @returns {number} */
+  next(key, n) {
+    if (n <= 1) return 0;
+    let bag = this.bags.get(key);
+    if (!bag?.length || bag.some((i) => i >= n)) {
+      bag = Array.from({ length: n }, (_, i) => i);
+      for (let i = n - 1; i > 0; i--) {
+        const j = Math.floor(this.random() * (i + 1));
+        [bag[i], bag[j]] = [bag[j], bag[i]];
+      }
+      // Dealt from the end: keep the previous line away from the first draw.
+      if (bag[n - 1] === this.last.get(key)) [bag[0], bag[n - 1]] = [bag[n - 1], bag[0]];
+      this.bags.set(key, bag);
+    }
+    const pick = /** @type {number} */ (bag.pop());
+    this.last.set(key, pick);
+    return pick;
+  }
+}
+
 /** A short line in a bubble above a character's head. */
 export class Bubbles {
   constructor() {
@@ -96,20 +130,21 @@ export class Bubbles {
     this.time = 0;
     /** Last time each speaker said each moment. @type {Record<string, number>} */
     this.last = {};
+    this.bag = new ShuffleBag();
   }
 
   /**
-   * Picks a line for a moment; each moment waits a while before repeating.
+   * Picks a line for a moment from its shuffle bag; each moment waits a while before repeating.
    * @param {string} who CAST id @param {string} moment @param {boolean} [force]
    */
   say(who, moment, force = false) {
     const lines = BARKS[who]?.[moment];
     if (!lines) return;
-    const key = who + moment;
+    const key = `${who}:${moment}`;
     const now = performance.now() / 1000;
     if (!force && (now - (this.last[key] ?? -99) < 8 || this.time > 0.4)) return;
     this.last[key] = now;
-    this.line(who, lines[Math.floor(Math.random() * lines.length)]);
+    this.line(who, lines[this.bag.next(key, lines.length)]);
   }
 
   /** @param {string} who @param {string} text */

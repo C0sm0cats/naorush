@@ -491,19 +491,23 @@ function stageWon() {
     bests[key] = sim.time;
     store(BEST_KEY, bests);
   }
+  const allSecrets = sim.secretTotal > 0 && sim.secrets >= sim.secretTotal;
+  // Highlights (gold) for the achievements worth a second look.
+  /** @type {Array<[string, string | number, boolean?]>} */
   const rows = [
     ['Tickets Swile', sim.tickets],
-    ['Secrets', `${sim.secrets} / ${sim.secretTotal}`],
+    ['Secrets', `${sim.secrets} / ${sim.secretTotal}${allSecrets ? ' ✓' : ''}`, allSecrets],
     ['Temps', clock(sim.time)],
-    ['Record', record ? 'Nouveau record !' : clock(bests[key])],
-    ['Retours au badge', sim.deaths],
+    ['Record', record ? 'Nouveau record !' : clock(bests[key]), record],
+    ['Retours au badge', sim.deaths || 'Aucun, sans faute !', !sim.deaths],
   ];
   $('wonStats').replaceChildren(
-    ...rows.flatMap(([k, v]) => {
+    ...rows.flatMap(([k, v, best]) => {
       const dt = document.createElement('dt');
       const dd = document.createElement('dd');
-      dt.textContent = String(k);
+      dt.textContent = k;
       dd.textContent = String(v);
+      if (best) dd.className = 'best';
       return [dt, dd];
     }),
   );

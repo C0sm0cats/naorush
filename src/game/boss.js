@@ -350,7 +350,7 @@ export function stepHazard(s, t) {
  */
 export function hitBoss(s, b) {
   if (b.state !== 'consult') {
-    emit(s, 'block', b.x, b.y + 1.6);
+    emit(s, 'block', b.x, b.y + 1.6, 'boss');
     return;
   }
   const next = PATTERNS[s.boss?.id ?? 'techServicesDirector'].phases[(b.phase ?? 1) - 1];

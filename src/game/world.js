@@ -110,7 +110,8 @@ export const HERO_STATS = {
  * @property {boolean} jump
  * @property {boolean} [fire] Throw a meeting report (CR).
  *
- * @typedef {{type: string, x: number, y: number}} SimEvent
+ * @typedef {{type: string, x: number, y: number, cause?: string}} SimEvent
+ *   `cause` tells apart events that share a type (a boss on guard vs. a crate).
  *
  * @typedef {'techServicesDirector'|'regionalDirector'} BossId
  *
@@ -163,8 +164,9 @@ export function blocked(s, x, y, w, h) {
   return false;
 }
 
-/** @param {World} s @param {string} type @param {number} x @param {number} y */
-export const emit = (s, type, x, y) => s.events.push({ type, x, y });
+/** @param {World} s @param {string} type @param {number} x @param {number} y @param {string} [cause] */
+export const emit = (s, type, x, y, cause) =>
+  s.events.push(cause ? { type, x, y, cause } : { type, x, y });
 
 /**
  * A new moving thing.

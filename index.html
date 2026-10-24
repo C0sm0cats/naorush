@@ -52,8 +52,15 @@
       </div>
     </header>
     <div class="bossbar" id="bossbar" hidden>
-      <b id="bossName"></b>
+      <div class="boss-head">
+        <b id="bossName"></b>
+        <span class="pips" id="bossPhase" role="img" aria-label="Phase 1"></span>
+      </div>
       <div class="bar"><i id="bossHp"></i></div>
+      <div class="consult" id="bossConsult" aria-hidden="true" hidden>
+        <span>PRIMO</span>
+        <div class="consult-bar"><i id="bossConsultBar"></i></div>
+      </div>
     </div>
     <div class="stage" id="stage" aria-live="polite">
       <p class="kicker" id="stageNum"></p>

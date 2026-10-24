@@ -325,7 +325,7 @@ body:not([data-screen='play']) .touch {
   transform: translate(-50%, 0);
 }
 body.boss .toast {
-  top: calc(max(12px, env(safe-area-inset-top)) + 102px);
+  top: calc(max(12px, env(safe-area-inset-top)) + 124px);
 }
 
 /* Screens */
@@ -931,6 +931,89 @@ body[data-screen='loading'] .stage {
 body:not([data-screen='play']) .bossbar {
   opacity: 0;
 }
+.boss-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-width: 0;
+}
+.pips {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: var(--glass-grad);
+  box-shadow: inset 0 0 0 1px #ff4f9a80;
+}
+.pip {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ffffff2e;
+  box-shadow: inset 0 0 0 1.5px #ffffff66;
+}
+.pip.done {
+  background: #ffffff8c;
+  box-shadow: none;
+}
+.pip.on {
+  background: var(--pink);
+  box-shadow: 0 0 8px var(--pink);
+}
+/* The consult countdown keeps its place so the toast below never jumps. */
+.consult {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 70%;
+  height: 16px;
+  color: var(--lime);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1.6px;
+  text-shadow: 0 1px 2px #000c;
+}
+.consult[hidden] {
+  display: flex;
+  visibility: hidden;
+}
+.consult-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: #0e1424d9;
+  box-shadow: inset 0 0 0 1px #c6f43266;
+  overflow: hidden;
+}
+.consult-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--lime);
+  box-shadow: 0 0 8px var(--lime);
+  transform-origin: left;
+}
+/* While he consults PRIMO the bar glows lime: the window is open. */
+.bossbar.open .bar {
+  box-shadow:
+    inset 0 0 0 1.5px var(--lime),
+    0 0 14px #c6f43299,
+    0 4px 14px #0007;
+}
+.bossbar.hit .bar {
+  animation: boss-jolt 0.35s ease-out;
+}
+@keyframes boss-jolt {
+  25% {
+    transform: translateX(-4px);
+    filter: brightness(1.8);
+  }
+  60% {
+    transform: translateX(3px);
+  }
+}
 
 /* Stage results */
 #won .card {
@@ -976,6 +1059,35 @@ body:not([data-screen='play']) .bossbar {
   font-weight: 900;
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+.stats dd.best {
+  color: #8a5a00;
+}
+.stats dd.best::before {
+  content: '★ ';
+  content: '★ ' / '';
+  color: #c98a00;
+}
+#won:not([hidden]) .stats dd {
+  animation: stat-in 0.35s ease-out backwards;
+}
+#won .stats dd:nth-of-type(2) {
+  animation-delay: 0.08s;
+}
+#won .stats dd:nth-of-type(3) {
+  animation-delay: 0.16s;
+}
+#won .stats dd:nth-of-type(4) {
+  animation-delay: 0.24s;
+}
+#won .stats dd:nth-of-type(5) {
+  animation-delay: 0.32s;
+}
+@keyframes stat-in {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
 }
 
 /* Speech bubbles above characters */
@@ -1811,6 +1923,7 @@ body.contrast .bark {
 body.contrast .card::before {
   display: none;
 }
+body.contrast .stats dd.best,
 body.contrast .lead,
 body.contrast .talk-box p,
 body.contrast .stats dt,
@@ -1844,11 +1957,18 @@ body.contrast .pill,
 body.contrast .hearts,
 body.contrast .room,
 body.contrast .icon-btn,
-body.contrast .bossbar b {
+body.contrast .bossbar b,
+body.contrast .pips {
   background: #000;
   color: #fff;
   outline: 2px solid #fff;
   backdrop-filter: none;
+}
+body.contrast .consult span {
+  padding: 0 6px;
+  border-radius: 4px;
+  background: #000;
+  outline: 2px solid #fff;
 }
 body.contrast .hero-card,
 body.contrast .talk-who {

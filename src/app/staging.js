@@ -10,7 +10,8 @@ import { HERO } from '../game/sim.js';
 
 /**
  * Extra lights for a boss fight: Julien's red alarm beacon in phase two,
- * Rodolphe's coloured spotlights sweeping the stage.
+ * Rodolphe's coloured spotlights sweeping the stage, and in his grand finale
+ * (phase three) a follow spot on the hero.
  * @param {import('../data/levels/index.js').Level} level @param {Sim} sim @param {number} t
  * @returns {PointLight[]}
  */
@@ -25,11 +26,15 @@ export function bossLights(level, sim, t) {
   const [x0, x1] = level.boss.arena;
   const mid = (x0 + x1) / 2;
   const half = (x1 - x0) / 2 - 1;
-  return [
+  const sweep = [
     { pos: [mid + Math.sin(t * 0.9) * half, 7, 0.5], radius: 8, color: [2.4, 0.6, 1.5] },
     { pos: [mid + Math.sin(t * 0.9 + 2.2) * half, 7, 0.5], radius: 8, color: [0.6, 1.2, 2.6] },
     { pos: [mid + Math.sin(t * 0.9 + 4.4) * half, 7, 0.5], radius: 8, color: [1.6, 2.2, 0.6] },
   ];
+  if ((boss?.phase ?? 1) < 3) return sweep;
+  // Grand finale: a warm follow spot keeps the hero centre stage.
+  const hx = sim.hero.x + HERO.w / 2;
+  return [{ pos: [hx, sim.hero.y + 3, 2.5], radius: 7, color: [4, 3.5, 2.8] }, ...sweep];
 }
 
 /**

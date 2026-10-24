@@ -83,6 +83,8 @@ describe('boss duel', () => {
     expect(boss.state).not.toBe('consult');
     const events = shootAt(s, boss);
     expect(has(events, 'block')).toBe(true);
+    // Tagged so the HUD's « attends qu’il consulte PRIMO » only shows for a boss.
+    expect(events.find((e) => e.type === 'block')?.cause).toBe('boss');
     expect(has(events, 'bossHit')).toBe(false);
     expect(boss.hp).toBe(HP);
   });
