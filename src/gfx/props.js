@@ -133,12 +133,81 @@ function flatBox(b, c, h, color, mat = MATTE) {
 }
 
 /**
+ * Smooth step from 0 at `a` to 1 at `c`.
+ * @param {number} a @param {number} c @param {number} x
+ */
+const sm = (a, c, x) => {
+  const t = Math.max(0, Math.min(1, (x - a) / (c - a)));
+  return t * t * (3 - 2 * t);
+};
+
+/**
+ * Bends every vertex added since `start` through `f`; normals follow the
+ * deformation (cofactor of the numerical Jacobian), so tapers and slopes stay lit.
+ * @param {MeshBuilder} b @param {number} start @param {(p: number[]) => number[]} f
+ */
+function deform(b, start, f) {
+  const P = b.pos,
+    N = b.nrm,
+    e = 1e-4;
+  for (let i = start * 3; i < P.length; i += 3) {
+    const p = [P[i], P[i + 1], P[i + 2]];
+    const q = f(p);
+    /** @type {number[][]} columns d f / d axis */
+    const J = [0, 1, 2].map((k) => {
+      const a = p.slice(),
+        c = p.slice();
+      a[k] -= e;
+      c[k] += e;
+      const fa = f(a),
+        fc = f(c);
+      return fc.map((x, j) => (x - fa[j]) / (2 * e));
+    });
+    const [c0, c1, c2] = J;
+    /** @param {number[]} u @param {number[]} v */
+    const cross = (u, v) => [
+      u[1] * v[2] - u[2] * v[1],
+      u[2] * v[0] - u[0] * v[2],
+      u[0] * v[1] - u[1] * v[0],
+    ];
+    // Cofactor rows: n' = cof(J) n.
+    const r0 = cross(c1, c2),
+      r1 = cross(c2, c0),
+      r2 = cross(c0, c1);
+    const n = [N[i], N[i + 1], N[i + 2]];
+    const m = [0, 1, 2].map((j) => r0[j] * n[0] + r1[j] * n[1] + r2[j] * n[2]);
+    const len = Math.hypot(...m) || 1;
+    P[i] = q[0];
+    P[i + 1] = q[1];
+    P[i + 2] = q[2];
+    N[i] = m[0] / len;
+    N[i + 1] = m[1] / len;
+    N[i + 2] = m[2] / len;
+  }
+}
+
+/**
+ * Colour scaled in brightness (and nudged towards `mix` by `t`), as `#rrggbb`.
+ * @param {string} hex @param {number} k @param {string} [mix] @param {number} [t]
+ */
+function tone(hex, k, mix = hex, t = 0) {
+  const a = rgb(hex),
+    c = rgb(mix);
+  let out = 0;
+  for (const sh of [16, 8, 0]) {
+    const v = ((a >> sh) & 255) * (1 - t) + ((c >> sh) & 255) * t;
+    out |= Math.max(0, Math.min(255, Math.round(v * k))) << sh;
+  }
+  return '#' + out.toString(16).padStart(6, '0');
+}
+
+/**
  * Parametric surface with numerical normals oriented towards `up`.
  * @param {MeshBuilder} b @param {number} nu @param {number} nv
  * @param {(u: number, v: number) => number[]} f @param {string} color @param {number} mat
- * @param {number[]} [up]
+ * @param {number[]} [up] @param {(u: number, v: number) => number} [ao] Baked occlusion 0..1.
  */
-function surf(b, nu, nv, f, color, mat, up = [0, 1, 0]) {
+function surf(b, nu, nv, f, color, mat, up = [0, 1, 0], ao) {
   const e = 1e-3;
   /** @param {number} x */
   const cl = (x) => Math.max(0, Math.min(1, x));
@@ -161,7 +230,7 @@ function surf(b, nu, nv, f, color, mat, up = [0, 1, 0]) {
       const len = Math.hypot(...n);
       n = len < 1e-12 ? up : n.map((x) => x / len);
       if (n[0] * up[0] + n[1] * up[1] + n[2] * up[2] < 0) n = n.map((x) => -x);
-      return { p, n };
+      return { p, n, ao: ao ? ao(u, v) : 1 };
     },
     rgb(color),
     mat,
@@ -252,8 +321,38 @@ function leaf(b, L, W, droop, color, m, t) {
     },
     color,
     GLOSSY,
+    [0, 1, 0],
+    (u, v) => 0.62 + 0.38 * Math.min(1, u * 1.6) * (1 - 0.25 * Math.abs(v * 2 - 1)),
+  );
+  // Paler midrib along the leaf.
+  surf(
+    b,
+    8,
+    1,
+    (u, v) => [(v * 2 - 1) * W * 0.07 * (1 - u), 0.002 - droop * u * u, u * L * 0.92],
+    tone(color, 1.25, '#e9f7b8', 0.3),
+    MATTE,
   );
   place(b, s, m, t);
+}
+
+/**
+ * Half disc facing ±z (arch shadow behind a wheel), centred on `c`.
+ * @param {MeshBuilder} b @param {number[]} c @param {number} r @param {number} side
+ * @param {string} color
+ */
+function halfDisc(b, c, r, side, color) {
+  b.grid(
+    14,
+    1,
+    (u, v) => {
+      const a = u * Math.PI;
+      const rr = v * r;
+      return { p: [c[0] + Math.cos(a) * rr, c[1] + Math.sin(a) * rr, c[2]], n: [0, 0, side] };
+    },
+    rgb(color),
+    MATTE,
+  );
 }
 
 /**
@@ -261,60 +360,113 @@ function leaf(b, L, W, droop, color, m, t) {
  * @param {MeshBuilder} b @param {string} paint
  */
 function car(b, paint) {
-  const GLASS = '#1c2633';
-  // Lower body and cabin; the cabin top stays flat to stand on.
-  b.roundedBox([0, 0.55, 0], [1.8, 0.3, 0.85], 0.22, paint, { mat: GLOSSY, seg: 7 });
-  b.roundedBox([-0.12, 1.07, 0], [1.12, 0.28, 0.76], 0.16, paint, { mat: GLOSSY, seg: 7 });
-  // Windows: windscreen, rear screen and two side windows each side.
-  flatBox(b, [0.99, 1.08, 0], [0.012, 0.19, 0.64], GLASS, GLOSSY);
-  flatBox(b, [-1.23, 1.08, 0], [0.012, 0.19, 0.62], GLASS, GLOSSY);
-  for (const z of [-0.765, 0.765])
-    for (const x of [-0.62, 0.42]) flatBox(b, [x, 1.09, z], [0.44, 0.17, 0.006], GLASS, GLOSSY);
-  // Door seam, handles, mirrors.
-  for (const z of [-0.852, 0.852]) {
-    flatBox(b, [-0.12, 0.55, z], [0.008, 0.22, 0.002], '#2a3038');
-    flatBox(b, [0.15, 0.68, z], [0.08, 0.015, 0.004], CHROME, GLOSSY);
-    b.roundedBox([0.85, 0.92, z * 0.98], [0.06, 0.05, 0.05], 0.03, paint, { mat: GLOSSY, seg: 3 });
+  const GLASS = '#1a2533';
+  const TRIM = '#2a2f37';
+  const dark = tone(paint, 0.72);
+  // Lower body: sloping bonnet and boot, slight tumblehome.
+  let s = mark(b);
+  b.roundedBox([0, 0.6, 0], [1.8, 0.28, 0.8], 0.2, paint, { mat: GLOSSY, seg: 7 });
+  for (const z of [-1, 1]) {
+    // Door seams, handles, a darker sill and a shoulder crease, all bent with the body.
+    for (const x of [-0.16, 0.66])
+      flatBox(b, [x, 0.6, z * 0.802], [0.006, 0.2, 0.002], tone(paint, 0.6));
+    flatBox(b, [-0.84, 0.6, z * 0.802], [0.006, 0.17, 0.002], tone(paint, 0.6));
+    for (const x of [-0.42, 0.42])
+      b.roundedBox([x, 0.74, z * 0.803], [0.07, 0.014, 0.008], 0.007, CHROME, {
+        mat: GLOSSY,
+        seg: 2,
+      });
+    flatBox(b, [0, 0.37, z * 0.792], [1.5, 0.045, 0.014], TRIM);
+    flatBox(b, [0.05, 0.8, z * 0.8], [1.45, 0.005, 0.004], tone(paint, 1.12, '#ffffff', 0.15));
   }
-  // Bumpers.
-  for (const x of [-1.72, 1.72])
-    b.roundedBox([x, 0.35, 0], [0.09, 0.09, 0.8], 0.06, '#3a3f48', { mat: GLOSSY, seg: 4 });
-  flatBox(b, [1.805, 0.47, 0], [0.004, 0.05, 0.25], '#20242c');
+  deform(b, s, ([x, y, z]) => {
+    const t = sm(0.32, 0.88, y);
+    const drop = 0.14 * sm(0.75, 1.8, x) + 0.07 * sm(-1.25, -1.8, x);
+    return [x, y - t * drop, z * (1 - 0.06 * t)];
+  });
+  // Wheel arches: dark half discs behind the tyres.
+  for (const x of [-1.15, 1.15])
+    for (const z of [-1, 1]) halfDisc(b, [x, 0.3, z * 0.806], 0.36, z, '#14161a');
+  // Cabin with its glass, tapered into a windscreen and rear screen.
+  s = mark(b);
+  b.roundedBox([-0.15, 1.07, 0], [1.1, 0.22, 0.72], 0.12, paint, { mat: GLOSSY, seg: 6 });
+  flatBox(b, [0.952, 1.1, 0], [0.006, 0.15, 0.6], GLASS, GLOSSY);
+  flatBox(b, [-1.252, 1.1, 0], [0.006, 0.14, 0.56], GLASS, GLOSSY);
+  for (const z of [-1, 1]) {
+    flatBox(b, [0.42, 1.1, z * 0.722], [0.42, 0.14, 0.004], GLASS, GLOSSY);
+    flatBox(b, [-0.62, 1.1, z * 0.722], [0.46, 0.14, 0.004], GLASS, GLOSSY);
+    // Sky reflection streak on the side glass.
+    flatBox(b, [0.3, 1.17, z * 0.727], [0.2, 0.012, 0.002], '#4a6078', GLOSSY);
+    flatBox(b, [-0.75, 1.17, z * 0.727], [0.22, 0.012, 0.002], '#4a6078', GLOSSY);
+  }
+  deform(b, s, ([x, y, z]) => {
+    const t = Math.max(0, Math.min(1, (y - 0.85) / 0.44));
+    return [-0.15 + (x + 0.15) * (1 - 0.24 * t) - 0.05 * t, y, z * (1 - 0.09 * t)];
+  });
+  // Flat roof (the platform), with a darker gutter line.
+  b.roundedBox([-0.2, 1.31, 0], [0.82, 0.04, 0.66], 0.035, paint, { mat: GLOSSY, seg: 3 });
+  for (const z of [-0.6, 0.6]) flatBox(b, [-0.2, 1.352 - 0.004, z], [0.78, 0.002, 0.012], dark);
+  // Mirrors.
+  for (const z of [-1, 1]) {
+    b.roundedBox([0.78, 0.96, z * 0.81], [0.07, 0.05, 0.07], 0.035, paint, { mat: GLOSSY, seg: 3 });
+    flatBox(b, [0.72, 0.96, z * 0.84], [0.004, 0.035, 0.035], GLASS, GLOSSY);
+  }
+  // Bumpers, grille, number plates.
+  for (const x of [-1, 1])
+    b.roundedBox([x * 1.73, 0.4, 0], [0.08, 0.085, 0.78], 0.06, TRIM, { mat: GLOSSY, seg: 4 });
+  b.roundedBox([1.765, 0.58, 0], [0.03, 0.06, 0.34], 0.03, '#1c1f25', { mat: GLOSSY, seg: 3 });
+  for (const y of [0.56, 0.6]) flatBox(b, [1.795, y, 0], [0.004, 0.006, 0.3], '#3d434d');
+  b.ellipsoid([1.8, 0.58, 0], [0.008, 0.026, 0.026], LIME, { mat: GLOSSY, seg: 6 });
+  for (const x of [-1, 1]) {
+    flatBox(b, [x * 1.806, 0.42, 0], [0.004, 0.045, 0.2], WHITE);
+    flatBox(b, [x * 1.809, 0.42, x * 0.17], [0.002, 0.04, 0.025], '#2c4fb8');
+    for (let i = 0; i < 4; i++)
+      flatBox(b, [x * 1.809, 0.42, -x * (0.08 - i * 0.06)], [0.002, 0.022, 0.018], GRAPHITE);
+  }
   // Lights.
-  for (const z of [-0.58, 0.58]) {
-    b.ellipsoid([1.74, 0.64, z], [0.07, 0.07, 0.13], '#fff6cf', { mat: EMISSIVE, seg: 8 });
-    b.ellipsoid([-1.75, 0.66, z], [0.06, 0.06, 0.12], '#ff3040', { mat: EMISSIVE, seg: 8 });
+  for (const z of [-0.56, 0.56]) {
+    b.roundedBox([1.71, 0.66, z], [0.07, 0.05, 0.15], 0.045, '#fff6cf', { mat: EMISSIVE, seg: 3 });
+    b.roundedBox([-1.73, 0.7, z], [0.06, 0.045, 0.16], 0.04, '#ff3040', { mat: EMISSIVE, seg: 3 });
+    flatBox(b, [1.75, 0.5, z * 1.22], [0.03, 0.018, 0.06], '#ffb347', EMISSIVE);
   }
-  // Wheels: tyre, rim and hub, rolled to face the sides.
+  // Wheels: chunky tyre, five-spoke rim, hub, rolled to face the sides.
   for (const x of [-1.15, 1.15])
     for (const side of [-1, 1]) {
-      const s = mark(b);
+      const w = mark(b);
       b.lathe(
         [0, 0, 0],
         [
           [0, 0],
           [0.2, 0],
-          [0.26, 0.02],
-          [0.28, 0.1],
-          [0.26, 0.18],
-          [0.2, 0.2],
-          [0, 0.2],
+          [0.255, 0.012],
+          [0.28, 0.06],
+          [0.28, 0.15],
+          [0.255, 0.196],
+          [0.2, 0.208],
+          [0.17, 0.2],
         ],
         BLACK,
-        { seg: 24 },
+        { seg: 20 },
       );
       b.lathe(
         [0, 0.2, 0],
         [
           [0.17, 0],
-          [0.15, 0.012],
-          [0.05, 0.02],
-          [0, 0.03],
+          [0.165, 0.012],
+          [0.06, 0.012],
+          [0.045, 0.03],
+          [0, 0.034],
         ],
-        CHROME,
-        { mat: GLOSSY, seg: 20 },
+        ALU,
+        { mat: GLOSSY, seg: 15 },
       );
-      place(b, s, side > 0 ? rotX(Math.PI / 2) : rotX(-Math.PI / 2), [x, 0.28, side * 0.62]);
+      for (let k = 0; k < 5; k++) {
+        const sp = mark(b);
+        flatBox(b, [0, 0.216, 0.105], [0.022, 0.006, 0.06], CHROME, GLOSSY);
+        place(b, sp, rotY((k / 5) * TAU));
+      }
+      b.ellipsoid([0, 0.232, 0], [0.025, 0.006, 0.025], LIME, { mat: GLOSSY, seg: 4 });
+      place(b, w, side > 0 ? rotX(Math.PI / 2) : rotX(-Math.PI / 2), [x, 0.28, side * 0.63]);
     }
 }
 
@@ -420,16 +572,40 @@ const BUILDERS = {
       '#4a3324',
       { seg: 24 },
     );
+    const pr = rng(11);
+    for (let i = 0; i < 7; i++) {
+      const a = pr() * TAU,
+        rr = 0.06 + pr() * 0.1;
+      b.ellipsoid(
+        [Math.sin(a) * rr, 0.333, Math.cos(a) * rr],
+        [0.018, 0.009, 0.014],
+        i % 3 ? '#cfc8bb' : '#a59c8c',
+        {
+          seg: 4,
+        },
+      );
+    }
     const n = 22;
-    const greens = ['#3b9a4c', '#55b85c', '#2f7f3f'];
+    const greens = ['#3b9a4c', '#55b85c', '#2f7f3f', '#6cc35e'];
+    const r = rng(5);
     for (let i = 0; i < n; i++) {
       const t = i / (n - 1);
-      const ang = i * 2.39996;
+      const ang = i * 2.39996 + (r() - 0.5) * 0.3;
       const rs = 0.05 + 0.05 * (1 - t);
       const base = [Math.sin(ang) * rs, 0.5 + t * 0.62, Math.cos(ang) * rs];
-      rod(b, [0, 0.32, 0], base, 0.011, '#4f7d39', { seg: 8 });
-      const pitch = -(0.15 + t * 0.85);
-      leaf(b, 0.26 - t * 0.05, 0.11, 0.07, greens[i % 3], mul(rotY(ang), rotX(pitch)), base);
+      rod(b, [0, 0.32, 0], base, 0.011, '#4f7d39', { seg: 6 });
+      const pitch = -(0.15 + t * 0.85) + (r() - 0.5) * 0.25;
+      const col = tone(greens[i % 4], 0.9 + r() * 0.2, LIME, t > 0.8 ? 0.25 : 0);
+      const L = (0.26 - t * 0.05) * (0.85 + r() * 0.3);
+      leaf(
+        b,
+        L,
+        0.11 * (0.85 + r() * 0.3),
+        0.05 + r() * 0.05,
+        col,
+        mul(rotY(ang), rotX(pitch)),
+        base,
+      );
     }
   },
 
@@ -473,10 +649,25 @@ const BUILDERS = {
       const tilt = 1.15 - t * 0.85;
       const len = 0.11 - t * 0.03;
       const s = mark(b);
-      b.ellipsoid([0, len, 0], [0.026, len, 0.014], i % 2 ? '#7fbf8a' : '#93cf9a', {
-        mat: GLOSSY,
-        seg: 8,
-      });
+      b.ellipsoid(
+        [0, len, 0],
+        [0.026, len, 0.014],
+        tone(i % 2 ? '#7fbf8a' : '#93cf9a', 0.85 + t * 0.25),
+        {
+          mat: GLOSSY,
+          seg: 8,
+        },
+      );
+      // Pink-tipped succulent leaves.
+      b.ellipsoid(
+        [0, len * 1.85, 0],
+        [0.01, len * 0.18, 0.007],
+        tone(PINK, 0.85, '#93cf9a', 0.35),
+        {
+          mat: GLOSSY,
+          seg: 4,
+        },
+      );
       place(b, s, mul(rotY(ang), rotX(tilt)), [0, 0.15, 0]);
     }
   },
@@ -492,6 +683,10 @@ const BUILDERS = {
     for (let i = 0; i < 4; i++)
       flatBox(b, [0, 0.1 + i * 0.035, 0.181], [0.11, 0.007, 0.004], '#b7c1cc');
     flatBox(b, [0.12, 0.84, 0.181], [0.012, 0.012, 0.003], '#59ff8a', EMISSIVE);
+    for (let k = 0; k < 5; k++)
+      flatBox(b, [-0.08 + k * 0.04, 0.633, 0.2], [0.006, 0.002, 0.04], '#7d8894');
+    flatBox(b, [0, 0.4, 0.182], [0.07, 0.03, 0.002], NAVY);
+    flatBox(b, [-0.035, 0.4, 0.185], [0.02, 0.015, 0.001], LIME);
     b.lathe(
       [0, 0.9, 0],
       [
@@ -524,6 +719,26 @@ const BUILDERS = {
       '#5fb0ee',
       { mat: GLOSSY, seg: 32 },
     );
+    // Water line and a label on the bottle.
+    b.lathe(
+      [0, 0.9, 0],
+      [
+        [0.151, 0.235],
+        [0.151, 0.27],
+      ],
+      WHITE,
+      { seg: 32 },
+    );
+    b.lathe(
+      [0, 0.9, 0],
+      [
+        [0.152, 0.25],
+        [0.152, 0.256],
+      ],
+      LIME,
+      { seg: 32 },
+    );
+    ring(b, [0, 1.25, 0], 0.149, 0.003, '#a6d6fb', { seg: 32, sides: 3 });
   },
 
   printer(b) {
@@ -533,6 +748,16 @@ const BUILDERS = {
       flatBox(b, [0, y + 0.06, 0.362], [0.16, 0.012, 0.004], '#5a6372');
     }
     flatBox(b, [-0.42, 0.03, 0.352], [0.12, 0.012, 0.004], LIME);
+    for (const x of [-0.5, 0.5]) flatBox(b, [x, 0.01, 0.3], [0.04, 0.01, 0.03], GRAPHITE);
+    flatBox(b, [0, 0.79, 0.352], [0.58, 0.006, 0.002], LIME);
+    for (const y of [0.14, 0.38]) flatBox(b, [0.42, y, 0.362], [0.04, 0.03, 0.002], WHITE);
+    for (let k = 0; k < 3; k++)
+      flatBox(
+        b,
+        [-0.12, 0.664 + k * 0.006, 0.37],
+        [0.2 - k * 0.004, 0.0025, 0.068],
+        k % 2 ? '#eef1f5' : '#ffffff',
+      );
     // Output slot and paper.
     flatBox(b, [-0.12, 0.66, 0.3], [0.36, 0.04, 0.06], '#3a4150');
     b.roundedBox([-0.12, 0.645, 0.38], [0.3, 0.008, 0.08], 0.006, '#b9c0c9', {
@@ -558,6 +783,30 @@ const BUILDERS = {
     // Cabinet.
     b.roundedBox([0, 0.4, 0], [0.3, 0.4, 0.25], 0.03, '#d2ae84', { seg: 4 });
     flatBox(b, [0, 0.4, 0.251], [0.002, 0.34, 0.003], '#a7835c');
+    const g = rng(21);
+    for (let i = 0; i < 9; i++) {
+      const x = -0.27 + i * 0.065 + g() * 0.02;
+      if (Math.abs(x) < 0.01) continue;
+      flatBox(
+        b,
+        [x, 0.4 + (g() - 0.5) * 0.1, 0.2505],
+        [0.002, 0.25 + g() * 0.1, 0.001],
+        i % 2 ? '#c49c70' : '#dcbb93',
+      );
+    }
+    flatBox(b, [0, 0.05, 0.252], [0.29, 0.012, 0.002], '#8c6a46');
+    // Stack of paper cups on the counter.
+    for (let i = 0; i < 4; i++)
+      b.lathe(
+        [0.255, 0.83 + i * 0.025, 0.17],
+        [
+          [0.022, 0],
+          [0.03, 0.05],
+          [0.026, 0.05],
+        ],
+        i === 3 ? LIME : WHITE,
+        { seg: 12 },
+      );
     for (const x of [-0.05, 0.05])
       flatBox(b, [x, 0.52, 0.255], [0.006, 0.05, 0.006], CHROME, GLOSSY);
     b.roundedBox([0, 0.815, 0], [0.31, 0.015, 0.26], 0.012, '#f2f2f0', { mat: GLOSSY, seg: 3 });
@@ -632,16 +881,25 @@ const BUILDERS = {
       const s = mark(b);
       b.roundedBox([0, 0, 0.14], [0.022, 0.018, 0.14], 0.016, GRAPHITE, { mat: GLOSSY, seg: 4 });
       place(b, s, mul(rotY(a), rotX(0.08)), [0, 0.1, 0]);
-      b.ellipsoid([tip[0], 0.035, tip[2]], [0.03, 0.035, 0.03], BLACK, { mat: GLOSSY, seg: 10 });
+      const w = mark(b);
+      cyl(b, [0, -0.02, 0], 0.035, 0.04, BLACK, { mat: GLOSSY, seg: 12 });
+      cyl(b, [0, -0.022, 0], 0.014, 0.044, '#5b6270', { mat: GLOSSY, seg: 8 });
+      place(b, w, mul(rotY(a), rotZ(Math.PI / 2)), [tip[0], 0.035, tip[2]]);
+      b.roundedBox([tip[0], 0.075, tip[2]], [0.014, 0.02, 0.014], 0.01, GRAPHITE, { seg: 2 });
     }
     cyl(b, [0, 0.12, 0], 0.035, 0.16, GRAPHITE, { mat: GLOSSY });
     cyl(b, [0, 0.27, 0], 0.022, 0.15, CHROME, { mat: GLOSSY });
     b.roundedBox([0, 0.42, 0], [0.1, 0.025, 0.1], 0.02, BLACK, { seg: 4 });
     b.roundedBox([0, 0.48, 0.02], [0.25, 0.05, 0.24], 0.05, NAVY, { seg: 6 });
+    b.roundedBox([0, 0.505, 0.035], [0.2, 0.03, 0.19], 0.03, '#2a3858', { seg: 4 });
+    flatBox(b, [0, 0.47, 0.262], [0.18, 0.006, 0.002], LIME);
     // Back spine and cushion.
     b.roundedBox([0, 0.55, -0.2], [0.03, 0.12, 0.02], 0.018, GRAPHITE, { mat: GLOSSY, seg: 4 });
     const s = mark(b);
     b.roundedBox([0, 0, 0], [0.23, 0.24, 0.045], 0.045, NAVY, { seg: 6 });
+    b.roundedBox([0, -0.02, 0.025], [0.18, 0.17, 0.03], 0.03, '#2a3858', { seg: 4 });
+    for (let k = 0; k < 4; k++)
+      flatBox(b, [0, -0.15 + k * 0.08, 0.056], [0.15, 0.003, 0.002], '#182238');
     b.roundedBox([0, 0.2, 0.03], [0.12, 0.012, 0.02], 0.01, LIME, { seg: 3 });
     place(b, s, rotX(-0.12), [0, 0.84, -0.23]);
     // Armrests.
@@ -682,6 +940,18 @@ const BUILDERS = {
     // Bottom vent.
     for (let i = 0; i < 4; i++)
       flatBox(b, [0, 0.05 + i * 0.03, 0.503], [0.4, 0.007, 0.003], '#1a1d22');
+    // Door frame, lime status strip, side vents, top grille, feet.
+    for (const x of [-0.465, 0.465])
+      flatBox(b, [x, 1.0, 0.504], [0.012, 0.96, 0.003], '#4b515c', GLOSSY);
+    flatBox(b, [0, 1.965, 0.504], [0.47, 0.012, 0.003], '#4b515c', GLOSSY);
+    flatBox(b, [-0.465, 1.0, 0.508], [0.004, 0.7, 0.002], LIME, EMISSIVE);
+    for (const x of [-0.503, 0.503])
+      for (let i = 0; i < 6; i++)
+        flatBox(b, [x * 0.998, 1.55 + i * 0.05, 0], [0.001, 0.012, 0.38], '#1a1d22');
+    for (let i = 0; i < 7; i++)
+      flatBox(b, [0, 2.0005, -0.3 + i * 0.1], [0.38, 0.001, 0.02], '#1a1d22');
+    flatBox(b, [0.3, 1.8, 0.506], [0.06, 0.03, 0.002], WHITE);
+    flatBox(b, [0.28, 1.8, 0.508], [0.03, 0.006, 0.001], NAVY);
   },
 
   hvac(b) {
@@ -777,6 +1047,9 @@ const BUILDERS = {
       { mat: GLOSSY, seg: 32 },
     );
     cyl(b, [0, 0.08, 0], 0.025, 2.06, WHITE, { mat: GLOSSY, seg: 16 });
+    ring(b, [0, 0.02, 0], 0.262, 0.012, LIME, { seg: 32, sides: 6 });
+    ring(b, [0, 1.3, 0], 0.03, 0.01, GRAPHITE, { seg: 16, sides: 6 });
+    b.roundedBox([0.045, 1.3, 0], [0.025, 0.012, 0.012], 0.01, GRAPHITE, { mat: GLOSSY, seg: 2 });
     const panels = 8,
       R = 0.9,
       top = 2.12,
@@ -822,12 +1095,14 @@ const BUILDERS = {
   },
 
   bistro(b) {
+    // Standing table in a stretch cover: soft vertical folds, lime band and bow.
+    const st = mark(b);
     b.lathe(
       [0, 0, 0],
       [
-        [0, 0],
-        [0.3, 0],
-        [0.29, 0.06],
+        [0, 0.02],
+        [0.29, 0.02],
+        [0.285, 0.07],
         [0.24, 0.2],
         [0.17, 0.36],
         [0.125, 0.5],
@@ -836,19 +1111,57 @@ const BUILDERS = {
         [0.17, 0.8],
         [0.25, 0.94],
         [0.32, 1.03],
-        [0.35, 1.075],
-        [0.35, 1.09],
-        [0.33, 1.1],
-        [0, 1.1],
+        [0.345, 1.068],
+        [0.345, 1.08],
+        [0.33, 1.084],
+        [0, 1.084],
       ],
       WHITE,
-      { seg: 40 },
+      { seg: 48 },
     );
+    deform(b, st, ([x, y, z]) => {
+      const r = Math.hypot(x, z);
+      if (r < 1e-6) return [x, y, z];
+      const a = Math.atan2(x, z);
+      const pinch = 1 - Math.min(1, Math.abs(y - 0.58) / 0.48);
+      const k =
+        1 +
+        0.035 * Math.sin(a * 9) * (0.3 + 0.7 * (1 - pinch)) * sm(0.02, 0.2, y) * sm(1.07, 0.95, y);
+      return [x * k, y, z * k];
+    });
+    // Black foot peeking out, white top with a lime rim.
+    b.lathe(
+      [0, 0, 0],
+      [
+        [0, 0],
+        [0.3, 0],
+        [0.3, 0.02],
+        [0, 0.02],
+      ],
+      GRAPHITE,
+      { mat: GLOSSY, seg: 32 },
+    );
+    b.lathe(
+      [0, 1.084, 0],
+      [
+        [0.33, 0],
+        [0.35, 0.004],
+        [0.35, 0.012],
+        [0.335, 0.016],
+        [0, 0.016],
+      ],
+      '#fbfbf8',
+      { mat: GLOSSY, seg: 40 },
+    );
+    ring(b, [0, 1.084, 0], 0.346, 0.006, LIME, { seg: 40, sides: 4 });
     ring(b, [0, 0.58, 0], 0.118, 0.018, LIME, { seg: 32 });
     for (const s of [-1, 1]) {
-      const st = mark(b);
+      const sp = mark(b);
       b.ellipsoid([0, 0, 0.04], [0.035, 0.022, 0.05], LIME, { seg: 10 });
-      place(b, st, rotY(s * 0.5), [s * 0.03, 0.585, 0.12]);
+      place(b, sp, rotY(s * 0.5), [s * 0.03, 0.585, 0.12]);
+      const tl = mark(b);
+      b.roundedBox([0, -0.06, 0], [0.012, 0.06, 0.004], 0.004, LIME, { seg: 2 });
+      place(b, tl, rotZ(s * 0.25), [s * 0.02, 0.57, 0.135]);
     }
     b.ellipsoid([0, 0.585, 0.135], [0.02, 0.02, 0.015], LIME, { seg: 8 });
   },
@@ -880,7 +1193,11 @@ const BUILDERS = {
       '#3a3e47',
       { mat: GLOSSY, seg: 32 },
     );
+    ring(b, [0, 0.014, 0], 0.152, 0.006, LIME, { seg: 32, sides: 4 });
     place(b, s, rotX(Math.PI / 2), [0, 1.42, 0.2]);
+    for (const x of [-0.17, 0.17])
+      for (let k = 0; k < 6; k++)
+        b.ellipsoid([x, 1.29 + k * 0.035, 0.2], [0.006, 0.006, 0.003], '#15171b', { seg: 3 });
     const s2 = mark(b);
     b.lathe(
       [0, 0, 0],
@@ -900,32 +1217,80 @@ const BUILDERS = {
   },
 
   lampPost(b) {
+    // Plinth with bolts, slim pole, lantern with a warm glass and a navy cap.
     b.lathe(
       [0, 0, 0],
       [
         [0, 0],
         [0.075, 0],
-        [0.075, 0.03],
-        [0.04, 0.07],
-        [0, 0.07],
+        [0.075, 0.05],
+        [0.068, 0.06],
+        [0.05, 0.11],
+        [0.032, 0.13],
+        [0, 0.13],
       ],
       NAVY,
       { mat: GLOSSY, seg: 24 },
     );
-    cyl(b, [0, 0.06, 0], 0.022, 2.36, NAVY, { mat: GLOSSY, seg: 16 });
-    ring(b, [0, 2.3, 0], 0.03, 0.008, LIME, { seg: 16 });
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * TAU + Math.PI / 4;
+      b.ellipsoid(
+        [Math.sin(a) * 0.062, 0.062, Math.cos(a) * 0.062],
+        [0.008, 0.006, 0.008],
+        CHROME,
+        {
+          mat: GLOSSY,
+          seg: 4,
+        },
+      );
+    }
+    cyl(b, [0, 0.12, 0], 0.022, 2.24, NAVY, { mat: GLOSSY, seg: 16 });
+    ring(b, [0, 0.15, 0], 0.024, 0.007, LIME, { seg: 16, sides: 6 });
+    ring(b, [0, 2.3, 0], 0.026, 0.008, LIME, { seg: 16, sides: 6 });
     b.lathe(
-      [0, 2.4, 0],
+      [0, 2.34, 0],
       [
         [0, 0],
         [0.03, 0],
-        [0.035, 0.06],
+        [0.045, 0.03],
+        [0.05, 0.06],
         [0, 0.06],
       ],
-      '#30333a',
-      { mat: GLOSSY, seg: 16 },
+      GRAPHITE,
+      { mat: GLOSSY, seg: 20 },
     );
-    b.ellipsoid([0, 2.52, 0], [0.06, 0.075, 0.06], '#ffd98a', { mat: EMISSIVE, seg: 16 });
+    b.lathe(
+      [0, 2.4, 0],
+      [
+        [0.0, 0],
+        [0.046, 0],
+        [0.058, 0.04],
+        [0.06, 0.1],
+        [0.056, 0.14],
+        [0.0, 0.14],
+      ],
+      '#ffd98a',
+      { mat: EMISSIVE, seg: 20 },
+    );
+    for (let i = 0; i < 4; i++) {
+      const sp = mark(b);
+      flatBox(b, [0, 2.47, 0.059], [0.004, 0.07, 0.004], GRAPHITE, GLOSSY);
+      place(b, sp, rotY((i / 4) * TAU));
+    }
+    b.lathe(
+      [0, 2.54, 0],
+      [
+        [0, 0],
+        [0.073, 0],
+        [0.075, 0.012],
+        [0.05, 0.045],
+        [0.012, 0.058],
+        [0.008, 0.06],
+        [0, 0.06],
+      ],
+      NAVY,
+      { mat: GLOSSY, seg: 24 },
+    );
   },
 
   monitor(b) {
@@ -957,6 +1322,10 @@ const BUILDERS = {
       );
     flatBox(b, [0.17, 0.25, z + 0.003], [0.05, 0.02, 0.001], LIME, EMISSIVE);
     flatBox(b, [0.27, 0.137, z], [0.005, 0.003, 0.002], '#ffffff', EMISSIVE);
+    b.roundedBox([0, 0.49, -0.005], [0.03, 0.008, 0.012], 0.007, BLACK, { mat: GLOSSY, seg: 2 });
+    flatBox(b, [0, 0.49, 0.008], [0.004, 0.004, 0.001], '#4fb8ff', EMISSIVE);
+    b.roundedBox([0, 0.31, -0.035], [0.12, 0.09, 0.008], 0.008, '#2a2e36', { mat: GLOSSY, seg: 2 });
+    flatBox(b, [0, 0.142, 0.0125], [0.02, 0.004, 0.001], LIME);
   },
 
   kpi(b) {
@@ -1193,6 +1562,21 @@ const BUILDERS = {
       b.roundedBox([0, 0.188, 0], [0.4, 0.012, 0.2], 0.01, c, { mat: GLOSSY, seg: 3 });
       b.roundedBox([0, 0.1, 0.185], [0.4, 0.1, 0.018], 0.015, c, { mat: GLOSSY, seg: 4 });
       flatBox(b, [0, 0.1, -0.01], [0.385, 0.077, 0.18], WHITE);
+      for (let k = 0; k < 5; k++)
+        flatBox(
+          b,
+          [0, 0.04 + k * 0.03, -0.191],
+          [0.38, 0.003, 0.001],
+          k % 2 ? '#d7dce3' : '#e8ebef',
+        );
+      for (const x of [-0.385, 0.385])
+        for (let k = 0; k < 5; k++)
+          flatBox(
+            b,
+            [x + Math.sign(x) * 0.001, 0.04 + k * 0.03, -0.01],
+            [0.001, 0.003, 0.17],
+            '#d7dce3',
+          );
       flatBox(b, [-0.12, 0.1, 0.204], [0.16, 0.05, 0.002], WHITE);
       flatBox(b, [-0.12, 0.11, 0.207], [0.11, 0.008, 0.001], '#5a6372');
       b.ellipsoid([0.26, 0.1, 0.2], [0.04, 0.025, 0.006], '#1b1d22', { seg: 8 });
@@ -1240,6 +1624,27 @@ const BUILDERS = {
     b.ellipsoid([0, 0.192, -0.06], [0.025, 0.008, 0.025], LIME, { mat: GLOSSY, seg: 8 });
     for (const x of [-0.12, 0.12])
       b.ellipsoid([x, 0.012, 0.2], [0.05, 0.01, 0.02], '#20242c', { seg: 6 });
+    // Front bumper, laser turret, side brush.
+    surf(
+      b,
+      16,
+      1,
+      (u, v) => {
+        const a = (u - 0.5) * 2.2;
+        return [Math.sin(a) * 0.353, 0.07 + v * 0.025, Math.cos(a) * 0.353];
+      },
+      '#30343c',
+      GLOSSY,
+      [0, 0, 1],
+    );
+    cyl(b, [0, 0.18, 0.08], 0.045, 0.03, '#30343c', { mat: GLOSSY, seg: 16 });
+    flatBox(b, [0, 0.198, 0.125], [0.02, 0.006, 0.002], PINK, EMISSIVE);
+    for (let k = 0; k < 3; k++) {
+      const s = mark(b);
+      flatBox(b, [0, 0, 0.05], [0.004, 0.002, 0.05], '#7c8592');
+      place(b, s, rotY((k / 3) * TAU + 0.3), [0.24, 0.006, 0.22]);
+    }
+    ring(b, [0, 0.181, 0], 0.17, 0.004, '#5b6270', { seg: 32, sides: 3 });
   },
 
   laptopStand(b) {
@@ -1322,6 +1727,10 @@ const BUILDERS = {
       { seg: 28 },
     );
     flatBox(b, [0, 0.14, 0.093], [0.035, 0.035, 0.002], LIME);
+    for (let k = 0; k < 6; k++) {
+      const y = 0.09 + k * 0.02;
+      ring(b, [0, y, 0], 0.0855 + (y - 0.08) * 0.0917, 0.002, '#a87b4c', { seg: 20, sides: 3 });
+    }
     b.lathe(
       [0, 0.26, 0],
       [
@@ -1336,6 +1745,9 @@ const BUILDERS = {
       { mat: GLOSSY, seg: 28 },
     );
     flatBox(b, [0, 0.32, 0.045], [0.012, 0.0015, 0.006], '#1b1d22');
+    ring(b, [0, 0.29, 0], 0.095, 0.006, '#4a372a', { seg: 28, sides: 4 });
+    // Steam-hole lip.
+    b.ellipsoid([0, 0.318, 0.045], [0.022, 0.006, 0.014], '#4a372a', { mat: GLOSSY, seg: 5 });
   },
 
   archive(b) {
@@ -1356,6 +1768,19 @@ const BUILDERS = {
         '#5a6372',
       );
     flatBox(b, [0.18, 0.31, 0.499], [0.04, 0.02, 0.0008], LIME);
+    // Packing tape over the lid, darker vertical edges, a printed arrow.
+    flatBox(b, [0, 1.0, 0], [0.09, 0.0015, 0.5], '#e3cd9c', GLOSSY);
+    flatBox(b, [0, 0.95, 0.4985], [0.09, 0.05, 0.0012], '#e3cd9c', GLOSSY);
+    for (const x of [-0.488, 0.488])
+      for (const z of [-0.4975, 0.4975]) flatBox(b, [x, 0.43, z], [0.008, 0.43, 0.0012], '#a87d4c');
+    for (const x of [-0.4975, 0.4975])
+      for (const z of [-0.488, 0.488]) flatBox(b, [x, 0.43, z], [0.0012, 0.43, 0.008], '#a87d4c');
+    flatBox(b, [-0.34, 0.2, 0.4985], [0.012, 0.07, 0.0008], '#3a2a1c');
+    for (const sx of [-1, 1]) {
+      const s = mark(b);
+      flatBox(b, [0, 0, 0], [0.012, 0.04, 0.0008], '#3a2a1c');
+      place(b, s, rotZ(sx * 0.7), [-0.34 + sx * 0.022, 0.255, 0.4985]);
+    }
   },
 
   copilTable(b) {
@@ -1434,7 +1859,33 @@ const BUILDERS = {
       const flare = 1 + 0.4 * (1 - y / 5);
       return [(u - 0.5) * 1, y, 0.07 * flare * Math.sin(u * TAU * 3 + y * 0.15)];
     };
-    surf(b, 48, 12, (u, v) => fold(u, v * 5), '#a3122a', MATTE, [0, 0, 1]);
+    surf(
+      b,
+      48,
+      16,
+      (u, v) => fold(u, v * 5),
+      '#a3122a',
+      MATTE,
+      [0, 0, 1],
+      // Deep fold valleys darker, light catching on the crests.
+      (u, v) => 0.62 + 0.38 * (0.5 + 0.5 * Math.sin(u * TAU * 3 + v * 0.75)),
+    );
+    // Velvet sheen on the crests.
+    for (let k = 0; k < 3; k++) {
+      surf(
+        b,
+        2,
+        10,
+        (u, v) => {
+          const y = 0.2 + v * 4.7;
+          const p = fold((0.25 + k) / 3 - (y * 0.15) / (TAU * 3) + (u - 0.5) * 0.02, y);
+          return [p[0], p[1], p[2] + 0.004];
+        },
+        '#d23a52',
+        GLOSSY,
+        [0, 0, 1],
+      );
+    }
     // Gold trim and fringe following the folds.
     surf(
       b,
