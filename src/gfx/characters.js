@@ -1,5 +1,5 @@
 import { MeshBuilder } from './geometry.js';
-import { chain, rotationX, rotationY, rotationZ, scaling, translation } from './mat4.js';
+import { multiply, rotationX, rotationY, rotationZ, scaling, translation } from './mat4.js';
 import { Mesh } from './renderer.js';
 import { MAT, rgb } from './voxels.js';
 
@@ -1355,6 +1355,94 @@ export function buildCharacter(gl, look) {
 const MOOD_NAMES = { neutral: 'Neutral', happy: 'Happy', ouch: 'Ouch', focus: 'Focus' };
 
 /**
+ * @typedef {import('./renderer.js').DrawItem} DrawItem
+ * @typedef {{take: (mesh: Mesh, rim?: number, tint?: number[], noShadow?: boolean) => DrawItem, tint: (r: number, g: number, b: number) => number[]}} ItemSource
+ * @typedef {{scale?: number, turn?: number, rim?: number, tint?: number[]}} PoseOptions
+ */
+
+/**
+ * Recycles draw items, their model matrices and tints from frame to frame: reset()
+ * when a frame starts, take() per item. Items stay valid until the next reset(), which
+ * is enough for Renderer.render(), which consumes them synchronously.
+ */
+export class DrawPool {
+  constructor() {
+    /** @type {DrawItem[]} */
+    this.list = [];
+    this.n = 0;
+    /** @type {number[][]} */
+    this.tints = [];
+    this.nt = 0;
+  }
+
+  reset() {
+    this.n = this.nt = 0;
+  }
+
+  /**
+   * An item whose model matrix the caller fills in.
+   * @param {Mesh} mesh @param {number} [rim] @param {number[]} [tint] @param {boolean} [noShadow]
+   * @returns {DrawItem}
+   */
+  take(mesh, rim, tint, noShadow) {
+    let it = this.list[this.n++];
+    if (it) {
+      it.mesh = mesh;
+      it.rim = rim;
+      it.tint = tint;
+      it.noShadow = noShadow;
+    } else this.list.push((it = { mesh, model: new Float32Array(16), rim, tint, noShadow }));
+    return it;
+  }
+
+  /** A per-frame colour. @param {number} r @param {number} g @param {number} b */
+  tint(r, g, b) {
+    const c = (this.tints[this.nt++] ??= [0, 0, 0]);
+    c[0] = r;
+    c[1] = g;
+    c[2] = b;
+    return c;
+  }
+}
+
+/** Without a pool every item is new, so callers may keep them. @type {ItemSource} */
+export const FRESH = {
+  take: (mesh, rim, tint, noShadow) => ({ mesh, model: new Float32Array(16), rim, tint, noShadow }),
+  tint: (r, g, b) => [r, g, b],
+};
+
+/** @type {Required<Omit<PoseOptions, 'tint'>> & PoseOptions} */
+const OPTS = { scale: 1, turn: 1.05, rim: 0.35, tint: undefined };
+
+/**
+ * Shared poseCharacter options object, overwritten on every call (use it right away).
+ * @param {number} scale @param {number} turn @param {number} rim @param {number[]} [tint]
+ */
+export function poseOptions(scale, turn, rim, tint) {
+  OPTS.scale = scale;
+  OPTS.turn = turn;
+  OPTS.rim = rim;
+  OPTS.tint = tint;
+  return OPTS;
+}
+
+// Scratch matrices: the root, torso and head transforms shared by several parts, and
+// two factors. Products are taken left to right, exactly like chain().
+const ROOT = new Float32Array(16);
+const TORSO = new Float32Array(16);
+const HEAD = new Float32Array(16);
+const F1 = new Float32Array(16);
+const F2 = new Float32Array(16);
+
+/**
+ * out = a·b·c (out must not be a or c).
+ * @param {Float32Array} a @param {Float32Array} b @param {Float32Array} c @param {Float32Array} out
+ */
+function mul3(a, b, c, out) {
+  return multiply(multiply(a, b, out), c, out);
+}
+
+/**
  * Turns a posed character into draw items.
  * @param {Record<string, Part>} parts
  * @param {number} x Feet position (world).
@@ -1362,52 +1450,59 @@ const MOOD_NAMES = { neutral: 'Neutral', happy: 'Happy', ouch: 'Ouch', focus: 'F
  * @param {number} z
  * @param {number} facing 1 = right, −1 = left.
  * @param {Pose} pose
- * @param {{scale?: number, turn?: number, rim?: number, tint?: number[]}} [o]
- * @returns {import('./renderer.js').DrawItem[]}
+ * @param {PoseOptions} [o]
+ * @param {DrawItem[]} [out] Items are appended here (a new array by default).
+ * @param {ItemSource} [pool] Where items come from (new ones by default).
+ * @returns {DrawItem[]} `out`.
  */
-export function poseCharacter(parts, x, y, z, facing, pose, o = {}) {
+export function poseCharacter(parts, x, y, z, facing, pose, o = {}, out = [], pool = FRESH) {
   const scale = o.scale ?? 1;
   // Three-quarter turn: the face stays visible while running sideways.
   const yaw = facing * (o.turn ?? 1.05);
   const sq = pose.squash ?? 0;
-  const root = chain(
-    translation(x, y, z),
-    rotationY(yaw),
-    scaling(scale * (1 + sq * 0.5), scale * (1 - sq), scale * (1 + sq * 0.5)),
-    translation(0, (pose.bob ?? 0) / 16, 0),
-  );
-  const base = { rim: o.rim ?? 0.35, tint: o.tint };
-  /** @param {string} name @param {...Float32Array} ms */
-  const at = (name, ...ms) => ({ mesh: parts[name].mesh, model: chain(root, ...ms), ...base });
-  const torso = [translation(0, HIP_Y, 0), rotationX(pose.lean ?? 0)];
+  const lean = pose.lean ?? 0;
   const spread = pose.armSpread ?? 0;
-  const headM = [...torso, translation(0, NECK_Y, 0), rotationX(pose.head ?? 0)];
-  /** @type {import('./renderer.js').DrawItem[]} */
-  const items = [
-    at('legL', translation(-HIP_X, HIP_Y, 0), rotationX(-pose.legL)),
-    at('legR', translation(HIP_X, HIP_Y, 0), rotationX(-pose.legR)),
-    at('torso', ...torso),
-    at('head', ...headM),
-    at(
-      'armL',
-      ...torso,
-      translation(-SHOULDER_X, SHOULDER_Y, 0),
-      rotationZ(-spread),
-      rotationX(-pose.armL),
-    ),
-    at(
-      'armR',
-      ...torso,
-      translation(SHOULDER_X, SHOULDER_Y, 0),
-      rotationZ(spread),
-      rotationX(-pose.armR),
-    ),
-  ];
+  const rim = o.rim ?? 0.35;
+  const tint = o.tint;
+  // root = T(feet)·Ry(yaw)·S(squash)·T(bob); torso = root·T(hip)·Rx(lean); head = torso·T(neck)·Rx(nod).
+  multiply(translation(x, y, z, F1), rotationY(yaw, F2), ROOT);
+  multiply(
+    ROOT,
+    scaling(scale * (1 + sq * 0.5), scale * (1 - sq), scale * (1 + sq * 0.5), F1),
+    ROOT,
+  );
+  multiply(ROOT, translation(0, (pose.bob ?? 0) / 16, 0, F1), ROOT);
+  mul3(ROOT, translation(0, HIP_Y, 0, F1), rotationX(lean, F2), TORSO);
+  mul3(TORSO, translation(0, NECK_Y, 0, F1), rotationX(pose.head ?? 0, F2), HEAD);
+  /** Appends the next part and returns its model matrix. @param {string} name @param {true} [face] */
+  const part = (name, face) => {
+    const it = pool.take(parts[name].mesh, rim, tint, face);
+    out.push(it);
+    return it.model;
+  };
+  mul3(ROOT, translation(-HIP_X, HIP_Y, 0, F1), rotationX(-pose.legL, F2), part('legL'));
+  mul3(ROOT, translation(HIP_X, HIP_Y, 0, F1), rotationX(-pose.legR, F2), part('legR'));
+  part('torso').set(TORSO);
+  part('head').set(HEAD);
+  const armL = mul3(
+    TORSO,
+    translation(-SHOULDER_X, SHOULDER_Y, 0, F1),
+    rotationZ(-spread, F2),
+    part('armL'),
+  );
+  multiply(armL, rotationX(-pose.armL, F2), armL);
+  const armR = mul3(
+    TORSO,
+    translation(SHOULDER_X, SHOULDER_Y, 0, F1),
+    rotationZ(spread, F2),
+    part('armR'),
+  );
+  multiply(armR, rotationX(-pose.armR, F2), armR);
   if (parts.eyes) {
+    // Face decals cast no shadow.
     const mood = pose.mood ?? 'neutral';
     const name = MOOD_NAMES[mood] ?? 'Neutral';
-    const face = { noShadow: true };
-    if (mood === 'ouch') items.push({ ...at('squint', ...headM), ...face });
+    if (mood === 'ouch') part('squint', true).set(HEAD);
     else {
       // Lids close towards a line a little below the eye centre; happy cheeks push the
       // eyes up into smiling crescents, focus lowers the upper lid.
@@ -1415,38 +1510,28 @@ export function poseCharacter(parts, x, y, z, facing, pose, o = {}) {
         Math.max(0.08, 1 - Math.min(1, Math.max(0, pose.blink ?? 0))) *
         (mood === 'happy' ? 0.78 : mood === 'focus' ? 0.8 : 1);
       const py = EYE_Y - (mood === 'focus' ? 0.03 : 0.006);
-      items.push({
-        ...at('eyes', ...headM, translation(0, py, 0), scaling(1, open, 1), translation(0, -py, 0)),
-        ...face,
-      });
+      const eyes = mul3(
+        HEAD,
+        translation(0, py, 0, F1),
+        scaling(1, open, 1, F2),
+        part('eyes', true),
+      );
+      multiply(eyes, translation(0, -py, 0, F1), eyes);
     }
     const cheekUp = mood === 'happy' ? 0.008 : 0;
-    items.push(
-      { ...at('cheeks', ...headM, translation(0, cheekUp, 0)), ...face },
-      { ...at('brow' + name, ...headM), ...face },
-      { ...at('mouth' + name, ...headM), ...face },
-    );
+    multiply(HEAD, translation(0, cheekUp, 0, F1), part('cheeks', true));
+    part('brow' + name, true).set(HEAD);
+    part('mouth' + name, true).set(HEAD);
   }
   if (parts.hair)
-    items.push(
-      at(
-        'hair',
-        ...torso,
-        translation(0, NECK_Y + 0.28, -0.1),
-        rotationX(0.08 - (pose.lean ?? 0) * 0.5),
-      ),
+    mul3(
+      TORSO,
+      translation(0, NECK_Y + 0.28, -0.1, F1),
+      rotationX(0.08 - lean * 0.5, F2),
+      part('hair'),
     );
-  if (parts.skirt) items.push(at('skirt', ...torso, translation(0, 0.06, 0)));
-  if (parts.prop)
-    items.push(
-      at(
-        'prop',
-        ...torso,
-        translation(SHOULDER_X, SHOULDER_Y, 0),
-        rotationZ(spread),
-        rotationX(-pose.armR),
-        translation(0, -0.43, 0.06),
-      ),
-    );
-  return items;
+  if (parts.skirt) multiply(TORSO, translation(0, 0.06, 0, F1), part('skirt'));
+  // The prop is held in the right hand.
+  if (parts.prop) multiply(armR, translation(0, -0.43, 0.06, F1), part('prop'));
+  return out;
 }

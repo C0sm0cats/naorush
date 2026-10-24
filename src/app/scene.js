@@ -10,8 +10,8 @@ import {
 import { renderPlaque, renderWhiteboard } from '../gfx/boards.js';
 import { renderPoster } from '../gfx/posters.js';
 import { buildProps } from '../gfx/props.js';
-import { buildCharacter, poseCharacter } from '../gfx/characters.js';
-import { chain, scaling, translation } from '../gfx/mat4.js';
+import { DrawPool, buildCharacter, poseCharacter, poseOptions } from '../gfx/characters.js';
+import { chain, multiply, scaling, translation } from '../gfx/mat4.js';
 import { Mesh, Sprite } from '../gfx/renderer.js';
 import { buildThings } from '../gfx/things.js';
 import { MAT, Volume, meshVolume } from '../gfx/voxels.js';
@@ -31,6 +31,33 @@ const GALLERY = [
   'techServicesDirector',
   'regionalDirector',
 ];
+/** The end party line-up, left to right. */
+const CROWD = [
+  'regionalDirector',
+  'charline',
+  'kevin',
+  'techServicesDirector',
+  'intern',
+  'visio',
+  'mathis',
+];
+const SIDES = [-1, 1];
+const RACK_GLOW = [0.3, 1.6, 1.2];
+// Scratch factors for the per-frame matrices (results go into pooled items).
+const F1 = new Float32Array(16);
+const F2 = new Float32Array(16);
+/** Reused dance pose of the end party. @type {Pose} */
+const DANCE = {
+  legL: 0,
+  legR: 0,
+  armL: 0,
+  armR: 0,
+  armSpread: 0.5,
+  bob: 0,
+  head: 0,
+  mood: 'happy',
+  blink: 0,
+};
 
 /**
  * Whiteboard artwork: the heroes' boards are images, the bosses' are drawn in code.
@@ -199,6 +226,18 @@ export class LevelView {
     }
     /** @type {Sprite[]} */
     this.sprites = [];
+    /** Per-frame draw items are recycled from here (see items()). */
+    this.pool = new DrawPool();
+    /** The list items() returns, refilled every frame. @type {DrawItem[]} */
+    this.frame = [];
+    /** @type {DrawItem} */
+    this.officeItem = { mesh: this.office, model: IDENTITY };
+    /** @type {DrawItem | null} */
+    this.skylineItem = this.skyline
+      ? { mesh: this.skyline, model: IDENTITY, noShadow: true }
+      : null;
+    /** Door and arena gate tiles, found once per tile map. @type {{tiles: Sim['tiles'] | null, doors: number[], gates: number[]}} */
+    this.gates = { tiles: null, doors: [], gates: [] };
     /** What the stage's key item looks like. */
     this.keyMesh = this.things[level.keyModel ?? 'key'];
     const exit = sim.things.find((t) => t.kind === 'exit');
@@ -245,12 +284,9 @@ export class LevelView {
    * @returns {DrawItem}
    */
   glow(x, y, z, size, color) {
-    return {
-      mesh: this.cube,
-      model: chain(translation(x, y, z), scaling(size, size, size)),
-      tint: color,
-      noShadow: true,
-    };
+    const it = this.pool.take(this.cube, undefined, color, true);
+    multiply(translation(x, y, z, F1), scaling(size, size, size, F2), it.model);
+    return it;
   }
 
   /** Frees the level's own GPU resources (shared meshes stay). */
@@ -338,68 +374,53 @@ export class LevelView {
    * @returns {DrawItem[]}
    */
   items(sim, t, particles) {
-    /** @type {DrawItem[]} */
-    const items = [{ mesh: this.office, model: IDENTITY }, ...this.furniture];
-    if (this.skyline) items.push({ mesh: this.skyline, model: IDENTITY, noShadow: true });
+    // Items come from the pool and are only valid until the next call: the renderer
+    // consumes them right away.
+    const pool = this.pool;
+    pool.reset();
+    const items = this.frame;
+    items.length = 0;
+    items.push(this.officeItem);
+    for (const f of this.furniture) items.push(f);
+    if (this.skylineItem) items.push(this.skylineItem);
     if (this.party) {
       // The end: everybody celebrates the signed envelope at the Espace VIP.
-      const crowd = [
-        'regionalDirector',
-        'charline',
-        'kevin',
-        'techServicesDirector',
-        'intern',
-        'visio',
-        'mathis',
-      ];
-      crowd.forEach((id, i) => {
+      for (let i = 0; i < CROWD.length; i++) {
+        const id = CROWD[i];
         const ph = t * 6 + i * 1.3;
-        items.push(
-          ...poseCharacter(
-            this.cast[id],
-            this.party + (i - 3) * 1.15,
-            3,
-            (i % 2) * -0.6,
-            1,
-            {
-              legL: Math.max(0, Math.sin(ph)) * 0.7,
-              legR: Math.max(0, -Math.sin(ph)) * 0.7,
-              armL: 2.6 + Math.sin(ph) * 0.4,
-              armR: 2.6 - Math.sin(ph) * 0.4,
-              armSpread: 0.5,
-              bob: Math.abs(Math.sin(ph)) * 2,
-              head: Math.sin(ph * 0.5) * 0.2,
-              mood: 'happy',
-              blink: blinkAt(t + i),
-            },
-            { scale: CAST[id].scale, turn: 0.3, rim: 0.4 },
-          ),
+        const d = DANCE;
+        d.legL = Math.max(0, Math.sin(ph)) * 0.7;
+        d.legR = Math.max(0, -Math.sin(ph)) * 0.7;
+        d.armL = 2.6 + Math.sin(ph) * 0.4;
+        d.armR = 2.6 - Math.sin(ph) * 0.4;
+        d.bob = Math.abs(Math.sin(ph)) * 2;
+        d.head = Math.sin(ph * 0.5) * 0.2;
+        d.blink = blinkAt(t + i);
+        const o = poseOptions(CAST[id].scale, 0.3, 0.4);
+        poseCharacter(
+          this.cast[id],
+          this.party + (i - 3) * 1.15,
+          3,
+          (i % 2) * -0.6,
+          1,
+          d,
+          o,
+          items,
+          pool,
         );
-      });
+      }
       return items;
     }
     if (this.gallery) {
-      GALLERY.forEach((id, i) =>
-        items.push(
-          ...poseCharacter(
-            this.cast[id],
-            this.galleryX + i * (this.galleryX > 2 ? 0.8 : 0.9),
-            3,
-            0.4,
-            1,
-            idlePose(t + i),
-            {
-              scale: CAST[id].scale,
-              turn: 0.35,
-              rim: 0.4,
-            },
-          ),
-        ),
-      );
+      for (let i = 0; i < GALLERY.length; i++) {
+        const id = GALLERY[i];
+        const x = this.galleryX + i * (this.galleryX > 2 ? 0.8 : 0.9);
+        const o = poseOptions(CAST[id].scale, 0.35, 0.4);
+        poseCharacter(this.cast[id], x, 3, 0.4, 1, idlePose(t + i), o, items, pool);
+      }
       return items;
     }
     this.drawHero(items, sim, t);
-    const things = this.things;
     // Off-screen things are skipped (the view is about 15 tiles wide).
     const near = sim.bossActive ? 30 : 16;
     for (const th of sim.things) {
@@ -408,35 +429,47 @@ export class LevelView {
     }
     for (const p of particles) {
       const k = p.size * Math.min(1, (p.life / p.max) * 2);
-      items.push({
-        mesh: this.cube,
-        model: chain(translation(p.x, p.y, p.z), scaling(k, k, k)),
-        tint: p.color,
-        noShadow: true,
-      });
+      const it = pool.take(this.cube, undefined, p.color, true);
+      multiply(translation(p.x, p.y, p.z, F1), scaling(k, k, k, F2), it.model);
+      items.push(it);
     }
+    const g = this.gateTiles(sim);
     // Doors slide up into the ceiling once the badge reader has been used.
-    for (let c = 0; c < sim.w; c++)
-      for (let r = 0; r < sim.h; r++)
-        if (
-          sim.tiles[c + r * sim.w] === TILE.DOOR &&
-          (r === 0 || sim.tiles[c + (r - 1) * sim.w] !== TILE.DOOR)
-        )
-          items.push({
-            mesh: things.door,
-            model: translation(
-              c + 0.5,
-              r + (sim.doorOpen ? Math.min(2.2, this.doorT * 3) : 0),
-              -0.6,
-            ),
-          });
+    const lift = sim.doorOpen ? Math.min(2.2, this.doorT * 3) : 0;
+    for (let i = 0; i < g.doors.length; i += 2) {
+      const it = pool.take(this.things.door);
+      translation(g.doors[i] + 0.5, g.doors[i + 1] + lift, -0.6, it.model);
+      items.push(it);
+    }
     // The arena gate drops shut while the boss fight is on.
     if (sim.bossActive && !sim.bossDone)
-      for (let c = 0; c < sim.w; c++)
-        for (let r = 0; r < sim.h; r++)
-          if (sim.tiles[c + r * sim.w] === TILE.GATE)
-            items.push({ mesh: this.props.gate, model: translation(c + 0.5, r, -0.2) });
+      for (let i = 0; i < g.gates.length; i += 2) {
+        const it = pool.take(this.props.gate);
+        translation(g.gates[i] + 0.5, g.gates[i + 1], -0.2, it.model);
+        items.push(it);
+      }
     return items;
+  }
+
+  /**
+   * Door tops and gate tiles as (column, row) pairs, in column order. The sim never
+   * adds or removes these tiles, so the scan runs once per tile map.
+   * @param {Sim} sim
+   */
+  gateTiles(sim) {
+    const g = this.gates;
+    if (g.tiles === sim.tiles) return g;
+    g.tiles = sim.tiles;
+    g.doors = [];
+    g.gates = [];
+    for (let c = 0; c < sim.w; c++)
+      for (let r = 0; r < sim.h; r++) {
+        const tile = sim.tiles[c + r * sim.w];
+        if (tile === TILE.DOOR && (r === 0 || sim.tiles[c + (r - 1) * sim.w] !== TILE.DOOR))
+          g.doors.push(c, r);
+        if (tile === TILE.GATE) g.gates.push(c, r);
+      }
+    return g;
   }
 
   /**
@@ -456,27 +489,22 @@ export class LevelView {
           if (i / 8 > k) break;
           const side = i % 2 ? 1 : -1;
           const dx = side * (1.2 + Math.floor(i / 2) * 0.9);
-          items.push(this.glow(b.x + dx, b.y + 0.4 + (i % 3) * 0.7, -1.4, 0.12, [0.3, 1.6, 1.2]));
+          items.push(this.glow(b.x + dx, b.y + 0.4 + (i % 3) * 0.7, -1.4, 0.12, RACK_GLOW));
         }
       else if (b.state === 'intro')
-        for (const side of [-1, 1])
-          items.push({
-            mesh: this.props.curtain,
-            model: translation(b.x + side * (0.7 + k * 3.2), b.y, 0.5),
-          });
+        for (const side of SIDES) {
+          const it = this.pool.take(this.props.curtain);
+          translation(b.x + side * (0.7 + k * 3.2), b.y, 0.5, it.model);
+          items.push(it);
+        }
     }
-    items.push(
-      ...poseCharacter(this.cast[id], b.x, y, -0.1, facing, pose, {
-        scale: CAST[id].scale,
-        turn,
-        rim: b.state === 'consult' ? 0.9 : 0.45,
-        tint,
-      }),
-    );
+    const o = poseOptions(CAST[id].scale, turn, b.state === 'consult' ? 0.9 : 0.45, tint);
+    poseCharacter(this.cast[id], b.x, y, -0.1, facing, pose, o, items, this.pool);
   }
 
   /**
    * The hero's face: winces when hurt, beams on success, concentrates on a ledge.
+   * Updates `pose` in place (heroPose() returns a fresh object every frame).
    * @param {Pose} pose @param {Sim} sim @param {number} t
    * @returns {Pose}
    */
@@ -491,11 +519,13 @@ export class LevelView {
           : h.state === 'hang' || h.state === 'climb'
             ? 'focus'
             : pose.mood;
-    return { ...pose, mood, blink: mood === 'ouch' ? 0 : (pose.blink ?? blinkAt(t)) };
+    pose.blink = mood === 'ouch' ? 0 : (pose.blink ?? blinkAt(t));
+    pose.mood = mood;
+    return pose;
   }
 
   /**
-   * Throwing arm on top of whatever the body is doing.
+   * Throwing arm on top of whatever the body is doing (updates `pose` in place).
    * @param {Pose} pose @param {Sim} sim
    * @returns {Pose}
    */
@@ -503,11 +533,13 @@ export class LevelView {
     const k = sim.time - this.throwAt;
     if (k < 0 || k > 0.28) return pose;
     const swing = k < 0.08 ? -1.6 * (k / 0.08) : -1.6 + 4.2 * ((k - 0.08) / 0.2);
-    return { ...pose, armR: Math.min(swing, 2.6), lean: (pose.lean ?? 0) + 0.12 };
+    pose.armR = Math.min(swing, 2.6);
+    pose.lean = (pose.lean ?? 0) + 0.12;
+    return pose;
   }
 
   /**
-   * Squash on landing, stretch on take-off.
+   * Squash on landing, stretch on take-off (updates `pose` in place).
    * @param {Pose} pose @param {number} time
    * @returns {Pose}
    */
@@ -517,7 +549,8 @@ export class LevelView {
     let k = pose.squash ?? 0;
     if (land >= 0 && land < 0.14) k += 0.16 * (1 - land / 0.14);
     if (jump >= 0 && jump < 0.12) k -= 0.1 * (1 - jump / 0.12);
-    return { ...pose, squash: k };
+    pose.squash = k;
+    return pose;
   }
 
   /** @param {DrawItem[]} items @param {Sim} sim @param {number} t */
@@ -538,41 +571,27 @@ export class LevelView {
     if (this.showcase) {
       // Title screen: relaxed and smiling, weight shifting gently from foot to foot.
       const sway = Math.sin(t * 1.1);
-      const wave = {
-        ...idlePose(t),
-        legL: sway * 0.05,
-        legR: -sway * 0.05,
-        armL: 0.08 + Math.sin(t * 1.1 + 0.6) * 0.06,
-        armR: 0.08 - Math.sin(t * 1.1 + 0.6) * 0.06,
-        lean: -0.03,
-        bob: Math.abs(sway) * 0.4,
-        head: Math.sin(t * 0.7) * 0.08,
-        mood: /** @type {const} */ ('happy'),
-      };
-      items.push(
-        ...poseCharacter(this.cast[sim.heroId], hx, hy, 0.3, 1, wave, {
-          scale: CAST[sim.heroId].scale,
-          turn: 0.3,
-          rim: 0.35,
-        }),
-      );
+      const wave = idlePose(t);
+      wave.legL = sway * 0.05;
+      wave.legR = -sway * 0.05;
+      wave.armL = 0.08 + Math.sin(t * 1.1 + 0.6) * 0.06;
+      wave.armR = 0.08 - Math.sin(t * 1.1 + 0.6) * 0.06;
+      wave.lean = -0.03;
+      wave.bob = Math.abs(sway) * 0.4;
+      wave.head = Math.sin(t * 0.7) * 0.08;
+      wave.mood = 'happy';
+      const o = poseOptions(CAST[sim.heroId].scale, 0.3, 0.35);
+      poseCharacter(this.cast[sim.heroId], hx, hy, 0.3, 1, wave, o, items, this.pool);
       return;
     }
-    items.push(
-      ...poseCharacter(
-        this.cast[sim.heroId],
-        hx,
-        hy,
-        0,
-        h.facing,
-        this.face(this.squashed(this.overlay(heroPose(sim, t, this.still), sim), sim.time), sim, t),
-        {
-          scale: CAST[sim.heroId].scale,
-          turn: h.state === 'hang' || h.state === 'climb' ? 1.45 : 1.0,
-          rim: 0.55,
-        },
-      ),
+    const pose = this.face(
+      this.squashed(this.overlay(heroPose(sim, t, this.still), sim), sim.time),
+      sim,
+      t,
     );
+    const turn = h.state === 'hang' || h.state === 'climb' ? 1.45 : 1.0;
+    const o = poseOptions(CAST[sim.heroId].scale, turn, 0.55);
+    poseCharacter(this.cast[sim.heroId], hx, hy, 0, h.facing, pose, o, items, this.pool);
   }
 }
 
