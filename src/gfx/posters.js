@@ -67,7 +67,7 @@ function font(size, weight = 900) {
   return `${weight} ${Math.round(size)}px ${FONT}`;
 }
 
-/** @param {Ctx} ctx @param {number} x @param {number} y @param {number} r @param {string} c */
+/** @param {Ctx} ctx @param {number} x @param {number} y @param {number} r @param {string | CanvasGradient} c */
 function circle(ctx, x, y, r, c) {
   ctx.beginPath();
   ctx.arc(x, y, r, 0, TAU);
@@ -473,6 +473,60 @@ function compose(ctx, s) {
   }
 }
 
+// ---------------------------------------------------------------- shading helpers
+
+const SHADE = 'rgba(10,14,30,0.28)';
+
+/**
+ * @param {Ctx} ctx @param {number} x @param {number} y @param {number} rx @param {number} ry
+ * @param {string | CanvasGradient} c @param {number} [rot]
+ */
+function oval(ctx, x, y, rx, ry, c, rot = 0) {
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx, ry, rot, 0, TAU);
+  ctx.fillStyle = c;
+  ctx.fill();
+}
+
+/** Soft contact shadow. @param {Ctx} ctx @param {number} x @param {number} y @param {number} rx @param {number} ry @param {number} [a] */
+function floorShadow(ctx, x, y, rx, ry, a = 0.22) {
+  oval(ctx, x, y, rx, ry, `rgba(10,14,30,${a})`);
+}
+
+/**
+ * Linear gradient between two points.
+ * @param {Ctx} ctx @param {number} x0 @param {number} y0 @param {number} x1 @param {number} y1
+ * @param {string[]} stops
+ */
+function grad(ctx, x0, y0, x1, y1, stops) {
+  const g = ctx.createLinearGradient(x0, y0, x1, y1);
+  stops.forEach((c, i) => g.addColorStop(i / (stops.length - 1), c));
+  return g;
+}
+
+/** Translucent colour. @param {string} hex @param {number} a */
+function alpha(hex, a) {
+  const [r, g, b] = rgb(hex);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+/**
+ * Receipt outline with a torn bottom edge.
+ * @param {Ctx} ctx @param {number} l @param {number} t @param {number} r @param {number} b @param {number} n teeth
+ */
+function torn(ctx, l, t, r, b, n) {
+  const step = (r - l) / n;
+  ctx.beginPath();
+  ctx.moveTo(l, t);
+  ctx.lineTo(r, t);
+  ctx.lineTo(r, b);
+  for (let i = 0; i < n; i++) {
+    ctx.lineTo(r - (i + 0.5) * step, b + step * 0.6);
+    ctx.lineTo(r - (i + 1) * step, b);
+  }
+  ctx.closePath();
+}
+
 // ---------------------------------------------------------------- illustrations
 
 /** @type {Art} */
@@ -480,54 +534,101 @@ const artLearning = {
   w: 620,
   h: 440,
   draw(ctx) {
-    // Books
-    box(ctx, 20, 380, 170, 40, 10, C.pink);
-    box(ctx, 34, 344, 150, 38, 10, C.sky);
-    box(ctx, 26, 310, 160, 36, 10, C.sun);
-    box(ctx, 34, 390, 140, 6, 3, mix(C.pink, '#ffffff', 0.5));
-    box(ctx, 46, 354, 120, 6, 3, mix(C.sky, '#ffffff', 0.5));
-    // Stairs
-    const sw = 84;
-    const sh = 62;
+    const base = 430;
+    glow(ctx, 470, 100, 100, C.paper, 0.6);
+    // Books.
+    floorShadow(ctx, 100, base + 2, 104, 10);
+    for (const [x, y, w, h, c] of /** @type {[number, number, number, number, string][]} */ ([
+      [14, 384, 176, 46, C.pink],
+      [28, 342, 150, 42, C.sky],
+      [20, 304, 164, 38, C.sun],
+      [42, 270, 124, 34, C.blue],
+    ])) {
+      box(ctx, x, y, w, h, 10, mix(c, C.navy, 0.3));
+      box(ctx, x, y, w - 4, h - 5, 10, c);
+      box(ctx, x + w - 26, y + 6, 16, h - 16, 4, C.paper);
+      box(ctx, x + 16, y + 6, 8, h - 16, 3, mix(c, '#ffffff', 0.45));
+      box(ctx, x + 30, y + 6, 8, h - 16, 3, mix(c, '#ffffff', 0.45));
+    }
+    // Stairs with a little depth.
+    const sw = 80;
+    const sh = 58;
+    const x0 = 200;
     for (let i = 0; i < 5; i++) {
-      const x = 200 + i * sw;
-      const top = 420 - (i + 1) * sh;
+      const x = x0 + i * sw;
+      const top = base - (i + 1) * sh;
+      const front = i % 2 ? C.blue : mix(C.blue, C.navy, 0.3);
+      poly(
+        ctx,
+        [x + sw, top, x + sw + 16, top - 12, x + sw + 16, base - 12, x + sw, base],
+        mix(C.navy, C.blue, 0.2),
+      );
       box(
         ctx,
         x,
         top,
-        sw + 2,
-        420 - top,
-        [12, 12, 0, 0],
-        i % 2 ? C.blue : mix(C.blue, C.navy, 0.3),
+        sw,
+        base - top,
+        0,
+        grad(ctx, 0, top, 0, base, [front, mix(front, C.navy, 0.4)]),
       );
-      box(ctx, x, top, sw + 2, 12, [12, 12, 0, 0], C.sky);
+      poly(ctx, [x, top, x + sw, top, x + sw + 16, top - 12, x + 16, top - 12], C.sky);
+      box(ctx, x, top, sw, 5, 0, mix(C.sky, '#ffffff', 0.5));
     }
-    const labels = ['Skills', 'Career', 'Talents'];
-    labels.forEach((l, i) => {
-      text(ctx, l, 200 + (i + 1) * sw + sw / 2, 420 - (i + 1) * sh + 48, 17, C.paper, {
-        weight: 800,
+    ['Skills', 'Career', 'Talents'].forEach((l, i) => {
+      const x = x0 + (i + 2) * sw;
+      const top = base - (i + 3) * sh;
+      box(ctx, x + 6, top + 18, sw - 12, 28, 14, C.paper);
+      text(ctx, l, x + sw / 2, top + 38, 17, C.navy, {
+        weight: 850,
         align: 'center',
+        maxW: sw - 22,
       });
     });
-    person(ctx, 285, 358, 0.62, {
+    // Jumping for the next ledge.
+    floorShadow(ctx, 322, 314, 30, 6, 0.3);
+    person(ctx, 322, 298, 0.56, {
       skin: SKIN[1],
       hair: HAIR[1],
       shirt: C.pink,
       pants: C.navy,
-      wave: true,
+      cheer: true,
     });
+    circle(ctx, 246, 168, 32, C.navy);
+    circle(ctx, 246, 168, 25, C.sun);
+    poly(ctx, [246, 148, 264, 168, 253, 168, 253, 186, 239, 186, 239, 168, 228, 168], C.navy);
     // Mortarboard above the top step.
-    const cx = 496;
-    const cy = 60;
-    poly(ctx, [cx - 66, cy + 20, cx + 66, cy + 20, cx + 56, cy + 74, cx - 56, cy + 74], C.navy);
-    poly(ctx, [cx - 120, cy, cx, cy - 46, cx + 120, cy, cx, cy + 46], C.navy);
-    poly(ctx, [cx - 104, cy, cx, cy - 38, cx + 104, cy, cx, cy + 38], mix(C.navy, C.blue, 0.6));
-    path(ctx, [cx, cy, cx + 84, cy + 14, cx + 90, cy + 74], 6, C.sun);
-    circle(ctx, cx, cy, 9, C.sun);
-    box(ctx, cx + 80, cy + 70, 20, 30, 6, C.sun);
-    spark(ctx, cx - 140, cy + 70, 18, C.paper);
-    spark(ctx, cx - 100, cy - 40, 12, C.navy);
+    const cx = 470;
+    const cy = 54;
+    poly(
+      ctx,
+      [cx - 62, cy + 18, cx + 62, cy + 18, cx + 54, cy + 76, cx - 54, cy + 76],
+      mix(C.navy, C.blue, 0.25),
+    );
+    oval(ctx, cx, cy + 76, 54, 11, C.navy);
+    poly(ctx, [cx - 124, cy + 8, cx, cy - 38, cx + 124, cy + 8, cx, cy + 54], SHADE);
+    poly(ctx, [cx - 124, cy, cx, cy - 46, cx + 124, cy, cx, cy + 46], C.navy);
+    poly(
+      ctx,
+      [cx - 104, cy, cx, cy - 38, cx + 104, cy, cx, cy + 38],
+      grad(ctx, cx - 100, cy - 40, cx + 100, cy + 40, [
+        mix(C.navy, C.blue, 0.85),
+        mix(C.navy, C.blue, 0.3),
+      ]),
+    );
+    path(ctx, [cx, cy, cx - 86, cy + 12, cx - 92, cy + 76], 6, C.sun);
+    circle(ctx, cx, cy, 10, C.sun);
+    box(ctx, cx - 102, cy + 72, 20, 34, 6, C.sun);
+    for (let i = 0; i < 4; i++)
+      path(
+        ctx,
+        [cx - 99 + i * 5, cy + 104, cx - 99 + i * 5, cy + 116],
+        3,
+        mix(C.sun, GOLD_DEEP, 0.5),
+      );
+    spark(ctx, cx + 120, cy + 70, 16, C.paper);
+    spark(ctx, cx - 112, cy - 30, 12, C.navy);
+    spark(ctx, 600, 30, 14, C.paper);
   },
 };
 
@@ -537,53 +638,91 @@ const artChrono = {
   h: 440,
   draw(ctx) {
     const cx = 430;
-    const cy = 230;
-    // Alarm bells and feet.
-    circle(ctx, cx - 120, cy - 150, 46, C.sun);
-    circle(ctx, cx + 120, cy - 150, 46, C.sun);
-    path(ctx, [cx - 110, cy + 150, cx - 140, cy + 196], 18, C.sun);
-    path(ctx, [cx + 110, cy + 150, cx + 140, cy + 196], 18, C.sun);
-    circle(ctx, cx, cy, 186, C.sun);
-    circle(ctx, cx, cy, 154, C.paper);
+    const cy = 238;
+    const gold = mix(C.sun, '#e0a030', 0.5);
+    glow(ctx, cx, cy, 190, C.sun, 0.3);
+    // Ringing!
+    for (const [s, a0, a1] of [
+      [-1, Math.PI * 1.02, Math.PI * 1.38],
+      [1, Math.PI * 1.52, Math.PI * 1.8],
+    ]) {
+      arc(ctx, cx + s * 120, cy - 150, 64, 7, C.pink, a0, a1);
+      arc(ctx, cx + s * 120, cy - 150, 84, 6, alpha(C.pink, 0.55), a0 + 0.06, a1 - 0.06);
+    }
+    path(ctx, [cx, cy - 180, cx, cy - 212], 10, gold);
+    circle(ctx, cx, cy - 216, 13, C.sun);
+    for (const s of [-1, 1]) {
+      const bx = cx + s * 120;
+      circle(ctx, bx + 6, cy - 144, 46, SHADE);
+      circle(ctx, bx, cy - 150, 46, grad(ctx, bx - 40, cy - 190, bx + 40, cy - 110, [C.sun, gold]));
+      circle(ctx, bx - 14, cy - 166, 13, mix(C.sun, '#ffffff', 0.6));
+      path(ctx, [cx + s * 110, cy + 150, cx + s * 142, cy + 196], 18, gold);
+    }
+    // Clock body.
+    circle(ctx, cx + 10, cy + 12, 186, SHADE);
+    circle(ctx, cx, cy, 186, grad(ctx, cx - 180, cy - 180, cx + 180, cy + 180, [C.sun, gold]));
+    circle(ctx, cx, cy, 160, gold);
+    circle(ctx, cx, cy, 151, C.paper);
     for (let i = 0; i < 60; i++) {
       const a = (i / 60) * TAU;
       const big = i % 5 === 0;
-      const r0 = big ? 122 : 136;
+      const r0 = big ? 120 : 132;
       path(
         ctx,
         [
           cx + Math.cos(a) * r0,
           cy + Math.sin(a) * r0,
-          cx + Math.cos(a) * 144,
-          cy + Math.sin(a) * 144,
+          cx + Math.cos(a) * 140,
+          cy + Math.sin(a) * 140,
         ],
-        big ? 9 : 3,
+        big ? 8 : 3,
         big ? C.navy : mix(C.navy, C.paper, 0.6),
       );
     }
+    ['12', '3', '6', '9'].forEach((n, i) => {
+      const a = -Math.PI / 2 + (i * Math.PI) / 2;
+      text(ctx, n, cx + Math.cos(a) * 100, cy + Math.sin(a) * 100 + 11, 30, C.navy, {
+        align: 'center',
+      });
+    });
     // 9:00 sharp.
-    path(ctx, [cx, cy, cx - 78, cy], 16, C.navy);
-    path(ctx, [cx, cy, cx, cy - 110], 11, C.navy);
-    path(ctx, [cx, cy + 30, cx + 70, cy - 90], 4, C.pink);
+    path(ctx, [cx, cy, cx - 76, cy], 16, C.navy);
+    path(ctx, [cx, cy, cx, cy - 74], 11, C.navy);
+    path(ctx, [cx, cy + 30, cx + 68, cy - 88], 4, C.pink);
     circle(ctx, cx, cy, 16, C.pink);
-    // Badge reader.
-    box(ctx, 26, 120, 190, 300, 30, C.blue);
-    box(ctx, 26, 120, 190, 22, [30, 30, 0, 0], mix(C.blue, C.sky, 0.3));
-    box(ctx, 48, 156, 146, 80, 14, C.navy);
+    circle(ctx, cx, cy, 6, C.paper);
+    ctx.save();
+    ctx.globalAlpha = 0.7;
+    arc(ctx, cx, cy, 128, 10, '#ffffff', Math.PI * 1.12, Math.PI * 1.38);
+    ctx.restore();
+    // Badge reader, with its checkpoint flag.
+    path(ctx, [62, 122, 62, 62], 6, C.paper);
+    poly(ctx, [65, 62, 112, 76, 65, 92], C.lime);
+    box(ctx, 34, 130, 190, 300, 30, SHADE);
+    box(ctx, 26, 120, 190, 300, 30, grad(ctx, 0, 120, 0, 420, [mix(C.blue, C.sky, 0.3), C.blue]));
+    box(ctx, 44, 130, 154, 8, 4, alpha('#ffffff', 0.3));
+    box(ctx, 46, 152, 150, 86, 14, C.navy);
+    glow(ctx, 121, 196, 74, C.lime, 0.3);
     text(ctx, '08:59', 121, 213, 44, C.lime, { align: 'center', weight: 800 });
-    for (let i = 0; i < 3; i++) arc(ctx, 121, 330, 26 + i * 22, 8, C.sky, -2.4, -0.74);
-    circle(ctx, 121, 330, 10, C.sky);
-    circle(ctx, 180, 392, 9, C.lime);
+    for (let i = 0; i < 3; i++)
+      arc(ctx, 121, 336, 24 + i * 21, 7, alpha(C.sky, 1 - i * 0.25), -2.4, -0.74);
+    circle(ctx, 121, 336, 10, C.sky);
+    glow(ctx, 62, 394, 24, C.lime, 0.6);
+    circle(ctx, 62, 394, 8, C.lime);
+    circle(ctx, 90, 394, 8, mix(C.blue, C.navy, 0.45));
     // Badge on its lanyard, tapping the reader.
     at(ctx, 196, 344, 0.22, () => {
       ctx.scale(0.8, 0.8);
       path(ctx, [0, -70, -30, -150], 10, C.pink);
       path(ctx, [0, -70, 34, -150], 10, C.pink);
+      box(ctx, -52, -64, 116, 156, 16, SHADE);
       box(ctx, -58, -72, 116, 156, 16, C.paper);
       box(ctx, -58, -72, 116, 34, [16, 16, 0, 0], C.pink);
-      circle(ctx, 0, 8, 26, SKIN[2]);
+      box(ctx, -14, -80, 28, 16, 6, mix(C.navy, '#ffffff', 0.3));
+      circle(ctx, 0, 6, 30, mix(C.sky, C.paper, 0.5));
+      circle(ctx, 0, 8, 22, SKIN[2]);
       ctx.beginPath();
-      ctx.arc(0, 4, 27, Math.PI, 0);
+      ctx.arc(0, 4, 23, Math.PI, 0);
       ctx.fillStyle = HAIR[0];
       ctx.fill();
       box(ctx, -36, 46, 72, 9, 4, C.navy);
@@ -599,16 +738,30 @@ const artSupport = {
   draw(ctx) {
     const cx = 220;
     const cy = 200;
-    // Friendly face wearing a headset.
-    circle(ctx, cx, cy + 10, 132, C.paper);
-    circle(ctx, cx - 44, cy - 4, 13, C.navy);
-    circle(ctx, cx + 44, cy - 4, 13, C.navy);
+    glow(ctx, cx, cy, 200, '#ffffff', 0.5);
+    // Shoulders.
+    box(ctx, cx - 150, cy + 112, 300, 200, [110, 110, 0, 0], C.blue);
+    poly(ctx, [cx - 44, cy + 116, cx + 44, cy + 116, cx, cy + 176], C.paper);
+    // Face, shaded on the lower right.
+    circle(ctx, cx + 8, cy + 20, 132, SHADE);
+    circle(ctx, cx, cy + 10, 132, mix(C.paper, C.sky, 0.4));
+    circle(ctx, cx - 12, cy, 122, C.paper);
+    for (const s of [-1, 1]) {
+      circle(ctx, cx + s * 44, cy - 4, 14, C.navy);
+      circle(ctx, cx + s * 44 - 4, cy - 9, 4.5, '#ffffff');
+      circle(ctx, cx + s * 82, cy + 40, 17, mix(C.pink, C.paper, 0.45));
+    }
     arc(ctx, cx, cy + 34, 46, 12, C.navy, 0.15 * Math.PI, 0.85 * Math.PI);
-    circle(ctx, cx - 82, cy + 40, 16, mix(C.pink, C.paper, 0.4));
-    circle(ctx, cx + 82, cy + 40, 16, mix(C.pink, C.paper, 0.4));
+    // Headset.
     arc(ctx, cx, cy + 10, 160, 30, C.navy, Math.PI * 1.03, Math.PI * 1.97);
-    box(ctx, cx - 192, cy - 40, 64, 116, 28, C.pink);
-    box(ctx, cx + 128, cy - 40, 64, 116, 28, C.pink);
+    arc(ctx, cx, cy + 10, 166, 6, alpha('#ffffff', 0.35), Math.PI * 1.25, Math.PI * 1.55);
+    for (const s of [-1, 1]) {
+      const ex = cx + s * 160;
+      box(ctx, ex - 32 + 5, cy - 34, 64, 116, 28, SHADE);
+      box(ctx, ex - 32, cy - 40, 64, 116, 28, C.pink);
+      box(ctx, ex - 20, cy - 24, 40, 84, 18, mix(C.pink, '#ffffff', 0.35));
+      box(ctx, ex - 22, cy - 34, 10, 40, 5, alpha('#ffffff', 0.5));
+    }
     ctx.beginPath();
     ctx.moveTo(cx - 160, cy + 70);
     ctx.quadraticCurveTo(cx - 150, cy + 150, cx - 40, cy + 140);
@@ -616,13 +769,16 @@ const artSupport = {
     ctx.strokeStyle = C.navy;
     ctx.lineCap = 'round';
     ctx.stroke();
+    glow(ctx, cx - 34, cy + 140, 46, C.lime, 0.5);
     box(ctx, cx - 56, cy + 124, 44, 32, 16, C.lime);
     // Speech waves.
     arc(ctx, cx + 120, cy - 150, 26, 9, C.paper, -1.2, 0.2);
     arc(ctx, cx + 120, cy - 150, 52, 9, C.paper, -1.2, 0.2);
     // Ticket.
-    at(ctx, cx, 470, -0.06, () => {
+    at(ctx, cx, 468, -0.06, () => {
+      box(ctx, -182, -80, 380, 180, 24, SHADE);
       box(ctx, -190, -90, 380, 180, 24, C.navy);
+      box(ctx, -190, -90, 380, 14, [24, 24, 0, 0], mix(C.navy, C.sky, 0.25));
       circle(ctx, -190, 0, 26, C.sky);
       circle(ctx, 190, 0, 26, C.sky);
       path(ctx, [72, -70, 72, 70], 4, mix(C.navy, C.sky, 0.5), [10, 10]);
@@ -631,9 +787,22 @@ const artSupport = {
       box(ctx, -150, 16, 120, 12, 6, mix(C.navy, C.paper, 0.35));
       box(ctx, -152, 42, 150, 36, 18, C.lime);
       text(ctx, 'RÉSOLU', -77, 70, 24, C.navy, { align: 'center', weight: 900 });
+      glow(ctx, 130, 0, 70, C.lime, 0.35);
       circle(ctx, 130, 0, 38, C.lime);
       check(ctx, 130, 2, 18, 9, C.navy);
     });
+    // A bare cable, already reported.
+    ctx.beginPath();
+    ctx.moveTo(-10, 590);
+    ctx.bezierCurveTo(70, 560, 120, 604, 196, 580);
+    ctx.lineWidth = 12;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = C.navy;
+    ctx.stroke();
+    for (const a of [-0.5, -0.1, 0.3])
+      path(ctx, [198, 579, 198 + Math.cos(a) * 26, 579 + Math.sin(a) * 26], 4, GOLD_DEEP);
+    spark(ctx, 238, 568, 16, C.sun);
+    spark(ctx, 232, 596, 8, C.paper);
   },
 };
 
@@ -642,10 +811,10 @@ const artConcur = {
   w: 620,
   h: 440,
   draw(ctx) {
-    // Dashed flight path from the receipt to the plane.
+    // Dashed flight path up to the plane.
     ctx.beginPath();
-    ctx.moveTo(250, 120);
-    ctx.bezierCurveTo(330, 30, 420, 160, 500, 80);
+    ctx.moveTo(300, 116);
+    ctx.bezierCurveTo(340, 30, 420, 30, 452, 96);
     ctx.setLineDash([14, 14]);
     ctx.lineWidth = 6;
     ctx.lineCap = 'round';
@@ -653,23 +822,30 @@ const artConcur = {
     ctx.stroke();
     ctx.setLineDash([]);
     // Suitcase.
-    box(ctx, 420, 262, 70, 40, 16, C.navy);
-    box(ctx, 436, 276, 38, 30, 8, mix(C.blue, C.navy, 0.2));
-    box(ctx, 360, 290, 190, 140, 24, C.pink);
-    box(ctx, 400, 290, 16, 140, 0, mix(C.pink, C.navy, 0.2));
-    box(ctx, 494, 290, 16, 140, 0, mix(C.pink, C.navy, 0.2));
-    circle(ctx, 455, 360, 18, C.sun);
+    floorShadow(ctx, 560, 432, 64, 8, 0.3);
+    box(ctx, 532, 278, 56, 30, 12, C.navy);
+    box(
+      ctx,
+      506,
+      296,
+      108,
+      132,
+      20,
+      grad(ctx, 506, 0, 614, 0, [C.pink, mix(C.pink, C.navy, 0.25)]),
+    );
+    box(ctx, 528, 296, 10, 132, 0, mix(C.pink, C.navy, 0.3));
+    box(ctx, 582, 296, 10, 132, 0, mix(C.pink, C.navy, 0.3));
+    circle(ctx, 560, 340, 14, C.sun);
+    box(ctx, 540, 380, 40, 22, 6, C.paper);
     // Receipt.
-    at(ctx, 160, 222, -0.08, () => {
-      ctx.beginPath();
-      ctx.moveTo(-120, -200);
-      ctx.lineTo(120, -200);
-      ctx.lineTo(120, 190);
-      for (let i = 0; i < 8; i++) {
-        ctx.lineTo(120 - (i + 0.5) * 30, 210);
-        ctx.lineTo(120 - (i + 1) * 30, 190);
-      }
-      ctx.closePath();
+    at(ctx, 150, 222, -0.08, () => {
+      ctx.save();
+      ctx.translate(10, 12);
+      torn(ctx, -120, -200, 120, 190, 8);
+      ctx.fillStyle = SHADE;
+      ctx.fill();
+      ctx.restore();
+      torn(ctx, -120, -200, 120, 190, 8);
       ctx.fillStyle = C.paper;
       ctx.fill();
       text(ctx, 'REÇU', 0, -150, 40, C.navy, { align: 'center' });
@@ -681,15 +857,48 @@ const artConcur = {
       text(ctx, 'TOTAL', -90, 104, 26, C.navy, { weight: 800 });
       text(ctx, '42,00 €', 90, 146, 46, C.blue, { align: 'right' });
     });
-    circle(ctx, 268, 52, 36, C.lime);
-    check(ctx, 268, 54, 16, 9, C.navy);
+    glow(ctx, 268, 52, 60, C.lime, 0.4);
+    circle(ctx, 268, 52, 34, C.lime);
+    check(ctx, 268, 54, 15, 9, C.navy);
+    // Phone scanning the receipt.
+    at(ctx, 410, 262, 0.1, () => {
+      box(ctx, -70, -132, 156, 280, 28, SHADE);
+      box(ctx, -78, -140, 156, 280, 28, C.navy);
+      box(
+        ctx,
+        -66,
+        -122,
+        132,
+        230,
+        16,
+        grad(ctx, 0, -122, 0, 108, [mix(C.sky, C.paper, 0.4), C.sky]),
+      );
+      box(ctx, -20, -134, 40, 8, 4, mix(C.navy, '#ffffff', 0.25));
+      box(ctx, -36, -92, 72, 120, 6, C.paper);
+      for (let i = 0; i < 4; i++)
+        box(ctx, -24, -76 + i * 20, 48 - (i % 2) * 16, 7, 3, mix(C.navy, C.paper, 0.55));
+      for (const [x, y, dx, dy] of [
+        [-48, -106, 1, 1],
+        [48, -106, -1, 1],
+        [-48, 42, 1, -1],
+        [48, 42, -1, -1],
+      ])
+        path(ctx, [x, y + dy * 22, x, y, x + dx * 22, y], 6, C.lime);
+      glow(ctx, 0, -24, 70, C.lime, 0.35);
+      box(ctx, -56, -27, 112, 6, 3, C.lime);
+      box(ctx, -40, 62, 80, 30, 15, C.lime);
+      text(ctx, 'OK', 0, 85, 22, C.navy, { align: 'center' });
+      circle(ctx, 0, 124, 9, mix(C.navy, '#ffffff', 0.3));
+    });
     // Plane.
-    at(ctx, 520, 90, -0.45, () => {
+    at(ctx, 530, 84, -0.45, () => {
       poly(ctx, [-10, -6, 30, -6, -20, -90, -44, -90], mix(C.sky, C.paper, 0.4));
       poly(ctx, [-10, 6, 30, 6, -20, 90, -44, 90], mix(C.sky, C.blue, 0.2));
       box(ctx, -90, -18, 190, 36, 18, C.paper);
+      box(ctx, -80, 6, 170, 10, 5, mix(C.paper, C.sky, 0.45));
       poly(ctx, [-90, -4, -70, -4, -88, -44, -104, -44], mix(C.sky, C.blue, 0.2));
-      for (let i = 0; i < 4; i++) circle(ctx, -40 + i * 26, -2, 6, C.sky);
+      for (let i = 0; i < 4; i++) circle(ctx, -40 + i * 26, -3, 6, C.sky);
+      box(ctx, 70, -10, 20, 12, 6, C.navy);
     });
   },
 };
@@ -699,39 +908,79 @@ const artPeopleDoc = {
   w: 620,
   h: 440,
   draw(ctx) {
+    // The cloud that keeps everything warm.
+    ctx.save();
+    ctx.globalAlpha = 0.95;
+    box(ctx, 404, 82, 180, 52, 26, '#ffffff');
+    circle(ctx, 452, 84, 42, '#ffffff');
+    circle(ctx, 512, 70, 52, '#ffffff');
+    circle(ctx, 556, 98, 34, '#ffffff');
+    ctx.restore();
+    poly(ctx, [512, 40, 538, 70, 524, 70, 524, 100, 500, 100, 500, 70, 486, 70], C.sky);
+    path(ctx, [420, 140, 380, 180], 5, alpha(C.blue, 0.6), [2, 12]);
+    // Folder back.
     const back = mix(C.blue, C.sky, 0.35);
     box(ctx, 100, 70, 160, 60, 18, back);
+    box(ctx, 108, 108, 420, 320, 24, SHADE);
     box(ctx, 100, 100, 420, 320, 24, back);
     // Payslip and a second document.
-    at(ctx, 340, 210, 0.07, () => box(ctx, -150, -170, 290, 300, 14, mix(C.paper, C.sky, 0.25)));
+    at(ctx, 340, 210, 0.07, () => {
+      box(ctx, -150, -170, 290, 300, 14, mix(C.paper, C.sky, 0.25));
+      for (let i = 0; i < 3; i++)
+        box(ctx, -110, -120 + i * 30, 160, 10, 5, mix(C.sky, C.paper, 0.4));
+    });
     at(ctx, 300, 200, -0.05, () => {
+      box(ctx, -144, -162, 300, 320, 14, SHADE);
       box(ctx, -150, -170, 300, 320, 14, C.paper);
-      text(ctx, 'BULLETIN DE PAIE', -122, -124, 24, C.blue, { weight: 900 });
+      box(ctx, -150, -170, 300, 20, [14, 14, 0, 0], C.pink);
+      text(ctx, 'BULLETIN DE PAIE', -122, -118, 24, C.blue, { weight: 900 });
       for (let i = 0; i < 4; i++) {
-        box(ctx, -122, -96 + i * 30, 150 - (i % 2) * 40, 11, 5, mix(C.navy, C.paper, 0.65));
-        box(ctx, 66, -96 + i * 30, 56, 11, 5, mix(C.navy, C.paper, 0.5));
+        box(ctx, -122, -94 + i * 28, 150 - (i % 2) * 40, 11, 5, mix(C.navy, C.paper, 0.65));
+        box(ctx, 66, -94 + i * 28, 56, 11, 5, mix(C.navy, C.paper, 0.5));
       }
+      // Paper clip.
+      ctx.beginPath();
+      ctx.roundRect(96, -194, 26, 70, 13);
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = mix(C.navy, C.paper, 0.35);
+      ctx.stroke();
     });
     // Folder front.
-    poly(ctx, [80, 220, 540, 220, 520, 420, 100, 420], C.sky);
-    poly(ctx, [80, 220, 540, 220, 536, 250, 84, 250], mix(C.sky, '#ffffff', 0.35));
-    text(ctx, 'DOCUMENTS RH', 276, 350, 38, C.navy, { align: 'center' });
+    poly(
+      ctx,
+      [80, 220, 540, 220, 520, 420, 100, 420],
+      grad(ctx, 0, 220, 0, 420, [C.sky, mix(C.sky, C.blue, 0.35)]),
+    );
+    poly(ctx, [80, 220, 540, 220, 536, 250, 84, 250], mix(C.sky, '#ffffff', 0.4));
+    box(ctx, 150, 304, 250, 66, 18, C.paper);
+    text(ctx, 'DOCUMENTS RH', 275, 350, 34, C.navy, { align: 'center', maxW: 220 });
     // Shield with a padlock.
     const sx = 540;
     const sy = 330;
-    ctx.beginPath();
-    ctx.moveTo(sx, sy - 80);
-    ctx.quadraticCurveTo(sx + 40, sy - 60, sx + 70, sy - 64);
-    ctx.quadraticCurveTo(sx + 76, sy + 40, sx, sy + 86);
-    ctx.quadraticCurveTo(sx - 76, sy + 40, sx - 70, sy - 64);
-    ctx.quadraticCurveTo(sx - 40, sy - 60, sx, sy - 80);
-    ctx.fillStyle = C.lime;
-    ctx.fill();
+    /** @param {number} dx @param {number} dy @param {string | CanvasGradient} c */
+    const shield = (dx, dy, c) => {
+      ctx.beginPath();
+      ctx.moveTo(sx + dx, sy - 80 + dy);
+      ctx.quadraticCurveTo(sx + 40 + dx, sy - 60 + dy, sx + 70 + dx, sy - 64 + dy);
+      ctx.quadraticCurveTo(sx + 76 + dx, sy + 40 + dy, sx + dx, sy + 86 + dy);
+      ctx.quadraticCurveTo(sx - 76 + dx, sy + 40 + dy, sx - 70 + dx, sy - 64 + dy);
+      ctx.quadraticCurveTo(sx - 40 + dx, sy - 60 + dy, sx + dx, sy - 80 + dy);
+      ctx.fillStyle = c;
+      ctx.fill();
+    };
+    glow(ctx, sx, sy, 78, C.lime, 0.35);
+    shield(8, 8, SHADE);
+    shield(
+      0,
+      0,
+      grad(ctx, sx - 70, sy - 80, sx + 70, sy + 86, [mix(C.lime, '#ffffff', 0.3), C.lime]),
+    );
     arc(ctx, sx, sy - 6, 20, 9, C.navy, Math.PI, 0);
     box(ctx, sx - 32, sy - 8, 64, 50, 10, C.navy);
-    circle(ctx, sx, sy + 14, 7, C.lime);
-    spark(ctx, 70, 160, 20, C.pink);
-    spark(ctx, 580, 120, 14, C.blue);
+    circle(ctx, sx, sy + 12, 7, C.lime);
+    box(ctx, sx - 3, sy + 14, 6, 14, 3, C.lime);
+    spark(ctx, 60, 160, 20, C.pink);
+    spark(ctx, 590, 190, 12, C.blue);
   },
 };
 
@@ -741,56 +990,99 @@ const artSwile = {
   h: 440,
   draw(ctx) {
     const cx = 300;
-    const cy = 210;
-    // Fork and knife.
-    box(ctx, 64, 60, 18, 330, 9, C.paper);
-    for (let i = 0; i < 4; i++) box(ctx, 44 + i * 16, 50, 9, 90, 5, C.paper);
-    box(ctx, 44, 120, 57, 40, 14, C.paper);
-    ctx.beginPath();
-    ctx.moveTo(526, 390);
-    ctx.lineTo(526, 50);
-    ctx.quadraticCurveTo(570, 90, 560, 240);
-    ctx.lineTo(546, 250);
-    ctx.lineTo(546, 390);
-    ctx.closePath();
-    ctx.fillStyle = C.paper;
-    ctx.fill();
+    const cy = 214;
+    // Fork and knife, with their shadows.
+    for (const [dx, c] of /** @type {[number, string][]} */ ([
+      [8, SHADE],
+      [0, C.paper],
+    ])) {
+      box(ctx, 64 + dx, 60 + dx, 18, 330, 9, c);
+      for (let i = 0; i < 4; i++) box(ctx, 44 + i * 16 + dx, 50 + dx, 9, 90, 5, c);
+      box(ctx, 44 + dx, 120 + dx, 57, 40, 14, c);
+      ctx.beginPath();
+      ctx.moveTo(526 + dx, 390 + dx);
+      ctx.lineTo(526 + dx, 50 + dx);
+      ctx.quadraticCurveTo(570 + dx, 90 + dx, 560 + dx, 240 + dx);
+      ctx.lineTo(546 + dx, 250 + dx);
+      ctx.lineTo(546 + dx, 390 + dx);
+      ctx.closePath();
+      ctx.fillStyle = c;
+      ctx.fill();
+    }
+    box(ctx, 530, 70, 6, 150, 3, mix(C.paper, C.sky, 0.4));
     // Plate seen from above.
-    circle(ctx, cx + 8, cy + 10, 182, mix(C.pink, C.navy, 0.25));
+    circle(ctx, cx + 10, cy + 12, 182, SHADE);
     circle(ctx, cx, cy, 182, C.paper);
-    circle(ctx, cx, cy, 140, mix(C.paper, C.pink, 0.12));
-    // Bowl: greens, tomatoes, an egg.
+    arc(ctx, cx, cy, 170, 6, '#ffffff', Math.PI * 1.1, Math.PI * 1.45);
+    circle(ctx, cx, cy, 140, mix(C.paper, C.pink, 0.14));
+    circle(ctx, cx + 6, cy + 6, 130, mix(C.paper, C.pink, 0.08));
+    // Bowl: greens, tomatoes, cucumber, an egg.
     const r = rng(7);
     for (let i = 0; i < 9; i++) {
       const a = (i / 9) * TAU;
       at(ctx, cx - 30 + Math.cos(a) * 60, cy + 10 + Math.sin(a) * 50, a, () => {
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 44, 22, 0, 0, TAU);
-        ctx.fillStyle = i % 2 ? C.lime : mix(C.lime, '#3c8c3c', 0.45);
-        ctx.fill();
+        const c = i % 2 ? C.lime : mix(C.lime, '#3c8c3c', 0.45);
+        oval(ctx, 0, 0, 44, 22, c);
+        path(ctx, [-34, 0, 34, 0], 3, mix(c, '#2e7d32', 0.4));
       });
+    }
+    for (const [x, y] of [
+      [cx - 90, cy - 30],
+      [cx - 20, cy + 70],
+      [cx + 40, cy + 40],
+    ]) {
+      circle(ctx, x, y, 22, mix(C.lime, '#2e7d32', 0.3));
+      circle(ctx, x, y, 17, mix(C.lime, '#ffffff', 0.55));
+      for (let k = 0; k < 3; k++)
+        circle(
+          ctx,
+          x + Math.cos(k * 2.1) * 7,
+          y + Math.sin(k * 2.1) * 7,
+          2.5,
+          mix(C.lime, '#2e7d32', 0.4),
+        );
     }
     for (let i = 0; i < 5; i++) {
       const a = r() * TAU;
-      circle(ctx, cx - 30 + Math.cos(a) * 64, cy + 10 + Math.sin(a) * 56, 18, C.pink);
-      circle(
-        ctx,
-        cx - 34 + Math.cos(a) * 64,
-        cy + 6 + Math.sin(a) * 56,
-        5,
-        mix(C.pink, '#ffffff', 0.6),
-      );
+      const x = cx - 30 + Math.cos(a) * 64;
+      const y = cy + 10 + Math.sin(a) * 56;
+      circle(ctx, x + 2, y + 3, 18, mix(C.pink, C.navy, 0.3));
+      circle(ctx, x, y, 18, mix(C.pink, '#ff3b3b', 0.4));
+      circle(ctx, x - 5, y - 5, 5, mix(C.pink, '#ffffff', 0.6));
     }
-    ctx.beginPath();
-    ctx.ellipse(cx + 70, cy - 40, 54, 44, 0.3, 0, TAU);
-    ctx.fillStyle = '#ffffff';
-    ctx.fill();
+    oval(ctx, cx + 74, cy - 34, 54, 44, SHADE, 0.3);
+    oval(ctx, cx + 70, cy - 40, 54, 44, '#ffffff', 0.3);
     circle(ctx, cx + 74, cy - 38, 22, C.sun);
+    circle(ctx, cx + 68, cy - 44, 6, mix(C.sun, '#ffffff', 0.6));
+    // Meal tickets: every one counts.
+    for (const [x, y, a] of [
+      [470, 44, 0.18],
+      [150, 30, -0.2],
+    ]) {
+      at(ctx, x, y, a, () => {
+        box(ctx, -44, -22, 88, 44, 10, C.sun);
+        circle(ctx, -44, 0, 9, C.pink);
+        circle(ctx, 44, 0, 9, C.pink);
+        text(ctx, '+1', 0, 11, 28, C.navy, { align: 'center' });
+      });
+    }
     // Meal card.
     at(ctx, 470, 360, -0.16, () => {
-      box(ctx, -110, -70, 220, 140, 18, C.navy);
-      box(ctx, -86, -40, 48, 36, 8, C.sun);
-      text(ctx, 'Bon appétit', -86, 46, 26, C.paper, { weight: 800 });
+      box(ctx, -102, -62, 220, 140, 18, SHADE);
+      box(
+        ctx,
+        -110,
+        -70,
+        220,
+        140,
+        18,
+        grad(ctx, -110, -70, 110, 70, [mix(C.navy, C.blue, 0.4), C.navy]),
+      );
+      box(ctx, -86, -42, 50, 38, 8, C.sun);
+      path(ctx, [-86, -23, -36, -23], 2, mix(C.sun, GOLD_DEEP, 0.6));
+      path(ctx, [-61, -42, -61, -4], 2, mix(C.sun, GOLD_DEEP, 0.6));
+      for (let i = 0; i < 3; i++) arc(ctx, -16, -23, 8 + i * 8, 3, C.paper, -0.7, 0.7);
+      text(ctx, 'Bon appétit', -86, 46, 26, C.paper, { weight: 800, maxW: 150 });
       heart(ctx, 74, -24, 18, C.pink);
     });
   },
@@ -801,35 +1093,76 @@ const artOrder = {
   w: 620,
   h: 440,
   draw(ctx) {
-    box(ctx, 120, 20, 380, 420, 28, C.blue);
+    // Clipboard.
+    box(ctx, 132, 32, 380, 420, 28, SHADE);
+    box(
+      ctx,
+      120,
+      20,
+      380,
+      420,
+      28,
+      grad(ctx, 120, 20, 500, 440, [mix(C.blue, C.sky, 0.25), C.blue]),
+    );
+    box(ctx, 146, 56, 328, 370, 12, mix(C.paper, C.navy, 0.12));
     box(ctx, 146, 52, 328, 370, 12, '#ffffff');
     box(ctx, 230, 0, 160, 56, 16, C.navy);
-    box(ctx, 266, 14, 88, 18, 9, C.sun);
+    box(ctx, 240, 6, 140, 10, 5, mix(C.navy, '#ffffff', 0.3));
+    box(ctx, 266, 18, 88, 18, 9, C.sun);
     text(ctx, 'N° 2026-042', 176, 106, 26, C.blue, { weight: 900 });
+    box(ctx, 360, 84, 90, 30, 15, mix(C.sky, '#ffffff', 0.6));
+    text(ctx, 'J+0', 405, 106, 20, C.blue, { align: 'center', weight: 850 });
     const rows = ['Projet', 'Fournisseur', 'Montant'];
     rows.forEach((l, i) => {
-      const y = 150 + i * 62;
+      const y = 132 + i * 52;
       box(ctx, 176, y, 34, 34, 8, mix(C.lime, '#ffffff', 0.2));
       check(ctx, 193, y + 18, 10, 6, C.navy);
       text(ctx, l, 224, y + 26, 24, C.navy, { weight: 800 });
-      path(ctx, [400, y + 26, 446, y + 26], 4, mix(C.navy, '#ffffff', 0.7));
+      path(ctx, [390, y + 26, 446, y + 26], 4, mix(C.navy, '#ffffff', 0.7));
     });
-    // Rubber stamp.
-    at(ctx, 320, 326, -0.18, () => {
-      ctx.globalAlpha = 0.95;
+    // Signature.
+    text(ctx, 'Signature', 176, 396, 18, mix(C.navy, '#ffffff', 0.45), { weight: 700 });
+    path(ctx, [270, 400, 446, 400], 3, mix(C.navy, '#ffffff', 0.7));
+    ctx.beginPath();
+    ctx.moveTo(280, 392);
+    ctx.bezierCurveTo(300, 350, 310, 410, 330, 380);
+    ctx.bezierCurveTo(345, 360, 350, 400, 372, 384);
+    ctx.quadraticCurveTo(392, 372, 420, 386);
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = C.navy;
+    ctx.stroke();
+    // Stamp imprint.
+    at(ctx, 320, 308, -0.12, () => {
+      ctx.globalAlpha = 0.92;
       ctx.beginPath();
-      ctx.roundRect(-214, -56, 428, 112, 18);
-      ctx.lineWidth = 10;
+      ctx.roundRect(-200, -48, 400, 96, 18);
+      ctx.lineWidth = 9;
       ctx.strokeStyle = C.pink;
       ctx.stroke();
-      text(ctx, 'APPROUVÉ', 0, 24, 64, C.pink, { align: 'center', spacing: 2, maxW: 390 });
+      ctx.beginPath();
+      ctx.roundRect(-187, -35, 374, 70, 12);
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      text(ctx, 'APPROUVÉ', 0, 20, 56, C.pink, { align: 'center', spacing: 2, maxW: 340 });
       ctx.globalAlpha = 1;
     });
+    // Rubber stamp waiting on the desk.
+    floorShadow(ctx, 62, 430, 50, 8, 0.3);
+    box(ctx, 18, 392, 88, 34, 8, mix(C.pink, C.navy, 0.3));
+    box(ctx, 14, 420, 96, 8, 4, C.pink);
+    box(ctx, 50, 350, 24, 46, 6, C.navy);
+    circle(ctx, 62, 336, 28, C.pink);
+    circle(ctx, 54, 328, 9, mix(C.pink, '#ffffff', 0.5));
     // Pen.
-    at(ctx, 540, 180, 0.5, () => {
+    at(ctx, 548, 180, 0.5, () => {
+      box(ctx, -8, -144, 28, 220, 12, SHADE);
       box(ctx, -14, -150, 28, 220, 12, C.pink);
+      box(ctx, -8, -140, 6, 196, 3, mix(C.pink, '#ffffff', 0.4));
       box(ctx, -14, -150, 28, 46, [12, 12, 0, 0], C.navy);
+      box(ctx, 10, -150, 8, 70, 4, mix(C.navy, '#ffffff', 0.3));
       poly(ctx, [-14, 70, 14, 70, 0, 104], C.sun);
+      poly(ctx, [-4, 92, 4, 92, 0, 104], C.navy);
     });
   },
 };
@@ -845,7 +1178,23 @@ const artMission = {
       [250, 70, 420, 40, 420, 390, 250, 420],
       [420, 40, 590, 70, 590, 420, 420, 390],
     ];
-    panels.forEach((p, i) => poly(ctx, p, i % 2 ? mix(C.paper, C.sky, 0.25) : C.paper));
+    poly(ctx, [80, 52, 260, 82, 430, 52, 600, 82, 600, 432, 430, 402, 260, 432, 80, 402], SHADE);
+    panels.forEach((p, i) =>
+      poly(
+        ctx,
+        p,
+        grad(
+          ctx,
+          p[0],
+          0,
+          p[2],
+          0,
+          i % 2
+            ? [mix(C.paper, C.sky, 0.4), mix(C.paper, C.sky, 0.2)]
+            : [C.paper, mix(C.paper, C.sun, 0.25)],
+        ),
+      ),
+    );
     ctx.save();
     ctx.beginPath();
     panels.forEach((p) => {
@@ -857,12 +1206,22 @@ const artMission = {
     ctx.moveTo(60, 160);
     ctx.bezierCurveTo(200, 120, 280, 300, 600, 250);
     ctx.lineWidth = 26;
-    ctx.strokeStyle = C.sky;
+    ctx.strokeStyle = alpha(C.sky, 0.85);
     ctx.stroke();
+    oval(ctx, 330, 360, 60, 26, alpha(C.sky, 0.85));
+    poly(ctx, [380, 210, 440, 120, 500, 210], mix(C.blue, C.sky, 0.55));
     poly(ctx, [420, 210, 500, 90, 580, 210], mix(C.blue, C.sky, 0.3));
+    poly(ctx, [500, 90, 580, 210, 500, 210], mix(C.blue, C.navy, 0.15));
     poly(ctx, [480, 120, 500, 90, 520, 120, 500, 130], '#ffffff');
-    circle(ctx, 150, 330, 40, mix(C.lime, '#3c8c3c', 0.3));
-    circle(ctx, 200, 350, 30, mix(C.lime, '#3c8c3c', 0.5));
+    for (const [x, y, r] of [
+      [150, 330, 34],
+      [196, 352, 26],
+      [130, 370, 22],
+      [520, 340, 22],
+    ]) {
+      circle(ctx, x, y, r, mix(C.lime, '#2e7d32', 0.45));
+      circle(ctx, x - r * 0.3, y - r * 0.3, r * 0.4, mix(C.lime, '#ffffff', 0.2));
+    }
     ctx.restore();
     ctx.beginPath();
     ctx.moveTo(130, 120);
@@ -874,16 +1233,28 @@ const artMission = {
     ctx.strokeStyle = C.navy;
     ctx.stroke();
     ctx.setLineDash([]);
-    circle(ctx, 130, 120, 16, C.navy);
+    circle(ctx, 130, 120, 18, C.paper);
+    circle(ctx, 130, 120, 12, C.navy);
+    glow(ctx, 500, 128, 80, C.pink, 0.35);
+    floorShadow(ctx, 500, 204, 22, 7, 0.3);
     pin(ctx, 500, 200, 36, C.pink, C.paper);
+    // Ream of paper: refills for the reports.
+    floorShadow(ctx, 540, 432, 72, 8, 0.3);
+    poly(ctx, [470, 350, 600, 350, 612, 338, 482, 338], '#ffffff');
+    poly(ctx, [600, 350, 612, 338, 612, 412, 600, 424], mix(C.paper, C.navy, 0.2));
+    box(ctx, 470, 350, 130, 74, [0, 0, 6, 6], C.paper);
+    box(ctx, 470, 368, 130, 32, 0, C.pink);
+    text(ctx, 'A4 · 500', 535, 392, 22, '#ffffff', { align: 'center', maxW: 116 });
     // Suitcase in front.
+    floorShadow(ctx, 78, 432, 80, 9, 0.3);
     box(ctx, 34, 260, 80, 40, 16, C.navy);
     box(ctx, 48, 274, 52, 30, 8, C.sun);
-    box(ctx, 0, 290, 150, 140, 22, C.blue);
+    box(ctx, 0, 290, 150, 140, 22, grad(ctx, 0, 0, 150, 0, [mix(C.blue, C.sky, 0.2), C.blue]));
     box(ctx, 26, 290, 14, 140, 0, mix(C.blue, C.navy, 0.4));
     box(ctx, 110, 290, 14, 140, 0, mix(C.blue, C.navy, 0.4));
-    circle(ctx, 75, 360, 22, C.lime);
-    check(ctx, 75, 362, 10, 6, C.navy);
+    box(ctx, 50, 400, 30, 18, 6, C.pink);
+    circle(ctx, 75, 352, 22, C.lime);
+    check(ctx, 75, 354, 10, 6, C.navy);
   },
 };
 
@@ -892,16 +1263,54 @@ const artSuccess = {
   w: 620,
   h: 460,
   draw(ctx) {
+    // Skyline, with the rooftop as the day's goal.
+    ctx.save();
+    ctx.fillStyle = alpha('#ffffff', 0.14);
+    for (const [x, t, w] of [
+      [20, 70, 92],
+      [118, 210, 70],
+      [400, 230, 80],
+      [500, 260, 110],
+    ])
+      ctx.fillRect(x, t, w, 460 - t);
+    ctx.fillStyle = alpha('#ffffff', 0.22);
+    for (let r = 0; r < 9; r++)
+      for (let c = 0; c < 3; c++) ctx.fillRect(32 + c * 26, 96 + r * 34, 14, 18);
+    ctx.restore();
+    path(ctx, [66, 72, 66, 18], 5, C.paper);
+    poly(ctx, [69, 18, 110, 30, 69, 44], C.lime);
+    spark(ctx, 120, 20, 12, C.lime);
+    // Confetti.
+    const r = rng(5);
+    const conf = [C.lime, C.pink, C.sun, C.paper, C.sky];
+    for (let i = 0; i < 22; i++) {
+      at(ctx, 140 + r() * 320, 20 + r() * 170, r() * TAU, () =>
+        box(ctx, -6, -3, 12, 6, 2, conf[i % 5]),
+      );
+    }
+    // Podium.
     const steps = [
       { x: 50, h: 120, c: C.sky, n: '2' },
       { x: 220, h: 190, c: C.lime, n: '1' },
       { x: 390, h: 90, c: C.paper, n: '3' },
     ];
     for (const s of steps) {
-      box(ctx, s.x, 460 - s.h, 170, s.h, [16, 16, 0, 0], s.c);
-      box(ctx, s.x, 460 - s.h, 170, 14, [16, 16, 0, 0], mix(s.c, '#ffffff', 0.4));
-      text(ctx, s.n, s.x + 85, 460 - s.h + 76, 60, C.navy, { align: 'center' });
+      const top = 460 - s.h;
+      poly(
+        ctx,
+        [s.x, top, s.x + 170, top, s.x + 182, top - 10, s.x + 12, top - 10],
+        mix(s.c, '#ffffff', 0.45),
+      );
+      box(ctx, s.x, top, 170, s.h, 0, grad(ctx, 0, top, 0, 460, [s.c, mix(s.c, C.navy, 0.3)]));
+      circle(ctx, s.x + 85, top + 54, 34, alpha('#ffffff', 0.35));
+      text(ctx, s.n, s.x + 85, top + 76, 60, C.navy, { align: 'center' });
     }
+    /** @param {number} x @param {number} y @param {number} s @param {string} c */
+    const medal = (x, y, s, c) => {
+      poly(ctx, [x - 14 * s, y - 50 * s, x, y - 6 * s, x + 14 * s, y - 50 * s], C.pink);
+      circle(ctx, x, y, 14 * s, c);
+      circle(ctx, x - 4 * s, y - 4 * s, 4 * s, '#ffffff');
+    };
     person(ctx, 135, 340, 0.62, {
       skin: SKIN[3],
       hair: HAIR[0],
@@ -909,6 +1318,7 @@ const artSuccess = {
       pants: C.navy,
       wave: true,
     });
+    medal(135, 340 - 112 * 0.62, 0.62, '#d7dde8');
     person(ctx, 305, 270, 0.7, {
       skin: SKIN[0],
       hair: HAIR[3],
@@ -916,6 +1326,7 @@ const artSuccess = {
       pants: C.navy,
       cheer: true,
     });
+    medal(305, 270 - 112 * 0.7, 0.7, GOLD);
     person(ctx, 475, 370, 0.58, {
       skin: SKIN[2],
       hair: HAIR[1],
@@ -923,17 +1334,20 @@ const artSuccess = {
       pants: C.navy,
       wave: true,
     });
+    medal(475, 370 - 112 * 0.58, 0.58, '#d08a4a');
     // Target with an arrow.
     const tx = 520;
     const ty = 100;
+    circle(ctx, tx + 7, ty + 8, 78, SHADE);
     circle(ctx, tx, ty, 78, C.paper);
     circle(ctx, tx, ty, 58, C.pink);
     circle(ctx, tx, ty, 38, C.paper);
     circle(ctx, tx, ty, 18, C.pink);
+    arc(ctx, tx, ty, 70, 5, '#ffffff', Math.PI * 1.1, Math.PI * 1.4);
     path(ctx, [tx - 110, ty + 70, tx - 4, ty + 4], 10, C.navy);
-    poly(ctx, [tx - 110, ty + 70, tx - 140, ty + 64, tx - 128, ty + 92], C.sun);
-    spark(ctx, 120, 60, 22, C.paper);
-    spark(ctx, 200, 120, 12, C.lime);
+    poly(ctx, [tx - 104, ty + 66, tx - 138, ty + 58, tx - 126, ty + 92], C.sun);
+    poly(ctx, [tx - 86, ty + 54, tx - 118, ty + 46, tx - 106, ty + 78], mix(C.sun, GOLD_DEEP, 0.4));
+    spark(ctx, tx - 14, ty - 20, 14, C.sun);
   },
 };
 
@@ -943,35 +1357,68 @@ const artComp = {
   h: 440,
   draw(ctx) {
     const cx = 310;
-    poly(ctx, [cx - 90, 440, cx + 90, 440, cx + 50, 400, cx - 50, 400], C.paper);
-    box(ctx, cx - 12, 90, 24, 320, 10, C.paper);
+    glow(ctx, cx, 170, 160, C.lime, 0.2);
+    // Arguments, ready.
+    box(ctx, 446, 0, 170, 84, 22, C.paper);
+    poly(ctx, [462, 80, 492, 80, 440, 100], C.paper);
+    for (let i = 0; i < 3; i++) {
+      check(ctx, 470, 20 + i * 24, 8, 5, C.blue);
+      box(ctx, 488, 16 + i * 24, 100 - i * 20, 9, 4, mix(C.navy, C.paper, 0.55));
+    }
+    // Base and pole.
+    oval(ctx, cx, 438, 110, 10, SHADE);
+    poly(
+      ctx,
+      [cx - 90, 436, cx + 90, 436, cx + 50, 396, cx - 50, 396],
+      grad(ctx, cx - 90, 0, cx + 90, 0, [C.paper, mix(C.paper, C.sky, 0.45)]),
+    );
+    box(
+      ctx,
+      cx - 12,
+      90,
+      24,
+      312,
+      10,
+      grad(ctx, cx - 12, 0, cx + 12, 0, [C.paper, mix(C.paper, C.sky, 0.5)]),
+    );
+    // Beam.
+    box(ctx, cx - 230, 112, 460, 20, 10, SHADE);
+    box(ctx, cx - 230, 106, 460, 20, 10, C.paper);
+    box(ctx, cx - 230, 118, 460, 8, [0, 0, 10, 10], mix(C.paper, C.sky, 0.4));
+    glow(ctx, cx, 84, 60, C.lime, 0.5);
     circle(ctx, cx, 84, 26, C.lime);
-    box(ctx, cx - 230, 110, 460, 20, 10, C.paper);
+    circle(ctx, cx - 8, 76, 8, mix(C.lime, '#ffffff', 0.6));
     for (const side of [-1, 1]) {
       const px = cx + side * 200;
-      path(ctx, [px, 120, px - 80, 280], 4, mix(C.paper, C.sky, 0.3));
-      path(ctx, [px, 120, px + 80, 280], 4, mix(C.paper, C.sky, 0.3));
-      circle(ctx, px, 120, 12, C.lime);
+      path(ctx, [px, 120, px - 84, 280], 4, mix(C.paper, C.sky, 0.3), [8, 6]);
+      path(ctx, [px, 120, px + 84, 280], 4, mix(C.paper, C.sky, 0.3), [8, 6]);
+      circle(ctx, px, 118, 13, C.lime);
       ctx.beginPath();
       ctx.moveTo(px - 104, 280);
       ctx.lineTo(px + 104, 280);
-      ctx.quadraticCurveTo(px + 90, 340, px, 340);
-      ctx.quadraticCurveTo(px - 90, 340, px - 104, 280);
-      ctx.fillStyle = C.lime;
+      ctx.quadraticCurveTo(px + 90, 342, px, 342);
+      ctx.quadraticCurveTo(px - 90, 342, px - 104, 280);
+      ctx.fillStyle = grad(ctx, 0, 280, 0, 342, [C.lime, mix(C.lime, '#2e7d32', 0.45)]);
       ctx.fill();
+      oval(ctx, px, 280, 104, 10, mix(C.lime, '#ffffff', 0.35));
     }
     // Left pan: a stack of coins.
+    const coin = mix(C.sun, '#e0a030', 0.45);
     for (let i = 0; i < 5; i++) {
-      const y = 262 - i * 22;
-      box(ctx, cx - 260, y, 120, 22, 8, i % 2 ? C.sun : mix(C.sun, '#e0a030', 0.4));
+      const y = 262 - i * 20;
+      box(ctx, cx - 262 + (i % 2) * 6, y, 120, 22, 10, coin);
+      oval(ctx, cx - 202 + (i % 2) * 6, y + 4, 60, 7, C.sun);
     }
-    circle(ctx, cx - 200, 150, 40, C.sun);
-    ring(ctx, cx - 200, 150, 30, 5, mix(C.sun, '#e0a030', 0.6));
-    text(ctx, '€', cx - 200, 166, 42, mix(C.sun, '#a0661a', 0.7), { align: 'center' });
+    circle(ctx, cx - 192, 148, 42, SHADE);
+    circle(ctx, cx - 200, 140, 42, grad(ctx, cx - 240, 100, cx - 160, 180, [C.sun, coin]));
+    arc(ctx, cx - 200, 140, 32, 5, mix(C.sun, '#a0661a', 0.45));
+    text(ctx, '€', cx - 200, 156, 42, mix(C.sun, '#a0661a', 0.7), { align: 'center' });
     // Right pan: a star for the work done.
+    starShape(ctx, cx + 206, 216, 70, 32, SHADE);
     starShape(ctx, cx + 200, 210, 70, 32, C.pink);
-    spark(ctx, cx + 120, 30, 18, C.lime);
-    spark(ctx, cx - 120, 50, 12, C.sky);
+    starShape(ctx, cx + 190, 196, 22, 10, mix(C.pink, '#ffffff', 0.45));
+    spark(ctx, cx + 110, 40, 16, C.lime);
+    spark(ctx, cx - 120, 46, 12, C.sky);
   },
 };
 
@@ -1003,30 +1450,55 @@ const artPowerUp = {
   h: 620,
   draw(ctx) {
     const cx = 220;
-    // Sun + rays + bolt.
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * TAU;
+    const cy = 220;
+    glow(ctx, cx, cy, 220, C.sun, 0.5);
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * TAU;
+      const r1 = i % 2 ? 196 : 212;
       path(
         ctx,
         [
           cx + Math.cos(a) * 168,
-          220 + Math.sin(a) * 168,
-          cx + Math.cos(a) * 205,
-          220 + Math.sin(a) * 205,
+          cy + Math.sin(a) * 168,
+          cx + Math.cos(a) * r1,
+          cy + Math.sin(a) * r1,
         ],
         14,
-        C.sun,
+        i % 2 ? C.lime : C.sun,
       );
     }
-    circle(ctx, cx, 220, 150, C.sun);
-    circle(ctx, cx, 220, 122, mix(C.sun, '#ffffff', 0.35));
-    bolt(ctx, cx + 6, 226, 112, C.navy);
-    bolt(ctx, cx, 220, 112, C.lime);
-    // Mountain with a flag.
-    poly(ctx, [-10, 620, 210, 390, 450, 620], C.navy);
+    circle(
+      ctx,
+      cx,
+      cy,
+      150,
+      grad(ctx, cx - 150, cy - 150, cx + 150, cy + 150, [C.sun, mix(C.sun, '#e0a030', 0.4)]),
+    );
+    circle(ctx, cx, cy, 122, mix(C.sun, '#ffffff', 0.4));
+    arc(ctx, cx, cy, 136, 8, alpha('#ffffff', 0.6), Math.PI * 1.1, Math.PI * 1.4);
+    bolt(ctx, cx + 8, cy + 8, 112, C.navy);
+    bolt(ctx, cx, cy, 112, C.lime);
+    bolt(ctx, cx - 4, cy - 6, 50, mix(C.lime, '#ffffff', 0.5));
+    // Rising arrows: going up.
+    for (const x of [44, 396]) {
+      for (let i = 0; i < 3; i++) {
+        ctx.save();
+        ctx.globalAlpha = 1 - i * 0.3;
+        path(ctx, [x - 22, 470 - i * 34, x, 448 - i * 34, x + 22, 470 - i * 34], 10, C.lime);
+        ctx.restore();
+      }
+    }
+    // Mountains with a flag.
+    poly(ctx, [-30, 620, 90, 470, 220, 620], mix(C.navy, C.blue, 0.55));
+    poly(ctx, [240, 620, 360, 480, 470, 620], mix(C.navy, C.blue, 0.55));
+    poly(ctx, [-10, 620, 210, 390, 210, 620], mix(C.navy, C.blue, 0.3));
+    poly(ctx, [210, 390, 450, 620, 210, 620], C.navy);
     poly(ctx, [210, 390, 260, 442, 236, 436, 214, 456, 190, 436, 168, 434], C.paper);
+    poly(ctx, [210, 390, 260, 442, 236, 436, 214, 456, 210, 450], mix(C.paper, C.sky, 0.4));
     path(ctx, [210, 392, 210, 300], 8, C.paper);
     poly(ctx, [214, 300, 290, 318, 214, 340], C.lime);
+    spark(ctx, 60, 60, 18, C.paper);
+    spark(ctx, 392, 380, 12, C.paper);
   },
 };
 
@@ -1037,30 +1509,58 @@ const artTour = {
   draw(ctx) {
     const cx = 210;
     const cy = 220;
-    circle(ctx, cx, cy, 200, C.blue);
+    const hz = 290;
+    glow(ctx, cx, cy, 208, C.lime, 0.25);
     ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, 200, 0, TAU);
     ctx.clip();
-    circle(ctx, cx + 70, cy - 30, 58, C.sun);
-    poly(ctx, [0, 300, 120, 200, 220, 300], mix(C.blue, C.navy, 0.45));
+    ctx.fillStyle = grad(ctx, 0, 20, 0, hz, [C.navy, C.blue, mix(C.pink, C.sun, 0.35)]);
+    ctx.fillRect(0, 0, 440, hz);
+    const r = rng(3);
+    for (let i = 0; i < 16; i++)
+      circle(ctx, 40 + r() * 340, 40 + r() * 120, 1.5 + r() * 2, C.paper);
+    glow(ctx, cx + 70, cy - 10, 120, C.sun, 0.5);
+    circle(ctx, cx + 70, cy - 10, 56, C.sun);
+    poly(ctx, [0, 300, 120, 196, 220, 300], mix(C.blue, C.navy, 0.45));
+    poly(ctx, [120, 196, 220, 300, 140, 300], mix(C.blue, C.navy, 0.65));
     poly(ctx, [160, 300, 300, 170, 440, 300], mix(C.blue, C.navy, 0.3));
-    ctx.fillStyle = mix(C.lime, '#2e7d32', 0.45);
-    ctx.fillRect(0, 290, 440, 200);
-    poly(ctx, [cx - 16, 290, cx + 16, 290, cx + 150, 440, cx - 150, 440], C.navy);
-    for (let i = 0; i < 4; i++) {
-      const t0 = i / 4;
-      const y0 = 300 + t0 * t0 * 140 + i * 10;
-      const h = 14 + i * 10;
+    poly(ctx, [300, 170, 440, 300, 320, 300], mix(C.blue, C.navy, 0.55));
+    poly(ctx, [300, 170, 326, 194, 300, 188, 282, 196], C.paper);
+    ctx.fillStyle = grad(ctx, 0, hz, 0, 440, [
+      mix(C.lime, '#2e7d32', 0.35),
+      mix(C.lime, '#2e7d32', 0.65),
+    ]);
+    ctx.fillRect(0, hz, 440, 200);
+    poly(ctx, [cx - 16, hz, cx + 16, hz, cx + 150, 440, cx - 150, 440], C.navy);
+    path(ctx, [cx - 14, hz + 2, cx - 140, 440], 4, alpha(C.paper, 0.7));
+    path(ctx, [cx + 14, hz + 2, cx + 140, 440], 4, alpha(C.paper, 0.7));
+    for (let i = 0; i < 3; i++) {
+      const y0 = hz + 10 + i * i * 14 + i * 12;
+      const h = 10 + i * 8;
       poly(
         ctx,
-        [cx - 3 - i * 2, y0, cx + 3 + i * 2, y0, cx + 4 + i * 3, y0 + h, cx - 4 - i * 3, y0 + h],
+        [cx - 2 - i * 2, y0, cx + 2 + i * 2, y0, cx + 3 + i * 3, y0 + h, cx - 3 - i * 3, y0 + h],
         C.lime,
       );
     }
+    // The tour van, seen from behind.
+    floorShadow(ctx, cx, 418, 70, 10, 0.35);
+    box(ctx, cx - 62, 400, 22, 24, 6, C.navy);
+    box(ctx, cx + 40, 400, 22, 24, 6, C.navy);
+    box(ctx, cx - 66, 330, 132, 82, 18, C.pink);
+    box(ctx, cx - 52, 340, 104, 34, 8, mix(C.sky, C.navy, 0.35));
+    box(ctx, cx - 46, 344, 40, 8, 4, alpha('#ffffff', 0.4));
+    box(ctx, cx - 30, 384, 60, 16, 4, C.paper);
+    circle(ctx, cx - 52, 392, 7, C.sun);
+    circle(ctx, cx + 52, 392, 7, C.sun);
     ctx.restore();
     ring(ctx, cx, cy, 200, 14, C.lime);
+    ring(ctx, cx, cy, 186, 3, alpha(C.paper, 0.5));
+    floorShadow(ctx, cx - 54, 252, 22, 7, 0.4);
     pin(ctx, cx - 60, 250, 54, C.pink, C.pink);
+    oval(ctx, cx - 82, 120, 12, 22, alpha('#ffffff', 0.35), 0.5);
+    bolt(ctx, cx - 56, 146, 38, C.navy);
     bolt(ctx, cx - 60, 142, 38, C.lime);
   },
 };
@@ -1094,18 +1594,15 @@ const artConnect = {
     const sh = 440;
     poly(
       ctx,
-      FRANCE.map((v, i) => (i % 2 ? oy + 10 + v * sh : ox + 12 + v * sw)),
+      FRANCE.map((v, i) => (i % 2 ? oy + 12 + v * sh : ox + 12 + v * sw)),
       mix(C.blue, C.navy, 0.2),
     );
     poly(
       ctx,
       FRANCE.map((v, i) => (i % 2 ? oy + v * sh : ox + v * sw)),
-      C.sky,
+      grad(ctx, ox, oy, ox + sw, oy + sh, [mix(C.sky, '#ffffff', 0.35), C.sky]),
     );
-    ctx.beginPath();
-    ctx.ellipse(ox + 1.0 * sw, oy + 0.92 * sh, 14, 26, 0.2, 0, TAU);
-    ctx.fillStyle = C.sky;
-    ctx.fill();
+    oval(ctx, ox + 1.0 * sw, oy + 0.92 * sh, 14, 26, C.sky, 0.2);
     const pts = CITIES.map(([x, y]) => [ox + x * sw, oy + y * sh]);
     const links = [
       [0, 1],
@@ -1123,25 +1620,30 @@ const artConnect = {
       [1, 6],
     ];
     for (const [a, b] of links) path(ctx, [...pts[a], ...pts[b]], 5, C.navy, [2, 12]);
+    const [nx, ny] = pts[0];
+    glow(ctx, nx, ny, 70, C.pink, 0.45);
+    ring(ctx, nx, ny, 40, 4, alpha(C.pink, 0.6));
     pts.forEach(([x, y], i) => {
       circle(ctx, x, y, i === 0 ? 26 : 15, C.paper);
       circle(ctx, x, y, i === 0 ? 17 : 9, i === 0 ? C.pink : C.blue);
     });
-    // Speech bubbles.
-    /** @param {number} x @param {number} y @param {string} t @param {string} bg @param {string} fg @param {number} dir */
-    const bubble = (x, y, t, bg, fg, dir) => {
-      const w = measure(ctx, t, 40, 900) + 48;
+    // Speech bubbles from colleagues.
+    /** @param {number} x @param {number} y @param {string} t @param {string} bg @param {string} fg @param {number} dir @param {number} k */
+    const chat = (x, y, t, bg, fg, dir, k) => {
+      const w = measure(ctx, t, 34, 900) + 104;
+      box(ctx, x + 6, y + 8, w, 78, 39, SHADE);
       box(ctx, x, y, w, 78, 39, bg);
       poly(
         ctx,
         [x + w / 2 - 14, y + 74, x + w / 2 + 14, y + 74, x + w / 2 + dir * 30, y + 106],
         bg,
       );
-      text(ctx, t, x + w / 2, y + 54, 40, fg, { align: 'center' });
+      avatar(ctx, x + 40, y + 39, 27, SKIN[k], HAIR[k], [C.sun, C.pink, C.lime][k % 3]);
+      text(ctx, t, x + 78, y + 51, 34, fg);
     };
-    bubble(0, 150, 'Salut !', C.pink, '#ffffff', 1);
-    bubble(450, 330, 'Hello !', C.blue, '#ffffff', -1);
-    bubble(30, 340, 'On s’aide ?', C.sun, C.navy, 1);
+    chat(0, 150, 'Salut !', C.pink, '#ffffff', 1, 1);
+    chat(396, 336, 'Hello !', C.blue, '#ffffff', -1, 3);
+    chat(14, 352, 'On s’aide ?', C.sun, C.navy, 1, 0);
   },
 };
 
@@ -1150,30 +1652,113 @@ const artGenAi = {
   w: 620,
   h: 440,
   draw(ctx) {
-    const cx = 260;
-    const cy = 260;
+    const cx = 230;
+    const cy = 262;
+    glow(ctx, cx, cy, 260, C.sky, 0.35);
     // Antenna.
-    path(ctx, [cx, cy - 150, cx, cy - 210], 10, C.paper);
-    circle(ctx, cx, cy - 216, 34, mix(C.pink, C.navy, 0.6));
-    circle(ctx, cx, cy - 216, 22, C.pink);
+    path(ctx, [cx, cy - 150, cx, cy - 206], 10, C.paper);
+    glow(ctx, cx, cy - 214, 56, C.pink, 0.6);
+    circle(ctx, cx, cy - 214, 26, mix(C.pink, C.navy, 0.5));
+    circle(ctx, cx, cy - 214, 18, C.pink);
+    circle(ctx, cx - 6, cy - 220, 5, '#ffffff');
     // Ears and head.
-    box(ctx, cx - 196, cy - 50, 40, 100, 18, C.pink);
-    box(ctx, cx + 156, cy - 50, 40, 100, 18, C.pink);
-    box(ctx, cx - 170, cy - 150, 340, 280, 60, C.paper);
-    box(ctx, cx - 136, cy - 112, 272, 190, 40, C.navy);
-    arc(ctx, cx - 58, cy - 10, 26, 13, C.sky, Math.PI * 1.1, Math.PI * 1.9);
-    arc(ctx, cx + 58, cy - 10, 26, 13, C.sky, Math.PI * 1.1, Math.PI * 1.9);
+    for (const s of [-1, 1]) {
+      box(ctx, cx + s * 176 - 20, cy - 50, 40, 100, 18, C.pink);
+      glow(ctx, cx + s * 190, cy, 30, C.sky, 0.6);
+      circle(ctx, cx + s * 190, cy, 9, C.sky);
+    }
+    box(ctx, cx - 160, cy - 140, 340, 280, 60, SHADE);
+    box(
+      ctx,
+      cx - 170,
+      cy - 150,
+      340,
+      280,
+      60,
+      grad(ctx, 0, cy - 150, 0, cy + 130, ['#ffffff', mix(C.paper, C.sky, 0.35)]),
+    );
+    box(
+      ctx,
+      cx - 136,
+      cy - 112,
+      272,
+      190,
+      40,
+      grad(ctx, 0, cy - 112, 0, cy + 78, [mix(C.navy, C.blue, 0.4), C.navy]),
+    );
+    poly(
+      ctx,
+      [
+        cx - 110,
+        cy - 112,
+        cx - 50,
+        cy - 112,
+        cx - 120,
+        cy + 20,
+        cx - 136,
+        cy - 10,
+        cx - 136,
+        cy - 80,
+      ],
+      alpha('#ffffff', 0.08),
+    );
+    for (const s of [-1, 1]) {
+      glow(ctx, cx + s * 58, cy - 16, 44, C.sky, 0.45);
+      arc(ctx, cx + s * 58, cy - 10, 26, 13, C.sky, Math.PI * 1.1, Math.PI * 1.9);
+      circle(ctx, cx + s * 100, cy + 30, 12, mix(C.pink, C.navy, 0.45));
+    }
     arc(ctx, cx, cy + 14, 30, 11, C.pink, 0.2 * Math.PI, 0.8 * Math.PI);
-    circle(ctx, cx - 100, cy + 30, 12, mix(C.pink, C.navy, 0.5));
-    circle(ctx, cx + 100, cy + 30, 12, mix(C.pink, C.navy, 0.5));
-    box(ctx, cx - 80, cy + 130, 160, 40, [0, 0, 20, 20], mix(C.paper, C.sky, 0.4));
+    box(ctx, cx - 80, cy + 130, 160, 40, [0, 0, 20, 20], mix(C.paper, C.sky, 0.45));
     // Speech bubble.
-    box(ctx, 420, 30, 200, 96, 32, C.sky);
-    poly(ctx, [440, 110, 480, 110, 420, 160], C.sky);
-    text(ctx, 'Bonjour !', 520, 92, 36, C.navy, { align: 'center' });
-    spark(ctx, 480, 220, 30, C.lime);
-    spark(ctx, 560, 290, 18, C.pink);
-    spark(ctx, 40, 70, 22, C.sky);
+    box(ctx, 426, 30, 190, 92, 32, SHADE);
+    box(ctx, 420, 22, 190, 92, 32, C.sky);
+    poly(ctx, [440, 104, 480, 104, 418, 154], C.sky);
+    text(ctx, 'Bonjour !', 515, 82, 36, C.navy, { align: 'center', maxW: 160 });
+    // A report in flight breaks a KPI slide.
+    at(ctx, 452, 214, -0.3, () => {
+      for (let i = 0; i < 3; i++)
+        path(
+          ctx,
+          [-40 - i * 4, -10 + i * 12, -70 - i * 10, -10 + i * 12],
+          4,
+          alpha(C.paper, 0.6 - i * 0.15),
+        );
+      box(ctx, -22, -28, 44, 56, 6, C.paper);
+      for (let i = 0; i < 3; i++) box(ctx, -14, -16 + i * 12, 28 - i * 6, 5, 2, C.blue);
+    });
+    glow(ctx, 520, 268, 70, C.sun, 0.6);
+    spark(ctx, 520, 268, 30, C.sun);
+    /** @param {number} x @param {number} y @param {number} a @param {number[]} p @param {number[][]} bars */
+    const shard = (x, y, a, p, bars) =>
+      at(ctx, x, y, a, () => {
+        poly(ctx, p, C.paper);
+        box(ctx, p[0], p[1], 54, 12, 0, C.pink);
+        for (const [bx, bh] of bars) box(ctx, bx, 40 - bh, 12, bh, 2, C.blue);
+      });
+    shard(
+      500,
+      330,
+      -0.25,
+      [-60, -48, 6, -48, -6, -6, 8, 18, -4, 48, -60, 48],
+      [
+        [-50, 30],
+        [-32, 52],
+      ],
+    );
+    shard(
+      578,
+      340,
+      0.28,
+      [-6, -48, 40, -48, 40, 48, -12, 48, 2, 18, -14, -6],
+      [
+        [4, 66],
+        [22, 44],
+      ],
+    );
+    box(ctx, 540, 400, 10, 10, 2, C.paper);
+    box(ctx, 512, 404, 8, 8, 2, C.pink);
+    spark(ctx, 40, 66, 22, C.sky);
+    spark(ctx, 600, 200, 14, C.pink);
   },
 };
 
@@ -1184,13 +1769,14 @@ const artCharity = {
   draw(ctx) {
     const cx = 310;
     const cy = 170;
+    glow(ctx, cx, cy, 165, '#ffffff', 0.6);
     for (let i = 0; i < 14; i++) {
       const a = (i / 14) * TAU;
       path(
         ctx,
         [
-          cx + Math.cos(a) * 170,
-          cy + Math.sin(a) * 160,
+          cx + Math.cos(a) * 172,
+          cy + Math.sin(a) * 162,
           cx + Math.cos(a) * 205,
           cy + Math.sin(a) * 195,
         ],
@@ -1198,12 +1784,20 @@ const artCharity = {
         i % 2 ? C.sun : mix(C.pink, '#ffffff', 0.3),
       );
     }
-    heart(ctx, cx + 8, cy + 10, 150, mix(C.pink, C.navy, 0.3));
+    heart(ctx, cx + 10, cy + 12, 150, mix(C.pink, C.navy, 0.35));
     heart(ctx, cx, cy, 150, C.pink);
+    ctx.save();
     ctx.beginPath();
-    ctx.ellipse(cx - 80, cy - 50, 26, 16, -0.7, 0, TAU);
-    ctx.fillStyle = mix(C.pink, '#ffffff', 0.55);
-    ctx.fill();
+    ctx.rect(cx, 0, 300, 460);
+    ctx.clip();
+    heart(ctx, cx, cy, 150, mix(C.pink, '#d9306f', 0.45));
+    ctx.restore();
+    oval(ctx, cx - 80, cy - 50, 28, 16, mix(C.pink, '#ffffff', 0.6), -0.7);
+    circle(ctx, cx - 42, cy - 82, 7, mix(C.pink, '#ffffff', 0.6));
+    heart(ctx, 70, 110, 22, mix(C.pink, '#ffffff', 0.3));
+    heart(ctx, 560, 70, 16, C.pink);
+    heart(ctx, 540, 190, 12, mix(C.pink, '#ffffff', 0.4));
+    spark(ctx, 90, 30, 16, C.sun);
     const sleeves = [C.blue, C.sun, C.sky, C.lime, C.blue];
     const xs = [70, 190, 310, 430, 550];
     const ys = [400, 360, 340, 360, 400];
@@ -1218,27 +1812,63 @@ const artCoopt = {
   h: 300,
   draw(ctx) {
     // Talent card.
-    box(ctx, 120, 20, 230, 230, 40, C.sky);
+    box(ctx, 130, 32, 230, 230, 40, SHADE);
+    box(ctx, 120, 20, 230, 230, 40, grad(ctx, 0, 20, 0, 250, [mix(C.sky, '#ffffff', 0.3), C.sky]));
     ctx.save();
     ctx.beginPath();
     ctx.roundRect(120, 20, 230, 230, 40);
     ctx.clip();
     circle(ctx, 235, 300, 110, C.blue);
+    poly(ctx, [205, 192, 265, 192, 235, 236], C.paper);
     ctx.restore();
     circle(ctx, 235, 120, 50, SKIN[1]);
     ctx.beginPath();
     ctx.arc(235, 112, 52, Math.PI * 1.02, Math.PI * 1.98);
     ctx.fillStyle = HAIR[1];
     ctx.fill();
+    circle(ctx, 218, 126, 5, C.navy);
+    circle(ctx, 252, 126, 5, C.navy);
+    arc(ctx, 235, 136, 14, 4, C.navy, 0.2 * Math.PI, 0.8 * Math.PI);
+    glow(ctx, 330, 34, 60, C.sun, 0.5);
     starShape(ctx, 330, 34, 36, 16, C.sun);
-    text(ctx, '1 TALENT', 235, 300, 48, C.paper, { align: 'center' });
+    text(ctx, '1 TALENT', 235, 298, 46, C.paper, { align: 'center' });
     // Equals.
-    box(ctx, 400, 100, 90, 24, 12, C.sun);
-    box(ctx, 400, 150, 90, 24, 12, C.sun);
-    // Gift.
-    box(ctx, 540, 100, 220, 150, 18, C.pink);
-    box(ctx, 524, 70, 252, 50, 14, mix(C.pink, '#ffffff', 0.2));
+    for (const y of [100, 150]) {
+      box(ctx, 404, y + 6, 90, 24, 12, SHADE);
+      box(ctx, 400, y, 90, 24, 12, C.sun);
+    }
+    // Gift, bursting with joy.
+    glow(ctx, 650, 150, 140, C.sun, 0.3);
+    const r = rng(9);
+    for (let i = 0; i < 9; i++) {
+      const a = Math.PI * (1.1 + (i / 8) * 0.8);
+      path(
+        ctx,
+        [
+          650 + Math.cos(a) * 110,
+          60 + Math.sin(a) * 50,
+          650 + Math.cos(a) * 140,
+          60 + Math.sin(a) * 64,
+        ],
+        6,
+        i % 2 ? C.sun : C.paper,
+      );
+      box(ctx, 560 + r() * 200, 4 + r() * 30, 8, 8, 2, [C.lime, C.sky, C.sun][i % 3]);
+    }
+    box(ctx, 550, 110, 220, 150, 18, SHADE);
+    box(
+      ctx,
+      540,
+      100,
+      220,
+      150,
+      18,
+      grad(ctx, 540, 0, 760, 0, [C.pink, mix(C.pink, C.navy, 0.25)]),
+    );
+    box(ctx, 524, 70, 252, 50, 14, mix(C.pink, '#ffffff', 0.25));
+    box(ctx, 524, 108, 252, 12, 0, mix(C.pink, C.navy, 0.2));
     box(ctx, 634, 70, 32, 180, 0, C.sun);
+    box(ctx, 640, 70, 8, 180, 0, mix(C.sun, '#ffffff', 0.45));
     ctx.lineWidth = 18;
     ctx.strokeStyle = C.sun;
     ctx.beginPath();
@@ -1247,10 +1877,11 @@ const artCoopt = {
     ctx.beginPath();
     ctx.ellipse(685, 50, 36, 22, -0.4, 0, TAU);
     ctx.stroke();
-    circle(ctx, 650, 66, 16, C.sun);
-    text(ctx, '1 PRIME', 650, 300, 48, C.paper, { align: 'center' });
-    spark(ctx, 820, 60, 22, C.sun);
+    circle(ctx, 650, 66, 16, mix(C.sun, GOLD_DEEP, 0.3));
+    text(ctx, '1 PRIME', 650, 298, 46, C.paper, { align: 'center' });
+    spark(ctx, 820, 70, 22, C.sun);
     spark(ctx, 60, 200, 18, C.pink);
+    spark(ctx, 70, 60, 12, C.sun);
   },
 };
 
@@ -1259,34 +1890,82 @@ const artVip = {
   w: 420,
   h: 440,
   draw(ctx) {
-    // Crown.
     const cx = 210;
-    poly(ctx, [70, 200, 60, 60, 140, 130, 210, 30, 280, 130, 360, 60, 350, 200], C.sun);
-    box(ctx, 66, 190, 288, 44, 12, mix(C.sun, '#e0a030', 0.45));
-    circle(ctx, 60, 60, 18, C.sun);
-    circle(ctx, 210, 30, 20, C.sun);
-    circle(ctx, 360, 60, 18, C.sun);
-    circle(ctx, cx, 212, 14, C.pink);
-    circle(ctx, cx - 90, 212, 10, C.sky);
-    circle(ctx, cx + 90, 212, 10, C.sky);
+    glow(ctx, cx, 150, 145, C.sun, 0.4);
+    // Red carpet.
+    poly(ctx, [130, 330, 290, 330, 380, 440, 40, 440], mix(C.pink, C.navy, 0.45));
+    path(ctx, [130, 330, 40, 440], 4, alpha(C.sun, 0.7));
+    path(ctx, [290, 330, 380, 440], 4, alpha(C.sun, 0.7));
+    // Crown.
+    const gold = mix(C.sun, '#e0a030', 0.45);
+    const tips = [70, 200, 60, 60, 140, 130, 210, 30, 280, 130, 360, 60, 350, 200];
+    poly(
+      ctx,
+      tips.map((v, i) => v + (i % 2 ? 10 : 8)),
+      SHADE,
+    );
+    poly(ctx, tips, grad(ctx, 0, 30, 0, 200, [mix(C.sun, '#ffffff', 0.3), C.sun]));
+    poly(ctx, [140, 130, 210, 30, 210, 200, 150, 200], alpha('#ffffff', 0.18));
+    poly(ctx, [280, 130, 360, 60, 350, 200, 290, 200], alpha(gold, 0.5));
+    box(ctx, 74, 198, 288, 44, 12, SHADE);
+    box(ctx, 66, 190, 288, 44, 12, grad(ctx, 0, 190, 0, 234, [gold, mix(gold, GOLD_DEEP, 0.5)]));
+    box(ctx, 80, 196, 260, 6, 3, alpha('#ffffff', 0.35));
+    for (const [x, y, r] of [
+      [60, 60, 18],
+      [210, 30, 20],
+      [360, 60, 18],
+    ]) {
+      circle(ctx, x, y, r, C.sun);
+      circle(ctx, x - r * 0.3, y - r * 0.3, r * 0.35, '#ffffff');
+    }
+    poly(ctx, [cx, 196, cx + 18, 212, cx, 228, cx - 18, 212], C.pink);
+    poly(ctx, [cx, 196, cx + 18, 212, cx, 212], mix(C.pink, '#ffffff', 0.5));
+    for (const s of [-1, 1]) {
+      circle(ctx, cx + s * 90, 212, 11, C.sky);
+      circle(ctx, cx + s * 90 - 3, 209, 4, '#ffffff');
+      circle(ctx, cx + s * 45, 212, 5, mix(C.paper, gold, 0.3));
+    }
+    circle(ctx, cx, 140, 16, C.pink);
+    circle(ctx, cx - 5, 135, 5, '#ffffff');
     // Stanchions and velvet rope.
     for (const x of [50, 370]) {
-      box(ctx, x - 9, 300, 18, 120, 6, C.sun);
-      ctx.beginPath();
-      ctx.ellipse(x, 424, 46, 14, 0, 0, TAU);
-      ctx.fillStyle = C.sun;
-      ctx.fill();
+      floorShadow(ctx, x, 428, 50, 12, 0.35);
+      oval(ctx, x, 424, 46, 14, gold);
+      oval(ctx, x, 420, 40, 10, C.sun);
+      box(
+        ctx,
+        x - 9,
+        300,
+        18,
+        120,
+        6,
+        grad(ctx, x - 9, 0, x + 9, 0, [mix(C.sun, '#ffffff', 0.4), gold]),
+      );
       circle(ctx, x, 296, 18, C.sun);
+      circle(ctx, x - 5, 290, 6, '#ffffff');
     }
     ctx.beginPath();
     ctx.moveTo(50, 316);
     ctx.quadraticCurveTo(210, 420, 370, 316);
-    ctx.lineWidth = 20;
+    ctx.lineWidth = 22;
     ctx.lineCap = 'round';
+    ctx.strokeStyle = mix(C.pink, C.navy, 0.2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(50, 312);
+    ctx.quadraticCurveTo(210, 412, 370, 312);
+    ctx.lineWidth = 14;
     ctx.strokeStyle = C.pink;
     ctx.stroke();
-    spark(ctx, 380, 250, 18, C.paper);
+    ctx.beginPath();
+    ctx.moveTo(70, 314);
+    ctx.quadraticCurveTo(210, 400, 350, 314);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = alpha('#ffffff', 0.45);
+    ctx.stroke();
+    spark(ctx, 384, 250, 18, C.paper);
     spark(ctx, 30, 160, 14, C.paper);
+    spark(ctx, 380, 150, 10, C.sun);
   },
 };
 
@@ -1295,6 +1974,47 @@ const artSummer = {
   w: 620,
   h: 460,
   draw(ctx) {
+    const hz = 300;
+    // Sun over the sea.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, 620, hz);
+    ctx.clip();
+    glow(ctx, 300, hz, 260, C.sun, 0.55);
+    circle(ctx, 300, hz, 150, grad(ctx, 0, hz - 150, 0, hz, [C.sun, mix(C.sun, C.pink, 0.55)]));
+    ctx.restore();
+    for (let i = 0; i < 4; i++)
+      box(ctx, 150, hz - 72 + i * 18, 300, 5 + i * 2, 0, mix(C.pink, C.sun, 0.3));
+    // Gulls.
+    for (const [x, y, s] of [
+      [470, 150, 1],
+      [520, 180, 0.7],
+    ]) {
+      ctx.beginPath();
+      ctx.moveTo(x - 18 * s, y);
+      ctx.quadraticCurveTo(x - 8 * s, y - 12 * s, x, y);
+      ctx.quadraticCurveTo(x + 8 * s, y - 12 * s, x + 18 * s, y);
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = C.navy;
+      ctx.stroke();
+    }
+    box(ctx, 0, hz, 620, 90, 0, grad(ctx, 0, hz, 0, hz + 90, [mix(C.blue, C.sky, 0.3), C.blue]));
+    for (let i = 0; i < 4; i++)
+      box(ctx, 210 + (i % 2) * 30, hz + 10 + i * 18, 180 - i * 30, 7, 4, alpha(C.sun, 0.9));
+    path(ctx, [30, hz + 34, 100, hz + 34], 5, C.sky);
+    path(ctx, [480, hz + 60, 580, hz + 60], 5, C.sky);
+    // Sand.
+    ctx.beginPath();
+    ctx.moveTo(0, hz + 84);
+    ctx.quadraticCurveTo(310, hz + 66, 620, hz + 88);
+    ctx.lineTo(620, 460);
+    ctx.lineTo(0, 460);
+    ctx.closePath();
+    ctx.fillStyle = grad(ctx, 0, hz + 70, 0, 460, [
+      mix(C.sun, C.paper, 0.45),
+      mix(C.sun, C.pink, 0.2),
+    ]);
+    ctx.fill();
     // String lights.
     const bulbs = [C.sun, C.sky, C.lime, C.paper];
     ctx.beginPath();
@@ -1307,24 +2027,11 @@ const artSummer = {
       const t = i / 12;
       const x = (1 - t) * (1 - t) * -20 + 2 * (1 - t) * t * 310 + t * t * 640;
       const y = (1 - t) * (1 - t) * 20 + 2 * (1 - t) * t * 140 + t * t * 20;
+      glow(ctx, x, y + 20, 30, bulbs[i % 4], 0.6);
       box(ctx, x - 5, y, 10, 10, 2, C.navy);
-      circle(ctx, x, y + 20, 13, bulbs[i % 4]);
+      circle(ctx, x, y + 20, 12, bulbs[i % 4]);
+      circle(ctx, x - 4, y + 16, 3.5, '#ffffff');
     }
-    // Sun over the sea.
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, 620, 330);
-    ctx.clip();
-    circle(ctx, 300, 330, 160, C.sun);
-    ctx.restore();
-    for (let i = 0; i < 4; i++)
-      box(ctx, 140, 260 + i * 18, 320, 6 + i * 2, 0, mix(C.pink, C.sun, 0.35));
-    box(ctx, 0, 330, 620, 130, [0, 0, 24, 24], C.blue);
-    for (let i = 0; i < 5; i++) {
-      box(ctx, 200 + (i % 2) * 40, 350 + i * 20, 200 - i * 26, 8, 4, C.sun);
-    }
-    path(ctx, [30, 380, 110, 380], 6, C.sky);
-    path(ctx, [480, 410, 580, 410], 6, C.sky);
     // Palm tree.
     ctx.beginPath();
     ctx.moveTo(70, 460);
@@ -1333,23 +2040,70 @@ const artSummer = {
     ctx.strokeStyle = C.navy;
     ctx.lineCap = 'round';
     ctx.stroke();
-    for (const a of [-2.7, -2.1, -1.4, -0.7, -0.1]) {
+    for (let i = 0; i < 6; i++) {
+      const t = 0.15 + i * 0.14;
+      const x = (1 - t) * (1 - t) * 70 + 2 * (1 - t) * t * 60 + t * t * 130;
+      const y = (1 - t) * (1 - t) * 460 + 2 * (1 - t) * t * 300 + t * t * 170;
+      path(ctx, [x - 10, y, x + 10, y - 4], 3, mix(C.navy, C.blue, 0.4));
+    }
+    for (const [a, c] of /** @type {[number, string][]} */ ([
+      [-2.7, mix(C.navy, '#2e7d32', 0.3)],
+      [-2.1, C.navy],
+      [-1.4, mix(C.navy, '#2e7d32', 0.3)],
+      [-0.7, C.navy],
+      [-0.1, mix(C.navy, '#2e7d32', 0.3)],
+    ])) {
       at(ctx, 130, 170, a, () => {
         ctx.beginPath();
         ctx.moveTo(0, 0);
         ctx.quadraticCurveTo(70, -40, 140, 20);
         ctx.quadraticCurveTo(70, 0, 0, 0);
-        ctx.fillStyle = C.navy;
+        ctx.fillStyle = c;
         ctx.fill();
       });
     }
-    // Cocktail.
-    poly(ctx, [450, 200, 570, 200, 510, 290], mix(C.sky, '#ffffff', 0.3));
-    poly(ctx, [466, 214, 554, 214, 510, 280], C.pink);
-    box(ctx, 505, 285, 10, 70, 4, C.paper);
-    box(ctx, 470, 350, 80, 12, 6, C.paper);
-    path(ctx, [530, 214, 580, 140], 7, C.lime);
-    circle(ctx, 462, 202, 20, C.lime);
+    circle(ctx, 122, 184, 11, mix(C.sun, '#8a5536', 0.6));
+    circle(ctx, 140, 186, 10, mix(C.sun, '#8a5536', 0.7));
+    // The buffet, under its cloche until the end of negotiations.
+    floorShadow(ctx, 470, 456, 150, 8, 0.25);
+    box(ctx, 350, 420, 10, 36, 3, C.navy);
+    box(ctx, 580, 420, 10, 36, 3, C.navy);
+    box(ctx, 330, 392, 280, 34, 6, C.paper);
+    for (let i = 0; i < 7; i++) {
+      ctx.beginPath();
+      ctx.arc(350 + i * 40, 426, 20, 0, Math.PI);
+      ctx.fillStyle = i % 2 ? C.pink : C.paper;
+      ctx.fill();
+    }
+    box(ctx, 330, 392, 280, 8, 4, alpha(C.navy, 0.12));
+    oval(ctx, 392, 392, 50, 8, mix(C.paper, C.sky, 0.4));
+    ctx.beginPath();
+    ctx.arc(392, 390, 40, Math.PI, 0);
+    ctx.fillStyle = grad(ctx, 352, 0, 432, 0, ['#ffffff', mix(C.paper, C.sky, 0.55)]);
+    ctx.fill();
+    circle(ctx, 392, 346, 7, C.navy);
+    arc(ctx, 392, 390, 30, 5, alpha('#ffffff', 0.9), Math.PI * 1.15, Math.PI * 1.4);
+    oval(ctx, 480, 390, 46, 8, '#ffffff');
+    for (const [x, y, c] of /** @type {[number, number, string][]} */ ([
+      [462, 380, C.pink],
+      [480, 376, C.lime],
+      [498, 380, C.sun],
+      [470, 370, C.sun],
+      [490, 368, C.pink],
+    ]))
+      circle(ctx, x, y, 9, c);
+    // Cocktail with its umbrella.
+    poly(ctx, [520, 300, 600, 300, 560, 352], mix(C.sky, '#ffffff', 0.4));
+    poly(ctx, [530, 310, 590, 310, 560, 346], C.pink);
+    box(ctx, 557, 350, 6, 38, 3, C.paper);
+    oval(ctx, 560, 390, 22, 5, C.paper);
+    path(ctx, [578, 310, 588, 268], 4, C.navy);
+    ctx.beginPath();
+    ctx.arc(588, 268, 28, Math.PI * 1.05, Math.PI * 1.95);
+    ctx.closePath();
+    ctx.fillStyle = C.lime;
+    ctx.fill();
+    circle(ctx, 532, 302, 12, C.lime);
   },
 };
 
@@ -1968,56 +2722,96 @@ const artExpenses = {
 function drawLcp7(ctx) {
   const W = 1024;
   const H = 768;
-  const sky = ctx.createLinearGradient(0, 0, 0, 520);
-  sky.addColorStop(0, C.sky);
-  sky.addColorStop(1, mix(C.sun, C.paper, 0.4));
-  ctx.fillStyle = sky;
+  const horizon = 520;
+  ctx.fillStyle = grad(ctx, 0, 0, 0, horizon, [
+    C.sky,
+    mix(C.sky, C.paper, 0.4),
+    mix(C.sun, C.paper, 0.35),
+  ]);
   ctx.fillRect(0, 0, W, H);
-  circle(ctx, 500, 470, 100, mix(C.sun, '#ffffff', 0.25));
+  glow(ctx, 500, 470, 230, C.sun, 0.55);
+  circle(ctx, 500, 470, 100, mix(C.sun, '#ffffff', 0.3));
   circle(ctx, 500, 470, 72, C.sun);
-  // Clouds.
+  // Clouds, shaded underneath.
   for (const [x, y, s] of [
-    [620, 110, 1],
+    [640, 110, 1],
     [930, 200, 0.7],
   ]) {
-    box(ctx, x - 90 * s, y, 180 * s, 44 * s, 22 * s, '#ffffff');
+    box(ctx, x - 90 * s, y + 6 * s, 180 * s, 44 * s, 22 * s, mix('#ffffff', C.sky, 0.3));
+    box(ctx, x - 90 * s, y, 180 * s, 40 * s, 20 * s, '#ffffff');
     circle(ctx, x - 20 * s, y, 40 * s, '#ffffff');
     circle(ctx, x + 30 * s, y + 6 * s, 30 * s, '#ffffff');
   }
-  const horizon = 520;
+  // Birds over the Erdre.
+  for (const [x, y, s] of [
+    [570, 236, 1],
+    [606, 258, 0.75],
+    [542, 266, 0.6],
+  ]) {
+    ctx.beginPath();
+    ctx.moveTo(x - 16 * s, y);
+    ctx.quadraticCurveTo(x - 7 * s, y - 11 * s, x, y);
+    ctx.quadraticCurveTo(x + 7 * s, y - 11 * s, x + 16 * s, y);
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = C.navy;
+    ctx.stroke();
+  }
   // Far trees.
   const tree = mix(C.lime, '#2e7d32', 0.55);
   const tree2 = mix(C.lime, '#2e7d32', 0.3);
   for (let i = 0; i < 20; i++) circle(ctx, i * 56, horizon - 6 - (i % 3) * 10, 46, tree);
-  // Building: LCP7.
-  box(ctx, 620, 380, 370, 140, 8, '#ffffff');
-  box(ctx, 680, 316, 240, 70, 8, mix('#ffffff', C.sky, 0.15));
-  for (let r = 0; r < 2; r++) {
-    for (let c = 0; c < 8; c++)
-      box(ctx, 636 + c * 44, 398 + r * 56, 34, 38, 4, mix(C.sky, C.blue, 0.25));
-  }
-  for (let c = 0; c < 5; c++) box(ctx, 696 + c * 44, 330, 38, 40, 4, mix(C.sky, C.blue, 0.4));
-  box(ctx, 900, 244, 76, 76, 14, C.lime);
-  text(ctx, '7', 938, 306, 66, C.navy, { align: 'center' });
-  path(ctx, [938, 320, 938, 380], 8, C.navy);
+  // Building: LCP7, glass and white bands.
+  const glass = grad(ctx, 0, 280, 0, 520, [mix(C.sky, '#ffffff', 0.2), mix(C.sky, C.blue, 0.45)]);
+  box(ctx, 630, 354, 370, 170, 8, SHADE);
+  box(ctx, 620, 344, 370, 176, 8, '#ffffff');
+  box(ctx, 690, 290, 240, 60, 8, SHADE);
+  box(ctx, 680, 280, 240, 64, 8, mix('#ffffff', C.sky, 0.12));
+  box(ctx, 612, 338, 386, 12, 4, mix(C.navy, C.blue, 0.4));
+  box(ctx, 672, 272, 256, 10, 4, mix(C.navy, C.blue, 0.4));
+  /** @param {number} x @param {number} y @param {number} w @param {number} h */
+  const pane = (x, y, w, h) => {
+    box(ctx, x, y, w, h, 4, glass);
+    poly(
+      ctx,
+      [x + 4, y + h - 6, x + w * 0.55, y + 4, x + w * 0.8, y + 4, x + 4, y + h * 0.95],
+      alpha('#ffffff', 0.35),
+    );
+  };
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 8; c++) pane(636 + c * 44, 362 + r * 50, 34, 38);
+  for (let c = 0; c < 5; c++) pane(696 + c * 44, 292, 38, 42);
+  // The "7" on the roof.
+  path(ctx, [950, 272, 950, 226], 8, C.navy);
+  box(ctx, 918, 158, 76, 76, 14, SHADE);
+  box(ctx, 912, 150, 76, 76, 14, C.lime);
+  box(ctx, 918, 156, 64, 10, 5, mix(C.lime, '#ffffff', 0.45));
+  text(ctx, '7', 950, 212, 66, C.navy, { align: 'center' });
   for (let i = 0; i < 10; i++) circle(ctx, 30 + i * 52, horizon - (i % 2) * 18, 38, tree2);
   for (let i = 0; i < 9; i++) circle(ctx, 600 + i * 52, horizon + 4 - (i % 2) * 14, 30, tree2);
-  // The Erdre.
-  const water = ctx.createLinearGradient(0, horizon, 0, H);
-  water.addColorStop(0, mix(C.blue, C.sky, 0.35));
-  water.addColorStop(1, C.blue);
-  ctx.fillStyle = water;
+  // The Erdre, with reflections.
+  ctx.fillStyle = grad(ctx, 0, horizon, 0, H, [mix(C.blue, C.sky, 0.4), C.blue]);
   ctx.fillRect(0, horizon, W, H - horizon);
+  ctx.save();
+  ctx.globalAlpha = 0.12;
+  for (let c = 0; c < 8; c++) box(ctx, 636 + c * 44, horizon + 14, 34, 70, 2, C.navy);
+  ctx.restore();
   for (let i = 0; i < 6; i++) {
     box(ctx, 500 - (90 - i * 12), horizon + 16 + i * 26, (90 - i * 12) * 2, 8, 4, C.sun);
   }
   for (let i = 0; i < 8; i++) {
     box(ctx, 660 + (i % 3) * 110, horizon + 20 + i * 18, 60, 5, 3, mix('#ffffff', C.sky, 0.3));
   }
-  // Sailboat.
+  // Sailboat and its wake.
+  path(ctx, [110, 652, 150, 652], 4, alpha('#ffffff', 0.6));
+  path(ctx, [290, 652, 340, 652], 4, alpha('#ffffff', 0.6));
+  oval(ctx, 220, 656, 70, 8, alpha(C.navy, 0.25));
   poly(ctx, [160, 620, 280, 620, 260, 648, 180, 648], C.paper);
-  poly(ctx, [220, 612, 220, 520, 280, 612], C.pink);
-  poly(ctx, [212, 612, 212, 540, 170, 612], '#ffffff');
+  box(ctx, 166, 626, 108, 6, 3, C.pink);
+  path(ctx, [216, 620, 216, 516], 4, C.navy);
+  poly(ctx, [220, 612, 220, 520, 284, 612], C.pink);
+  poly(ctx, [220, 612, 220, 520, 240, 612], mix(C.pink, '#ffffff', 0.25));
+  poly(ctx, [212, 612, 212, 540, 166, 612], '#ffffff');
+  poly(ctx, [220, 516, 244, 524, 220, 532], C.lime);
 
   /** @type {Spec} */
   const s = {
