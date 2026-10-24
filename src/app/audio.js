@@ -807,6 +807,233 @@ function loadVolume(bus) {
   return Number.isFinite(n) ? clamp01(n) : VOL_DEFAULT[bus];
 }
 
+const AMB_FADE = 1;
+const AMBIENCE_NAMES = ['office', 'datacenter', 'parking', 'rooftop', 'copil'];
+// Per-bed output trim (dB), tuned so each bed sits around -40 dBFS RMS at default volumes.
+const AMB_TRIM_DB = { office: -12, datacenter: -26, parking: -19, rooftop: -22, copil: -16 };
+
+/**
+ * Builds one ambient bed into `dest`. Random events use their own timeouts, all cleared by `stop`.
+ * @param {AudioContext} ctx @param {AudioBuffer} buf @param {AudioNode} dest @param {string} name
+ */
+function buildBed(ctx, buf, dest, name) {
+  /** @type {AudioNode[]} */
+  const nodes = [];
+  /** @type {AudioScheduledSourceNode[]} */
+  const sources = [];
+  /** @type {ReturnType<typeof setTimeout>[]} */
+  const timers = [];
+  let alive = true;
+  /** @param {AudioNode} n */
+  const keep = (n) => {
+    nodes.push(n);
+    return n;
+  };
+  /** @param {number} v */
+  const gain = (v) => {
+    const g = ctx.createGain();
+    g.gain.value = v;
+    return /** @type {GainNode} */ (keep(g));
+  };
+  /** @param {BiquadFilterType} type @param {number} f @param {number} [q] */
+  const filt = (type, f, q = 0.7) => {
+    const b = ctx.createBiquadFilter();
+    b.type = type;
+    b.frequency.value = f;
+    b.Q.value = q;
+    return /** @type {BiquadFilterNode} */ (keep(b));
+  };
+  /** @param {OscillatorType} type @param {number} f */
+  const osc = (type, f) => {
+    const o = ctx.createOscillator();
+    o.type = type;
+    o.frequency.value = f;
+    o.start();
+    sources.push(o);
+    return o;
+  };
+  /** Looping noise from a random offset, optionally through a chain, then a gain into `to`. */
+  const noise = (/** @type {AudioNode[]} */ chain, /** @type {number} */ g, to = out) => {
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    src.start(0, Math.random() * buf.duration);
+    sources.push(src);
+    let n = /** @type {AudioNode} */ (src);
+    for (const c of chain) n = n.connect(c);
+    n.connect(gain(g)).connect(to);
+  };
+  /** Slow sine LFO modulating `param` by +-depth. */
+  const lfo = (
+    /** @type {AudioParam} */ param,
+    /** @type {number} */ hz,
+    /** @type {number} */ depth,
+  ) => {
+    const l = osc('sine', hz);
+    const d = gain(depth);
+    l.connect(d).connect(param);
+  };
+  /** @param {number} minMs @param {number} maxMs @param {() => void} fn */
+  const every = (minMs, maxMs, fn) => {
+    const tick = () => {
+      if (!alive) return;
+      try {
+        fn();
+      } catch {
+        /* a failed event must never stop the bed */
+      }
+      timers.push(setTimeout(tick, minMs + Math.random() * (maxMs - minMs)));
+      if (timers.length > 8) timers.shift();
+    };
+    timers.push(setTimeout(tick, minMs * Math.random() + 300));
+  };
+  /** One-shot enveloped voice that disconnects itself when done. */
+  const blip = (
+    /** @type {OscillatorType} */ type,
+    /** @type {number} */ f,
+    /** @type {number} */ peak,
+    /** @type {number} */ dur,
+    /** @type {AudioNode} */ to = out,
+    /** @type {number} */ delay = 0,
+  ) => {
+    const t = ctx.currentTime + delay;
+    const o = ctx.createOscillator();
+    o.type = type;
+    o.frequency.value = f;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(peak, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(to);
+    o.start(t);
+    o.stop(t + dur + 0.05);
+    o.onended = () => {
+      o.disconnect();
+      g.disconnect();
+    };
+  };
+  /** Short filtered noise tick (keyboard click). */
+  const tick = (/** @type {number} */ f, /** @type {number} */ peak, /** @type {number} */ dur) => {
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = f;
+    bp.Q.value = 1.2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(peak, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(bp).connect(g).connect(out);
+    src.start(t, Math.random() * 0.9);
+    src.stop(t + dur + 0.02);
+    src.onended = () => {
+      src.disconnect();
+      bp.disconnect();
+      g.disconnect();
+    };
+  };
+  const out = gain(dbToGain(AMB_TRIM_DB[/** @type {keyof typeof AMB_TRIM_DB} */ (name)] ?? 0));
+  out.connect(dest);
+
+  if (name === 'office') {
+    noise([filt('lowpass', 500, 0.5), filt('lowpass', 900, 0.4)], 0.5);
+    noise([filt('bandpass', 3200, 0.8)], 0.012);
+    every(250, 1400, () => {
+      const burst = 1 + Math.floor(Math.random() * 4);
+      for (let i = 0; i < burst; i++) {
+        setTimeout(
+          () => {
+            if (alive) tick(1800 + Math.random() * 2200, 0.05 + Math.random() * 0.05, 0.03);
+          },
+          i * (70 + Math.random() * 90),
+        );
+      }
+    });
+    every(14000, 30000, () => {
+      const lp = filt('lowpass', 1800, 0.5);
+      lp.connect(out);
+      for (let k = 0; k < 4; k++) {
+        blip('sine', 1330, 0.012, 0.09, lp, k * 0.12);
+        blip('sine', 1000, 0.012, 0.09, lp, k * 0.12 + 0.06);
+      }
+    });
+  } else if (name === 'datacenter') {
+    const hum = gain(0.6);
+    hum.connect(out);
+    [50, 100.4, 150.7].forEach((f, i) => {
+      const o = osc('sine', f);
+      const g = gain([0.5, 0.3, 0.12][i]);
+      o.connect(g).connect(hum);
+      lfo(g.gain, 0.11 + i * 0.07, [0.15, 0.1, 0.05][i]);
+    });
+    const beat = osc('sine', 50.7);
+    beat.connect(gain(0.25)).connect(hum);
+    noise([filt('bandpass', 1400, 0.5), filt('lowpass', 3500, 0.5)], 0.35);
+  } else if (name === 'parking') {
+    noise([filt('lowpass', 120, 0.7), filt('lowpass', 160, 0.5)], 2.2);
+    noise([filt('bandpass', 400, 0.6)], 0.1);
+    const delay = /** @type {DelayNode} */ (keep(ctx.createDelay(1)));
+    delay.delayTime.value = 0.23;
+    const fb = gain(0.5);
+    const damp = filt('lowpass', 2200, 0.5);
+    delay.connect(damp).connect(fb).connect(delay);
+    damp.connect(out);
+    every(3500, 9000, () => {
+      const f = 900 + Math.random() * 500;
+      blip('sine', f, 0.12, 0.07, delay);
+      blip('sine', f * 1.5, 0.05, 0.04, delay);
+      blip('sine', f, 0.05, 0.07, out);
+    });
+  } else if (name === 'rooftop') {
+    const bp = filt('bandpass', 500, 0.9);
+    noise([bp], 1.4);
+    lfo(bp.frequency, 0.13, 260);
+    const bp2 = filt('bandpass', 900, 1.2);
+    noise([bp2], 0.5);
+    lfo(bp2.frequency, 0.07, 350);
+    const am = gain(1);
+    lfo(am.gain, 0.09, 0.25);
+    noise([filt('lowpass', 350, 0.6), filt('lowpass', 500, 0.5)], 0.7, am);
+    am.connect(out);
+  } else if (name === 'copil') {
+    noise([filt('lowpass', 450, 0.5), filt('lowpass', 800, 0.4)], 0.45);
+    [
+      [380, 0.31],
+      [620, 0.23],
+      [900, 0.41],
+    ].forEach(([f, hz], i) => {
+      const am = gain(0.5);
+      lfo(am.gain, hz, 0.45);
+      lfo(am.gain, hz * 2.7, 0.15);
+      noise([filt('bandpass', f, 2.5 + i)], 1.2, am);
+      am.connect(out);
+    });
+  }
+
+  return {
+    name,
+    out,
+    stop() {
+      alive = false;
+      for (const t of timers) clearTimeout(t);
+      timers.length = 0;
+    },
+    dispose() {
+      alive = false;
+      for (const t of timers) clearTimeout(t);
+      for (const s of sources) {
+        try {
+          s.stop();
+        } catch {
+          /* already stopped */
+        }
+      }
+      for (const n of nodes) n.disconnect();
+    },
+  };
+}
+
 export class Audio {
   constructor() {
     /** @type {AudioContext | null} */
@@ -823,6 +1050,12 @@ export class Audio {
     this.run = null;
     /** @type {TrackName | null} */
     this.wanted = null;
+    /** @type {GainNode | null} */
+    this.ambBus = null;
+    /** @type {ReturnType<typeof buildBed> | null} */
+    this.bed = null;
+    /** @type {'office' | 'datacenter' | 'parking' | 'rooftop' | 'copil' | null} */
+    this.ambWanted = null;
     this._muted = load(MUTE_KEY) === '1';
     this._vol = { music: loadVolume('music'), sfx: loadVolume('sfx') };
     this._intensity = 0;
@@ -848,6 +1081,7 @@ export class Audio {
     const ctx = this.ctx;
     if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
     if (this.wanted && !this.run) this.music(this.wanted);
+    if (this.ambWanted && !this.bed) this.ambience(this.ambWanted);
   }
 
   /** @param {AudioContext} ctx */
@@ -873,10 +1107,12 @@ export class Audio {
     const music = ctx.createGain();
     music.gain.value = BUS_GAIN.music * this._vol.music;
     music.connect(master);
+    const amb = ctx.createGain();
+    amb.connect(sfx);
     const buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const data = buf.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-    Object.assign(this, { ctx, buf, master, sfxBus: sfx, musicBus: music });
+    Object.assign(this, { ctx, buf, master, sfxBus: sfx, musicBus: music, ambBus: amb });
   }
 
   /** @param {boolean} m */
@@ -1004,6 +1240,42 @@ export class Audio {
       }
     }, TICK_MS);
     this.run = run;
+  }
+
+  /**
+   * Quiet synthesised ambient bed under music and SFX (routed through the sfx bus).
+   * @param {'office' | 'datacenter' | 'parking' | 'rooftop' | 'copil' | null} name
+   */
+  ambience(name) {
+    if (name !== null && !AMBIENCE_NAMES.includes(name)) return;
+    this.ambWanted = name;
+    const ctx = this.ctx;
+    if (!ctx || !this.ambBus || !this.buf) return;
+    if (this.bed && this.bed.name === name) return;
+    if (!this.bed && !name) return;
+    const now = ctx.currentTime;
+    const old = this.bed;
+    this.bed = null;
+    if (old) {
+      old.stop();
+      const g = old.out.gain;
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(g.value, now);
+      g.linearRampToValueAtTime(0, now + AMB_FADE);
+      setTimeout(() => old.dispose(), (AMB_FADE + 0.3) * 1000);
+    }
+    if (!name) return;
+    const fade = ctx.createGain();
+    fade.gain.setValueAtTime(0, now);
+    fade.gain.linearRampToValueAtTime(1, now + AMB_FADE);
+    fade.connect(this.ambBus);
+    const bed = buildBed(ctx, this.buf, fade, name);
+    const dispose = bed.dispose;
+    bed.dispose = () => {
+      dispose();
+      fade.disconnect();
+    };
+    this.bed = bed;
   }
 
   /** @param {Run} run @param {number} now */

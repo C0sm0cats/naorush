@@ -173,6 +173,8 @@ async function beginStage(i, before = []) {
   void banner.offsetWidth;
   banner.classList.add('show');
   audio.music(level.music);
+  // A quiet bed of room sound under the music: office hum, servers, wind…
+  audio.ambience(level.id === 'copil' ? 'copil' : level.theme);
   setIntensity(0.2);
   // While the intro plays, the camera glides from the exit back to the start.
   flyover = { t: 0, from: Math.max(sim.hero.x, sim.w - 12) };
@@ -273,6 +275,7 @@ const startFrom = (i) => {
 };
 const toMenu = () => {
   view.party = 0;
+  audio.ambience(null);
   challenge = null;
   updateContinue();
   audio.music('title');

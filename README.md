@@ -76,7 +76,7 @@ Badge aux bornes Chronotime : en cas de pépin, tu repars de là. Les ramettes d
 - **Rendu** : moteur WebGL2 écrit pour le jeu (ombres du soleil, lumières ponctuelles, occlusion ambiante, tonemapping ACES).
 - **Géométrie** : décors en voxels (maillage glouton), personnages et accessoires en géométrie lisse procédurale.
 - **Images** : les affiches, les tableaux blancs des boss et les plaques sont dessinés en code (Canvas 2D).
-- **Son** : musique (un thème par étape et par boss, avec des couches qui montent pendant l’action) et bruitages synthétisés en direct avec WebAudio. Aucun fichier son.
+- **Son** : musique (un thème par étape et par boss, avec des couches qui montent pendant l’action), ambiances de fond (serveurs, vent, parking…) et bruitages, tout synthétisé en direct avec WebAudio. Aucun fichier son.
 - **Simulation** : déterministe à 60 Hz. Un solveur rejoue chaque étape avec les deux héros dans les tests, et chaque niveau est prouvé finissable.
 
 ### Prérequis
