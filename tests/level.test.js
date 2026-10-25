@@ -5,6 +5,35 @@ import { HERO, TILE, createSim, step, tileAt } from '../src/game/sim.js';
 import { solve } from '../src/game/solver.js';
 
 const HEROES = /** @type {const} */ (['kevin', 'charline']);
+
+/**
+ * Is the tile around a secret closed off by walls and archive boxes, so that only
+ * knocking boxes down opens it? (A flood fill through everything that is not
+ * structure or a box: it must stay inside the map and meet at least one box.)
+ * @param {import('../src/game/sim.js').Sim} sim @param {{x: number, y: number}} spot
+ */
+function sealedByBoxes(sim, spot) {
+  const seen = new Set();
+  const todo = [[Math.floor(spot.x), Math.floor(spot.y)]];
+  let boxes = 0;
+  while (todo.length) {
+    const [c, r] = /** @type {[number, number]} */ (todo.pop());
+    if (c < 0 || c >= sim.w || r < 0 || r >= sim.h) return false;
+    const k = c + r * sim.w;
+    if (seen.has(k)) continue;
+    const t = tileAt(sim, c, r);
+    if (t === TILE.CRATE) {
+      boxes++;
+      continue;
+    }
+    if (t === TILE.SOLID) continue;
+    seen.add(k);
+    // A pocket the size of a room is no niche.
+    if (seen.size > 60) return false;
+    todo.push([c + 1, r], [c - 1, r], [c, r + 1], [c, r - 1]);
+  }
+  return boxes > 0;
+}
 /** Solver proofs are long searches (boss stages most of all): generous time limits. */
 const SEARCH = 300_000;
 const BOSS_SEARCH = 900_000;
@@ -62,21 +91,24 @@ describe.each(LEVELS)('$name', (level) => {
   });
 
   it(
-    'hides a secret for each hero',
+    'hides a secret for each hero, on their own route',
     () => {
       const sim = createSim(level, 'kevin');
       const spots = sim.things.filter((t) => t.kind === 'secret');
       expect(spots.length).toBe(2);
-      // Each hero can reach at least one of them.
+      // Kévin's sits behind archive boxes that only his CRs knock down; Charline's is
+      // the other one, up a ledge for her double jump.
+      const sealed = spots.filter((spot) => sealedByBoxes(sim, spot));
+      expect(sealed.length).toBe(1);
+      const own = { kevin: sealed[0], charline: spots.find((s) => s !== sealed[0]) };
       for (const hero of HEROES) {
-        const found = spots.some((spot) => {
-          const s = createSim(level, hero);
-          return solve(s, {
-            maxNodes: 40000,
-            allowDamage: true,
-            goal: { x: spot.x, y: spot.y, done: (x) => x.secrets > 0 },
-          }).won;
-        });
+        const spot = own[hero];
+        if (!spot) throw new Error('no secret');
+        const found = solve(createSim(level, hero), {
+          maxNodes: 40000,
+          allowDamage: true,
+          goal: { x: spot.x, y: spot.y, done: (x) => x.secrets > 0 },
+        }).won;
         expect(found, hero).toBe(true);
       }
     },
