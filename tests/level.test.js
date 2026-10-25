@@ -14,7 +14,8 @@ describe.each(LEVELS)('$name', (level) => {
     '%s can finish it',
     (hero) => {
       const result = solve(createSim(level, hero), {
-        maxNodes: 200000,
+        // A boss stage adds the duel (its phases and risers) to the search.
+        maxNodes: level.boss ? 300000 : 200000,
         allowDamage: Boolean(level.boss),
       });
       expect(result.won).toBe(true);
