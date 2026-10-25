@@ -214,7 +214,7 @@ const dialogue = new Dialogue(audio, (who) =>
 );
 const bubbles = new Bubbles();
 // Queued lines (the set-piece teasers) get the same little voice as the others.
-bubbles.onLine = (who) => audio.sfx('bubble', { who });
+bubbles.onLine = (/** @type {string} */ who) => audio.sfx('bubble', { who });
 
 /** @param {Line[]} lines @param {() => void} done */
 function talk(lines, done) {
@@ -565,7 +565,9 @@ function credits() {
       `${count(run.tickets, 'ticket')} Swile · ${count(run.secrets, 'secret')} · ${clock(run.time)} · ${count(run.deaths, 'retour')} au badge`,
     ],
     ['Avec', 'h'],
-    ...CREDITS.flatMap((c) => [[`${c.name} · ${c.role}`], [c.line, 's']]),
+    ...CREDITS.flatMap(
+      (c) => /** @type {Array<[string, string?]>} */ ([[`${c.name} · ${c.role}`], [c.line, 's']]),
+    ),
     ['Fabriqué avec', 'h'],
     ['Un moteur WebGL2 maison · des affiches dessinées en code'],
     ['Une musique et des bruitages synthétisés en direct'],
