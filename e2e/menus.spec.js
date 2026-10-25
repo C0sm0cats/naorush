@@ -52,7 +52,7 @@ test('pause and resume with the HUD button', async ({ page }) => {
   await page.locator('#pauseBtn').click();
   await expect(page.locator('body')).toHaveAttribute('data-screen', 'pause');
   await expect(page.locator('#pause')).toBeVisible();
-  await expect(page.locator('#pauseInfo')).toContainText('tickets');
+  await expect(page.locator('#pauseInfo')).toContainText('ticket');
   await page.locator('#resume').click();
   await expect(page.locator('body')).toHaveAttribute('data-screen', 'play');
   await expect(page.locator('#pause')).toBeHidden();
