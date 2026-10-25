@@ -9,7 +9,14 @@ import { clearFloor, renderBonus, renderCast, renderTrophies } from './app/menus
 import { applyPrefs, prefs, reducedMotion, setupOptions } from './app/options.js';
 import { renderResults } from './app/results.js';
 import { load, store } from './app/storage.js';
-import { DynamicResolution, bossLighting, fightFocus, withLights } from './app/staging.js';
+import {
+  DynamicResolution,
+  PRIMO_PROMPT,
+  bossLighting,
+  fightFocus,
+  primoCue,
+  withLights,
+} from './app/staging.js';
 import { findSpot, heroRegion, title } from './app/title.js';
 import { Trophies } from './app/trophies.js';
 import { LevelView, boardUrl } from './app/scene.js';
@@ -18,7 +25,7 @@ import { CAST } from './data/cast.js';
 import { CAMPAIGN, LEVELS, ROOM_W } from './data/levels/index.js';
 import { POSTER_LIST, renderPoster } from './gfx/posters.js';
 import { Renderer } from './gfx/renderer.js';
-import { PATTERNS } from './game/boss.js';
+import { consultLength } from './game/boss.js';
 import { DT, HERO, TILE, createSim, step, tileAt } from './game/sim.js';
 
 /**
@@ -921,7 +928,11 @@ function frame(now) {
       if (hitstop > 0) {
         hitstop -= dt;
         acc = 0;
-      } else acc += dt * (challenge ? 1 : prefs.speed);
+      } else {
+        // The first PRIMO window of each director plays in slow motion for a beat.
+        acc += dt * (challenge ? 1 : prefs.speed) * primoCue.update(sim, dt);
+        if (primoCue.started) hud.toast(PRIMO_PROMPT, 'consult');
+      }
       while (acc >= DT && !pending && hitstop <= 0 && gameOverTimer <= 0) {
         step(sim, input.state());
         if (sim.doorOpen) view.doorT += DT;
@@ -932,7 +943,7 @@ function frame(now) {
       const chief =
         sim.bossActive && sim.boss ? sim.things.find((t) => t.kind === 'boss') : undefined;
       if (chief?.state === 'consult' && sim.boss) {
-        const length = PATTERNS[sim.boss.id].consult[(chief.phase ?? 1) - 1] ?? 1;
+        const length = consultLength(sim, chief);
         const slot = Math.ceil((length - (chief.t ?? 0)) / 0.25);
         if (slot > 0 && slot <= 4 && slot !== consultTick) {
           consultTick = slot;
@@ -1065,7 +1076,7 @@ function frame(now) {
   // Key, rim and fill lights on the heroes posing behind the title menu.
   const lit = view.showcase
     ? withLights(lighting, title.lights(t, heroId))
-    : bossLighting(level, sim, t, lighting);
+    : bossLighting(level, sim, t, lighting, prefs.flash);
   renderer.render(cam, lit, view.items(sim, t, particles.list), view.sprites, { flash });
   // Messages count down on every screen; first-time tips check this frame's camera.
   hud.tick(dt, cam.viewProj);
