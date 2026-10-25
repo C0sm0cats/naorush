@@ -1,3 +1,4 @@
+import { teleportTarget } from '../game/boss.js';
 import { HERO } from '../game/sim.js';
 
 /**
@@ -9,8 +10,11 @@ import { HERO } from '../game/sim.js';
  * Every phase change flashes, dips and comes back in the colours of the new
  * phase: Julien's failover to the backup site runs on red alarm light,
  * Rodolphe's grand finale is played by night under a follow spot on the hero.
- * Once convinced, warm light floods the stage for the signing. Everything here
- * is a pure function of the simulation and the clock, and allocates nothing
+ * Once convinced, warm light floods the stage for the signing. Every argument
+ * that lands pushes the camera in on him; the first PRIMO window of each
+ * director slows time down for a beat so nobody misses it. In the dark stages a
+ * rim light follows the hero. Everything here is a pure function of the
+ * simulation and the clock (bar the PRIMO cue's timer), and allocates nothing
  * per frame: lights and lighting are shared objects, rewritten in place.
  *
  * @typedef {import('../game/sim.js').Sim} Sim
@@ -116,20 +120,52 @@ const MOOD = { phase: 1, beat: 0.5, done: false };
  * Both: the PRIMO tablet lights up the director's face while he consults it.
  * The returned list is rewritten on the next call.
  * @param {Level} level @param {Sim} sim @param {number} t
+ * @param {boolean} [flashes] The « Flashs » option: hits and phase changes flash white only with it.
  * @returns {PointLight[]}
  */
-export function bossLights(level, sim, t) {
+export function bossLights(level, sim, t, flashes = true) {
   count = 0;
   const b = level.boss && sim.bossActive ? bossOf(sim) : undefined;
-  if (b) stage(level, sim, b, t);
+  if (b) {
+    cueLight(b);
+    stage(level, sim, b, t, flashes);
+  }
+  rim(level, sim);
   return VIEWS[count];
+}
+
+/** Stages lit low enough for the hero to need a rim light. */
+const DARK = new Set(['night', 'dawn', 'event']);
+
+/**
+ * The hero's rim light in the dark stages: a cool light just behind and above
+ * him (on the side he comes from) that outlines his head and shoulders and
+ * lifts him off the background.
+ * @param {Level} level @param {Sim} sim
+ */
+function rim(level, sim) {
+  if (!level.mood || !DARK.has(level.mood)) return;
+  const h = sim.hero;
+  if (h.state === 'dead') return;
+  add(h.x + HERO.w / 2 - h.facing * 0.7, h.y + 2.3, -0.9, 3.2, 0.75, 0.95, 1.45);
+}
+
+/**
+ * The first PRIMO window's cue: a lime ring of light spreading from his feet.
+ * @param {Thing} b
+ */
+function cueLight(b) {
+  const k = primoCue.ring;
+  if (k < 0) return;
+  const f = (1 - k) * 2.2;
+  add(b.x, (b.y0 ?? b.y) + 0.6, 0.9, 2.5 + k * 6, 0.95 * f, 2.1 * f, 0.45 * f);
 }
 
 /**
  * Adds the lights of the duel's current moment (see bossLights()).
- * @param {Level} level @param {Sim} sim @param {Thing} b @param {number} t
+ * @param {Level} level @param {Sim} sim @param {Thing} b @param {number} t @param {boolean} flashes
  */
-function stage(level, sim, b, t) {
+function stage(level, sim, b, t, flashes) {
   const x0 = floorX0(sim, b),
     x1 = floorX1(sim, b);
   const mid = (x0 + x1) / 2;
@@ -161,7 +197,7 @@ function stage(level, sim, b, t) {
   }
 
   // A hit or a phase change: a white flash on the director first.
-  if (mood.beat > 0.3) {
+  if (mood.beat > 0.3 && flashes) {
     const k = mood.beat;
     add(b.x, b.y + 2.2, 1.6, state === 'phase' ? 14 : 6, 3.2 * k, 3 * k, 2.8 * k);
   }
@@ -195,7 +231,7 @@ function stage(level, sim, b, t) {
     if (state === 'teleport') {
       // Failover: a cyan glow gathers where he stands and where he will appear.
       const k = bt < 0.55 ? smoothstep(0, 0.55, bt) : 1 - smoothstep(0.55, 0.9, bt);
-      const to = b.x > mid ? x0 + 4 : x1 - 4;
+      const to = bt < 0.55 ? teleportTarget(sim, b) : b.x;
       add(b.x, b.y + 1.2, 0.8, 4.5, 0.4 * k * 2, 1.4 * k * 2, 1.9 * k * 2);
       if (bt < 0.55) add(to, floor + 1, 0.8, 3.5, 0.3 * k * 2, 1.2 * k * 2, 1.6 * k * 2);
     }
@@ -365,10 +401,12 @@ const HOUSE_DOWN = [0.45, 0.95, 0.95, 1.05, 0.6];
  * colours of the phase; warm light for the signing. Returns `base` itself
  * outside boss fights, otherwise a shared object rewritten on every call.
  * @param {Level} level @param {Sim} sim @param {number} t @param {Lighting} base
+ * @param {boolean} [flashes] The « Flashs » option: without it a phase change only
+ *   blends into its new colours, and a hit does not brighten the stage.
  * @returns {Lighting}
  */
-export function bossLighting(level, sim, t, base) {
-  const extra = bossLights(level, sim, t);
+export function bossLighting(level, sim, t, base, flashes = true) {
+  const extra = bossLights(level, sim, t, flashes);
   const b = level.boss && sim.bossActive ? bossOf(sim) : undefined;
   if (!b || !level.boss) return withLights(base, extra);
   const julien = level.boss.id === 'techServicesDirector';
@@ -386,10 +424,12 @@ export function bossLighting(level, sim, t, base) {
     const from = phaseMood(julien, (b.phase ?? 2) - 1, t, M2);
     const k = phaseBlend(bt);
     for (let i = 0; i < 5; i++) M2[i] = mix(from[i], M1[i], k);
-    const flash = bt < 0.12 ? 1.6 : mix(1.6, 0.55, smoothstep(0.12, 0.45, bt));
-    M2[0] *= bt < 0.45 ? flash : mix(0.55, 1, smoothstep(0.45, 1.6, bt));
+    if (flashes) {
+      const flash = bt < 0.12 ? 1.6 : mix(1.6, 0.55, smoothstep(0.12, 0.45, bt));
+      M2[0] *= bt < 0.45 ? flash : mix(0.55, 1, smoothstep(0.45, 1.6, bt));
+    }
     m = M2;
-  } else if (state === 'hit' && bt < 0.15) {
+  } else if (state === 'hit' && bt < 0.15 && flashes) {
     for (let i = 0; i < 5; i++) M2[i] = M1[i];
     M2[0] *= 1.25;
     m = M2;
@@ -409,8 +449,12 @@ export function bossLighting(level, sim, t, base) {
 }
 const ONE = [1, 1, 1, 1, 1];
 
-/** Reused camera focus (numbers only, so its fields are stored unboxed). @type {{x: number, y: number, facing: number, visH?: number}} */
-const FOCUS = { x: 0.5, y: 0.5, facing: 0.5, visH: 8.5 };
+/**
+ * Reused camera focus (numbers only, so its fields are stored unboxed). `low`
+ * (0 to 1): how far the camera drops for a low angle (the directors' entrances).
+ * @type {{x: number, y: number, facing: number, visH?: number, low: number}}
+ */
+const FOCUS = { x: 0.5, y: 0.5, facing: 0.5, visH: 8.5, low: 0.5 };
 /**
  * @param {number} x @param {number} y @param {number} facing @param {number} visH
  */
@@ -419,6 +463,7 @@ function focus(x, y, facing, visH) {
   FOCUS.y = y;
   FOCUS.facing = facing;
   FOCUS.visH = visH;
+  FOCUS.low = 0;
   return FOCUS;
 }
 
@@ -428,18 +473,33 @@ const MARGIN = 1;
 /**
  * Frames `keep` (always in the shot, MARGIN from the edge) and `other` as well when
  * both fit, pulling back from `baseH` tiles of visible height as far as the screen
- * shape allows.
+ * shape allows: on a narrow screen as far as the level's height and 2 more.
  * @param {number} keep @param {number} other @param {number} y @param {number} baseH
- * @param {number} aspect
+ * @param {number} aspect @param {number} levelH
  */
-function frame(keep, other, y, baseH, aspect) {
-  const maxH = aspect >= 1 ? 10.5 : 12.5;
+function frame(keep, other, y, baseH, aspect, levelH) {
+  const maxH = aspect >= 1 ? 10.5 : Math.max(12.5, levelH + 2);
   const need = Math.abs(other - keep) + 2 * MARGIN;
   const visH = Math.min(maxH, Math.max(baseH, need / aspect));
   const half = (visH * aspect) / 2;
   const x =
     need <= half * 2 ? (keep + other) / 2 : keep + Math.sign(other - keep) * (half - MARGIN);
   return focus(x, y, 0, visH);
+}
+
+/**
+ * Every argument that lands: the camera pushes in for a beat (towards the
+ * director on a wide screen; straight in on a narrow one, where the hero must
+ * stay in the shot), then eases back out.
+ * @param {typeof FOCUS} f @param {Thing} b @param {number} hx @param {boolean} wide
+ */
+function pushIn(f, b, hx, wide) {
+  if (b.state !== 'hit') return f;
+  const bt = b.t ?? 0;
+  const k = bt < 0.1 ? bt / 0.1 : 1 - smoothstep(0.1, 0.6, bt);
+  if (wide) f.x = mix(f.x, (hx + b.x * 2) / 3, 0.6 * k);
+  f.visH = (f.visH ?? 8.2) * (1 - (wide ? 0.22 : 0.12) * k);
+  return f;
 }
 
 /**
@@ -470,7 +530,7 @@ export function fightFocus(sim, lift, aspect) {
     // The signing: the two of them in one shot, until the envelope is in hand.
     if (sim.hasKey || Math.abs(hx - b.x) > 7 || (b.state === 'sign' && bt > 6)) return null;
     const y = floor - 0.7 - lift;
-    return known ? frame(b.x, hx, y, 6.4, a) : focus((hx + b.x) / 2, y, 0, 6.4);
+    return known ? frame(b.x, hx, y, 6.4, a, sim.h) : focus((hx + b.x) / 2, y, 0, 6.4);
   }
   const x0 = floorX0(sim, b),
     x1 = floorX1(sim, b);
@@ -480,30 +540,98 @@ export function fightFocus(sim, lift, aspect) {
   if (b.state === 'idle' || (b.state === 'intro' && bt < 0.7)) {
     // The entrance: close on the director, a little to the hero's side on a wide
     // screen. Rodolphe's shot is wider and lower, down to his name on the stage.
+    // A low angle: the camera looks up at him.
     const side = wide ? Math.sign(hx - b.x) * 0.5 : 0;
-    if (sim.boss?.id === 'regionalDirector') return focus(b.x + side, floor - 1.4 - lift, 0, 6.4);
-    return focus(b.x + side, b.y - 1 - lift, 0, 5.2);
+    const f =
+      sim.boss?.id === 'regionalDirector'
+        ? focus(b.x + side, floor - 1.4 - lift, 0, 6.4)
+        : focus(b.x + side, b.y - 1 - lift, 0, 5.2);
+    f.low = 1;
+    return f;
   }
   if (b.state === 'intro') {
     // The reveal: the whole arena, or the director and as much of the way to the hero as fits.
     if (arenaH <= 10.5) return focus(mid, floor + 0.4 - lift, 0, Math.max(9.2, arenaH));
-    return known ? frame(b.x, hx, floor - lift, baseH, a) : focus(b.x, floor - lift, 0, baseH);
+    return known
+      ? frame(b.x, hx, floor - lift, baseH, a, sim.h)
+      : focus(b.x, floor - lift, 0, baseH);
   }
   if (b.state === 'phase' && bt < 1.3 && Math.abs(hx - b.x) < 6) {
     // A new phase: lean in on him, with the hero still in the shot.
     if (wide) return focus((hx + b.x * 2) / 3, floor - 0.5 - lift, 0, 6.6);
-    if (known) return frame(hx, b.x, floor - 0.5 - lift, 6.6, a);
+    if (known) return frame(hx, b.x, floor - 0.5 - lift, 6.6, a, sim.h);
   }
   if (arenaH <= 10.5) {
     // The duel on a wide screen: the whole arena, rising a little with the hero.
     const y = floor + Math.max(0, hy - floor) * 0.5;
-    return focus(mid, y - lift, 0, arenaH);
+    return pushIn(focus(mid, y - lift, 0, arenaH), b, hx, true);
   }
   // Narrower screens: the hero always in the shot, the director too when he fits.
-  if (known) return frame(hx, b.x, hy - lift, baseH, a);
+  if (known) return pushIn(frame(hx, b.x, hy - lift, baseH, a, sim.h), b, hx, false);
   // Screen shape unknown: the follow camera's own framing, on the hero.
   return focus(hx, hy - lift, Math.sign(b.x - hx) * 0.4, 8.2);
 }
+
+/** How long the first PRIMO window of a director plays in slow motion (real seconds), and how slow. */
+export const PRIMO_SLOW = 0.8;
+const PRIMO_SCALE = 0.35;
+/** What the HUD says as it starts. */
+export const PRIMO_PROMPT = 'X / CR : maintenant !';
+
+/**
+ * The first time each director consults PRIMO, time slows down for 0.8 s, a
+ * lime ring spreads from his feet and the HUD says what to do. Shown once per
+ * director (pass the ones already seen to skip them).
+ */
+export class PrimoCue {
+  /** @param {Iterable<string>} [seen] Directors whose first consult was already cued. */
+  constructor(seen = []) {
+    this.seen = new Set(seen);
+    /** Real seconds into the cue, -1 when none plays. */
+    this.t = -1;
+    /** True on the frame a cue starts: show {@link PRIMO_PROMPT} then. */
+    this.started = false;
+  }
+
+  /**
+   * Call once per frame during play, before stepping the simulation.
+   * @param {Sim} sim @param {number} dt Real seconds since the last frame.
+   * @returns {number} Time scale for this frame (1 outside the cue).
+   */
+  update(sim, dt) {
+    this.started = false;
+    const b = sim.bossActive && !sim.bossDone ? bossOf(sim) : undefined;
+    const id = sim.boss?.id;
+    if (this.t < 0) {
+      if (b?.state === 'consult' && id && !this.seen.has(id)) {
+        this.seen.add(id);
+        this.t = 0;
+        this.started = true;
+      }
+    } else if ((this.t += dt) >= PRIMO_SLOW || b?.state !== 'consult') this.t = -1;
+    return this.scale;
+  }
+
+  /** Time scale now: slow, easing back to full speed over the last quarter second. */
+  get scale() {
+    if (this.t < 0) return 1;
+    return mix(PRIMO_SCALE, 1, smoothstep(PRIMO_SLOW - 0.25, PRIMO_SLOW, this.t));
+  }
+
+  /** Progress of the ring (0 to 1), -1 when no cue plays. */
+  get ring() {
+    return this.t < 0 ? -1 : this.t / PRIMO_SLOW;
+  }
+
+  /** Forgets the directors seen (a new game). */
+  reset() {
+    this.seen.clear();
+    this.t = -1;
+  }
+}
+
+/** The game's PRIMO cue (read by the drawing for its ring). */
+export const primoCue = new PrimoCue();
 
 /** Drops the render scale when frames run long, raises it back when there is headroom. */
 export class DynamicResolution {
