@@ -168,12 +168,14 @@ describe('chapters', () => {
 
 /**
  * The medal yardstick follows the solver: the same search as the « can finish it »
- * proofs in tests/level.test.js. When a stage or the physics change, the route
- * changes, and this fails with the new table to paste into src/app/medals.js.
+ * proofs in tests/level.test.js. A reference may be a little lenient (up to 1.3× the
+ * route) but never stricter than the route (0.98×, for rounding): when a stage or the
+ * physics move it out of that window, this fails with the new table to paste into
+ * src/app/medals.js.
  */
 describe('reference times', () => {
-  /** Drift allowed before the table must be refreshed. */
-  const TOLERANCE = 0.1;
+  /** How far a reference may sit from the solver's route: [stricter, more lenient]. */
+  const WINDOW = [0.98, 1.3];
   /** @type {Record<string, Record<string, number>>} */
   const now = {};
   let drifted = false;
@@ -188,8 +190,9 @@ describe('reference times', () => {
     it.each(HEROES)(
       '%s: the solver’s route takes the reference time',
       (hero) => {
+        // The same search as the level proofs (a boss stage adds the duel to it).
         const result = solve(createSim(level, hero), {
-          maxNodes: 200000,
+          maxNodes: level.boss ? 300000 : 200000,
           allowDamage: Boolean(level.boss),
         });
         expect(result.won).toBe(true);
@@ -198,7 +201,7 @@ describe('reference times', () => {
         expect(sim.won).toBe(true);
         (now[level.id] ??= {})[hero] = Math.round(sim.time * 10) / 10;
         const ref = REFERENCE[level.id]?.[hero] ?? 0;
-        const ok = Math.abs(sim.time - ref) <= ref * TOLERANCE;
+        const ok = ref >= sim.time * WINDOW[0] && ref <= sim.time * WINDOW[1];
         if (!ok) drifted = true;
         const why = `${level.id}/${hero} took ${sim.time.toFixed(1)} s, reference ${ref} s: refresh REFERENCE in src/app/medals.js`;
         expect(ok, why).toBe(true);

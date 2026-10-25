@@ -30,8 +30,8 @@ import { load, store } from './storage.js';
 export const REFERENCE = {
   parking: { kevin: 14.2, charline: 12.4 },
   lcp7: { kevin: 20.4, charline: 15.9 },
-  ts: { kevin: 47.8, charline: 46.6 },
-  copil: { kevin: 19.2, charline: 19.2 },
+  ts: { kevin: 49.5, charline: 47.6 },
+  copil: { kevin: 29.6, charline: 25.2 },
   rooftop: { kevin: 60.1, charline: 53.2 },
   intercontrat: { kevin: 21, charline: 20 },
   pause: { kevin: 28.2, charline: 24.2 },
