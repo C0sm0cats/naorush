@@ -1,13 +1,20 @@
 import { Audio, eventSfx, screenPan } from './app/audio.js';
 import { Camera } from './app/camera.js';
-import { applyTwist, dailyChallenge } from './app/daily.js';
+import { applyTwist, dailyFor, dailyKicker, dailyMet, shareCard } from './app/daily.js';
 import { Bubbles, Dialogue } from './app/dialogue.js';
 import { Particles, landPower } from './app/fx.js';
 import { Hud } from './app/hud.js';
 import { Input } from './app/input.js';
-import { clearFloor, renderBonus, renderCast, renderTrophies } from './app/menus.js';
+import { Medals, applySansFilet, medalFor, medalTargets, modeOf } from './app/medals.js';
+import {
+  chapterRows,
+  clearFloor,
+  renderCast,
+  renderChapters,
+  renderTrophies,
+} from './app/menus.js';
 import { applyPrefs, prefs, reducedMotion, setupOptions } from './app/options.js';
-import { renderResults } from './app/results.js';
+import { BEST_KEY, renderResults, secretsFound } from './app/results.js';
 import { load, store } from './app/storage.js';
 import {
   DynamicResolution,
@@ -34,7 +41,7 @@ import { DT, HERO, TILE, createSim, step, tileAt } from './game/sim.js';
  * play ⇄ pause / options / reading / dialogue / game over → stage won → … → credits.
  * The level keeps rendering behind every screen.
  *
- * @typedef {'loading'|'title'|'play'|'pause'|'options'|'reading'|'talk'|'won'|'gameover'|'credits'|'trophies'|'cast'|'posters'} Screen
+ * @typedef {'loading'|'title'|'play'|'pause'|'options'|'reading'|'talk'|'won'|'gameover'|'credits'|'trophies'|'cast'|'posters'|'chapters'} Screen
  * @typedef {import('./data/levels/index.js').Line} Line
  */
 
@@ -65,6 +72,16 @@ const trophies = new Trophies((t) => {
   audio.sfx('trophy');
 });
 const SAVE_KEY = 'naorush.stage';
+/** Best medal and star per stage and hero (« Sans filet » apart). */
+const medals = new Medals();
+/**
+ * How the current run started: the story (Jouer, Continuer), a stage picked in
+ * « Chapitres », or one picked there in « Sans filet ». Next and Replay keep it.
+ * @type {'story'|'chapter'|'sansFilet'}
+ */
+let runMode = 'story';
+/** Relaxed mode or a slower speed at any point of the run: a bronze at most. */
+let helped = false;
 
 applyPrefs();
 
@@ -115,6 +132,7 @@ const OVERLAYS = /** @type {const} */ ([
   'trophies',
   'cast',
   'posters',
+  'chapters',
 ]);
 /** Where focus lands when a screen opens, so keyboards, pads and screen readers start there. */
 const FIRST_FOCUS = /** @type {Partial<Record<Screen, string>>} */ ({
@@ -172,8 +190,10 @@ async function loadStage(i) {
     await view.ready;
   }
   sim = createSim(level, heroId);
-  sim.assist = prefs.assist && !challenge;
+  sim.assist = prefs.assist && !challenge && runMode !== 'sansFilet';
   if (challenge) applyTwist(sim, challenge);
+  else if (runMode === 'sansFilet') applySansFilet(sim);
+  helped = false;
   particles.clear();
   view.doorT = 0;
   camera.snap(sim.hero.x, sim.hero.y + 3);
@@ -191,7 +211,9 @@ async function loadStage(i) {
 /** Stage title card, dialogue, then play. @param {number} i @param {Line[]} [before] */
 async function beginStage(i, before = []) {
   await loadStage(i);
-  $('stageNum').textContent = i < CAMPAIGN ? `Étape ${i + 1} sur ${CAMPAIGN}` : 'Étape bonus';
+  $('stageNum').textContent =
+    (i < CAMPAIGN ? `Étape ${i + 1} sur ${CAMPAIGN}` : 'Étape bonus') +
+    (sim.hardcore && !challenge ? ' · Sans filet' : '');
   $('stageName').textContent = level.name;
   $('stageSub').textContent = level.subtitle;
   const banner = $('stage');
@@ -289,10 +311,8 @@ function updateContinue() {
   const d = today();
   $('dailyBtn').textContent =
     `Défi du jour : ${LEVELS[d.stage].name} · ${CAST[d.hero].name} · ${d.twist.label}`;
-  // Bonus stages, unlocked once the envelope is signed.
-  const bonusRow = $('bonusRow');
-  bonusRow.hidden = !trophies.data.got.nao;
-  renderBonus(bonusRow, LEVELS.slice(CAMPAIGN), (k) => startFrom(CAMPAIGN + k));
+  // Chapters: every stage cleared so far, and the bonus stages once the envelope is signed.
+  $('chaptersBtn').hidden = !chapters('normal').some((c) => c.open);
 
   const got = trophies.list().filter((t) => t.got).length;
   $('trophiesBtn').textContent = `Trophées ${got}/${trophies.list().length}`;
@@ -303,11 +323,11 @@ function updateContinue() {
 
 /** Today's challenge while it is being played. @type {import('./app/daily.js').Challenge | null} */
 let challenge = null;
-// Boss stages stay out of the daily draw: no spoiling Julien or Rodolphe on a fresh save.
-const DAILY_STAGES = LEVELS.slice(0, CAMPAIGN).flatMap((l, i) => (l.boss ? [] : [i]));
-const today = () => dailyChallenge(DAILY_STAGES);
+// Stages without a boss, bonus ones included: no spoiling Julien or Rodolphe on a fresh save.
+const today = () => dailyFor(LEVELS);
 $('dailyBtn').onclick = () =>
   leaveTitle(() => {
+    runMode = 'story';
     challenge = today();
     updateContinue();
     heroId = challenge.hero;
@@ -327,6 +347,7 @@ const toMenu = () => {
   view.party = 0;
   audio.ambience(null);
   challenge = null;
+  runMode = 'story';
   updateContinue();
   audio.music('title');
   setIntensity(0);
@@ -335,8 +356,16 @@ const toMenu = () => {
     show('title');
   });
 };
-$('play').onclick = () => startFrom(0);
-$('continue').onclick = () => startFrom(saved());
+/** Jouer: a new story run from the parking. */
+const newGame = () => {
+  runMode = 'story';
+  startFrom(0);
+};
+$('play').onclick = newGame;
+$('continue').onclick = () => {
+  runMode = 'story';
+  startFrom(saved());
+};
 $('next').onclick = () => startFrom(stage + 1);
 // Replaying keeps the daily challenge going.
 $('again').onclick =
@@ -379,7 +408,11 @@ muteBtn.onclick = () => {
   if (screen === 'play') muteBtn.blur();
 };
 syncMute();
-const refreshOptions = setupOptions(audio, input, () => (sim.assist = prefs.assist && !challenge));
+const refreshOptions = setupOptions(
+  audio,
+  input,
+  () => (sim.assist = prefs.assist && !challenge && !sim.hardcore),
+);
 function openOptions() {
   optionsFrom = screen;
   refreshOptions();
@@ -392,6 +425,46 @@ $('trophiesBtn').onclick = () => {
   show('trophies');
 };
 $('trophiesClose').onclick = () => {
+  audio.sfx('back');
+  show('title');
+};
+
+// « Chapitres »: replay a cleared stage with either hero, in « Sans filet » after the credits.
+/** Mode last picked on the screen. @type {import('./app/medals.js').Mode} */
+let chapterMode = 'normal';
+/** @param {import('./app/medals.js').Mode} mode */
+const chapters = (mode) =>
+  chapterRows({
+    levels: LEVELS,
+    campaign: CAMPAIGN,
+    progress: Number(load(SAVE_KEY, 0)) || 0,
+    finished: Boolean(trophies.data.got.nao),
+    bests: load(BEST_KEY, {}),
+    medals,
+    secretsOf: secretsFound,
+    mode,
+  });
+/** @param {number} i @param {'kevin'|'charline'} hero @param {import('./app/medals.js').Mode} mode */
+const playChapter = (i, hero, mode) => {
+  runMode = mode === 'sansFilet' ? 'sansFilet' : 'chapter';
+  heroId = hero;
+  markHero();
+  startFrom(i);
+};
+$('chaptersBtn').onclick = () => {
+  renderChapters({ modes: $('chapterModes'), list: $('chapterList') }, chapters, {
+    mode: chapterMode,
+    sansFilet: Boolean(trophies.data.got.nao),
+    play: playChapter,
+    onMode: (m) => (chapterMode = m),
+  });
+  audio.sfx('select');
+  show('chapters');
+  /** @type {HTMLElement | null} */ ($('chapterList').querySelector('button'))?.focus({
+    preventScroll: true,
+  });
+};
+$('chaptersClose').onclick = () => {
   audio.sfx('back');
   show('title');
 };
@@ -520,6 +593,11 @@ const STAGE_END = [
   },
 ];
 
+/** Game speed: the daily challenge and « Sans filet » always run at full speed. */
+const speed = () => (challenge || sim.hardcore ? 1 : prefs.speed);
+/** The medal of the last stage won (for the shared score). @type {import('./app/medals.js').Medal | null} */
+let lastMedal = null;
+
 /** @param {number} s */
 const clock = (s) => `${Math.floor(s / 60)} min ${String(Math.floor(s % 60)).padStart(2, '0')} s`;
 
@@ -531,18 +609,35 @@ function stageWon() {
       deaths: sim.deaths,
       secrets: sim.secrets,
     };
-  const last = stage === CAMPAIGN - 1 && !challenge;
+  const final = stage === CAMPAIGN - 1 && !challenge;
+  const finished = Boolean(trophies.data.got.nao);
+  // The credits roll at the end of the story, and the first time a chapter run gets there.
+  const last = final && (runMode === 'story' || !finished);
   const bonus = stage >= CAMPAIGN || Boolean(challenge);
-  if (!bonus) store(SAVE_KEY, last ? 0 : stage + 1);
-  trophies.stageWon(sim, level.id, last);
-  if (challenge) trophies.dailyDone(challenge.key);
+  // The story saves the next stage; a chapter run never sets it back (nor touches a
+  // finished game); « Sans filet » leaves it alone.
+  if (!bonus && (runMode === 'story' || (runMode === 'chapter' && !finished)))
+    store(
+      SAVE_KEY,
+      last
+        ? 0
+        : runMode === 'story'
+          ? stage + 1
+          : Math.max(Number(load(SAVE_KEY, 0)) || 0, stage + 1),
+    );
+  // Gold and silver against the solver's time, a star without a return to the badge.
+  // The daily's medal goes on its card and share, not into the stage's collection.
+  const medal = medalFor(level.id, heroId, sim.time, sim.deaths, helped);
+  if (!challenge) medals.record(level.id, heroId, medal, modeOf(sim));
+  lastMedal = medal;
+  trophies.stageWon(sim, level.id, last, medals);
+  if (challenge && dailyMet(challenge, sim)) trophies.dailyDone(challenge.key);
   if (last) return talk(EPILOGUE, credits);
-  $('next').hidden = bonus;
+  $('next').hidden = bonus || final;
   $('wonKicker').textContent = challenge
-    ? `Défi du jour · ${challenge.twist.label}`
-    : bonus
-      ? 'Étape bonus terminée'
-      : `Étape ${stage + 1} sur ${CAMPAIGN} terminée`;
+    ? dailyKicker(challenge, sim)
+    : (sim.hardcore ? 'Sans filet · ' : '') +
+      (bonus ? 'Étape bonus terminée' : `Étape ${stage + 1} sur ${CAMPAIGN} terminée`);
   $('wonTitle').textContent = STAGE_END[stage].title;
   $('wonText').textContent = STAGE_END[stage].text;
   // Medal, gap to the record, secrets per hero (the card saves the record itself).
@@ -551,7 +646,8 @@ function stageWon() {
     levelId: level.id,
     hero: heroId,
     daily: challenge?.key,
-    // medal: challenge ? null : medalFor(level.id, heroId, sim.time, sim.deaths),
+    medal,
+    targets: medalTargets(level.id, heroId) ?? undefined,
   });
   $('share').textContent = 'Partager mon score';
   setIntensity(0.2);
@@ -615,15 +711,19 @@ async function share(text, button) {
 }
 $('share').onclick = () => {
   const hero = CAST[heroId].name;
-  // A little emoji card, like the word games: hearts kept, secrets, badges used.
-  const hearts =
-    '❤️'.repeat(Math.max(0, sim.hero.hearts)) +
-    '🖤'.repeat(Math.max(0, sim.maxHearts - sim.hero.hearts));
-  const card = `${hearts}  ${'⭐'.repeat(sim.secrets)}${'▫️'.repeat(sim.secretTotal - sim.secrets)}  ⏱️ ${clock(sim.time)}`;
+  // A little emoji card, like the word games: medal, hearts kept, secrets, time.
+  const card = shareCard({
+    medal: lastMedal?.tier,
+    hearts: sim.hero.hearts,
+    maxHearts: sim.maxHearts,
+    secrets: sim.secrets,
+    secretTotal: sim.secretTotal,
+    time: sim.time,
+  });
   share(
     (challenge
       ? `NAO Rush · Défi du ${challenge.key.split('-').reverse().join('/')} (${challenge.twist.label})\n`
-      : `NAO Rush · ${level.name}\n`) +
+      : `NAO Rush · ${level.name}${sim.hardcore ? ' · Sans filet' : ''}\n`) +
       `${card}\n${hero}, ${count(sim.tickets, 'ticket')} Swile, ${count(sim.deaths, 'retour')} au badge.`,
     $('share'),
   );
@@ -835,6 +935,7 @@ const titleScene = () =>
   (titleWarmup > 0 ||
     screen === 'title' ||
     screen === 'trophies' ||
+    screen === 'chapters' ||
     (screen === 'options' && optionsFrom === 'title'));
 /**
  * Leaving the title: the menu steps aside for a moment, then the stage starts.
@@ -885,7 +986,7 @@ function menuInput() {
   if (!overlay) return false;
   if (input.pressed('pause') || input.pressed('back')) {
     if (screen === 'options') closeOptions();
-    else if (screen === 'trophies' || screen === 'cast') show('title');
+    else if (screen === 'trophies' || screen === 'cast' || screen === 'chapters') show('title');
     else if (screen === 'posters') show('cast');
     else if (screen === 'credits' || screen === 'gameover' || screen === 'won') toMenu();
     else return false;
@@ -931,9 +1032,10 @@ function frame(now) {
         acc = 0;
       } else {
         // The first PRIMO window of each director plays in slow motion for a beat.
-        acc += dt * (challenge ? 1 : prefs.speed) * primoCue.update(sim, dt);
+        acc += dt * speed() * primoCue.update(sim, dt);
         if (primoCue.started) hud.toast(PRIMO_PROMPT, 'consult');
       }
+      if (sim.assist || speed() < 1) helped = true;
       while (acc >= DT && !pending && hitstop <= 0 && gameOverTimer <= 0) {
         step(sim, input.state());
         if (sim.doorOpen) view.doorT += DT;
@@ -955,7 +1057,7 @@ function frame(now) {
         // After a couple of game overs, point gently at the relaxed mode.
         gameOvers++;
         $('gameoverText').textContent =
-          gameOvers >= 2 && !prefs.assist && !challenge
+          gameOvers >= 2 && !prefs.assist && !challenge && !sim.hardcore
             ? 'Pas de panique : dans Options, le mode détente retire la perte de cœurs. Ta progression jusqu’au dernier badge est gardée.'
             : 'Un café, une respiration, et on y retourne : ta progression jusqu’au dernier badge est gardée.';
         setIntensity(0.2);
@@ -1006,7 +1108,7 @@ function frame(now) {
       show('play');
     } else if (screen !== 'talk' && menuInput()) {
       /* handled */
-    } else if (screen === 'title' && input.pressed('confirm')) startFrom(0);
+    } else if (screen === 'title' && input.pressed('confirm')) newGame();
     else if (screen === 'talk') {
       dialogue.update(dt);
       if (input.pressed('confirm') || input.pressed('jump') || input.pressed('fire'))

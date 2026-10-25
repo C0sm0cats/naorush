@@ -108,8 +108,8 @@
         <button class="ghost" id="continue" hidden>Continuer</button>
         <button class="ghost daily" id="dailyBtn">Défi du jour</button>
         <div class="btn-row">
+          <button class="ghost" id="chaptersBtn" hidden>Chapitres</button>
           <button class="ghost" id="optionsBtn">Options</button>
-          <div class="btn-row bonus-row" id="bonusRow" hidden></div>
           <button class="ghost" id="trophiesBtn">Trophées</button>
           <button class="ghost" id="castBtn">Distribution</button>
         </div>
@@ -271,6 +271,22 @@
         <h2 id="trophiesTitle">Trophées</h2>
         <ul class="trophy-list" id="trophyList"></ul>
         <button class="go" id="trophiesClose">Fermer</button>
+      </div>
+    </section>
+
+    <section
+      class="screen"
+      id="chapters"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="chaptersTitle"
+      hidden
+    >
+      <div class="card">
+        <h2 id="chaptersTitle">Chapitres</h2>
+        <div id="chapterModes"></div>
+        <ol class="chapter-list" id="chapterList"></ol>
+        <button class="go" id="chaptersClose">Fermer</button>
       </div>
     </section>
 

@@ -1014,6 +1014,7 @@ body:not([data-screen='play']) .bossbar {
 /* Close buttons stay in reach on short landscape screens. */
 #optionsClose,
 #trophiesClose,
+#chaptersClose,
 #castClose,
 .credits-actions {
   position: sticky;
@@ -1041,7 +1042,8 @@ body:not([data-screen='play']) .bossbar {
    (the scroll box gets .more-below from options.js). */
 #optionsClose::before,
 #castClose::before,
-#trophiesClose::before {
+#trophiesClose::before,
+#chaptersClose::before {
   content: '▼ encore en dessous';
   position: absolute;
   left: -2px;
@@ -1060,7 +1062,8 @@ body:not([data-screen='play']) .bossbar {
 }
 .more-below #optionsClose::before,
 .more-below #castClose::before,
-.trophy-list.more-below + #trophiesClose::before {
+.trophy-list.more-below + #trophiesClose::before,
+.chapter-list.more-below + #chaptersClose::before {
   opacity: 1;
 }
 .options h2 {
@@ -1308,6 +1311,218 @@ body:not([data-screen='play']) .bossbar {
 .trophy-list span {
   font-size: 12.5px;
   line-height: 1.35;
+}
+
+/* « Chapitres » joins the title's menu row once a stage is cleared: four buttons when the
+   menu is wide enough for their labels, two by two otherwise. */
+.title-panel {
+  container-type: inline-size;
+}
+.title .btn-row:has(> #chaptersBtn:not([hidden])) {
+  grid-template-columns: repeat(4, auto);
+  gap: 6px;
+}
+.title .btn-row:has(> #chaptersBtn:not([hidden])) .ghost {
+  padding-left: 4px;
+  padding-right: 4px;
+}
+@container (max-width: 419px) {
+  .title .btn-row:has(> #chaptersBtn:not([hidden])) {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+}
+/* Chapters: replay a cleared stage, one play button per hero with its medal. */
+#chapters .card {
+  width: min(660px, 100%);
+}
+.chapter-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.chapter-modes [aria-checked='true'] {
+  background: var(--ink-2);
+  color: var(--lime);
+  box-shadow:
+    inset 0 0 0 1.5px var(--ink-2),
+    0 3px 0 #141a2c40;
+}
+.chapter-modes [data-mode='sansFilet'][aria-checked='true'] {
+  color: var(--pink);
+}
+.chapter-hint {
+  margin: 0 2px 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.chapter-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 2px 4px 4px 2px;
+  list-style: none;
+  max-height: max(40vh, calc(100dvh - 270px));
+  overflow: auto;
+}
+/* Short landscape screens: a tighter header so a row of chapters stays in view. */
+@media (max-height: 500px) {
+  #chapters h2 {
+    margin: 0 0 6px;
+    font-size: 22px;
+  }
+  .chapter-modes {
+    margin-bottom: 6px;
+  }
+  .chapter-modes .ghost {
+    padding: 6px;
+  }
+  .chapter-hint {
+    margin-bottom: 6px;
+    font-size: 12px;
+    line-height: 1.3;
+  }
+  .chapter-list {
+    max-height: calc(100dvh - 190px);
+    margin-bottom: 10px;
+  }
+}
+.chapter {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-content: start;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 14px;
+  background: #141a2c0a;
+  box-shadow: inset 0 0 0 1.5px #141a2c12;
+}
+.chapter-list[data-mode='sansFilet'] .chapter:not(.locked) {
+  background: linear-gradient(135deg, #ff4f9a17, #ff4f9a08);
+  box-shadow: inset 0 0 0 1.5px #ff4f9a40;
+}
+.chapter-name {
+  grid-column: 1 / -1;
+  margin: 0 2px;
+  color: var(--ink);
+  font-size: 14.5px;
+  font-weight: 900;
+}
+.chapter-name small {
+  margin-right: 6px;
+  color: var(--soft);
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+.chapter-hero {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-height: 44px;
+  padding: 7px 9px 7px 12px;
+  border: 0;
+  border-radius: 11px;
+  background: #fff;
+  box-shadow:
+    inset 3px 0 0 var(--blue),
+    inset 0 0 0 1.5px #141a2c1f,
+    0 2px 0 #141a2c14;
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.12s,
+    filter 0.12s;
+}
+.chapter-hero.charline {
+  box-shadow:
+    inset 3px 0 0 var(--pink),
+    inset 0 0 0 1.5px #141a2c1f,
+    0 2px 0 #141a2c14;
+}
+.chapter-hero:hover {
+  filter: brightness(1.03);
+  transform: translateY(-1px);
+}
+.chapter-hero:active {
+  transform: translateY(2px);
+}
+.chapter-hero:focus-visible,
+.padnav .chapter-hero:focus {
+  outline: 3px solid var(--pink);
+  outline-offset: 2px;
+}
+.chapter-who {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+}
+/* A disc in the medal's colour, with its initial: Or, Argent, Bronze. */
+.medal-chip {
+  display: inline-grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #fffc, transparent 45%), var(--medal);
+  box-shadow:
+    inset 0 0 0 1.5px #0000002e,
+    0 1px 0 #00000026;
+  color: #0000008c;
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 900;
+}
+.medal-chip.gold {
+  --medal: #f2b51e;
+}
+.medal-chip.gold::after {
+  content: 'O';
+}
+.medal-chip.silver {
+  --medal: #b9c3d1;
+}
+.medal-chip.silver::after {
+  content: 'A';
+}
+.medal-chip.bronze {
+  --medal: #c9783d;
+}
+.medal-chip.bronze::after {
+  content: 'B';
+}
+.chapter-hero .medal-star {
+  color: #c98a00;
+  font-size: 15px;
+  font-style: normal;
+  line-height: 1;
+}
+.chapter-best {
+  color: #2c3550;
+  font-size: 13px;
+  font-weight: 700;
+}
+.chapter-next {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.chapter.locked .chapter-name {
+  color: var(--muted);
+}
+.chapter-lock {
+  grid-column: 1 / -1;
+  margin: 0 2px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
 }
 
 /* Cast: bios on the left, the whole cast in 3D on the right. */
@@ -1830,6 +2045,23 @@ body.contrast .trophy-list li {
   background: #fff;
   color: #000;
   box-shadow: inset 0 0 0 2px #000;
+}
+body.contrast .chapter,
+body.contrast .chapter-hero,
+body.contrast .chapter-list[data-mode='sansFilet'] .chapter:not(.locked) {
+  background: #fff;
+  color: #000;
+  box-shadow: inset 0 0 0 2px #000;
+}
+body.contrast .chapter-hint,
+body.contrast .chapter-best,
+body.contrast .chapter-next,
+body.contrast .chapter-lock {
+  color: #000;
+}
+body.contrast .medal-chip {
+  box-shadow: 0 0 0 2px #000;
+  color: #000;
 }
 body.contrast .go {
   background: var(--lime);

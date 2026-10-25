@@ -119,14 +119,16 @@ function nextTarget(r) {
  * Fills the results card and saves the record and the secrets.
  * @param {HTMLElement} stats The card's <dl>; the medal line is kept just above it.
  * @param {{sim: {time: number, deaths: number, tickets: number, secrets: number, secretTotal: number,
- *   things: Array<{kind: string, alive: boolean, x: number}>}, levelId: string, hero: HeroId,
- *   daily?: string, medal?: unknown, targets?: {gold?: number, silver?: number}}} ctx
- *   `medal`: what medals.js hands back for this run (none for the daily challenge).
+ *   hardcore?: boolean, things: Array<{kind: string, alive: boolean, x: number}>}, levelId: string,
+ *   hero: HeroId, daily?: string, medal?: unknown, targets?: {gold?: number, silver?: number}}} ctx
+ *   `medal`: what medals.js hands back for this run. « Sans filet » (`sim.hardcore`) keeps its own records.
  */
 export function renderResults(stats, ctx) {
   const { sim, levelId, hero } = ctx;
   const bests = /** @type {Record<string, number>} */ (load(BEST_KEY, {}));
-  const key = ctx.daily ? `daily:${ctx.daily}` : `${levelId}:${hero}`;
+  const key = ctx.daily
+    ? `daily:${ctx.daily}`
+    : `${levelId}:${hero}${sim.hardcore ? ':sansfilet' : ''}`;
   const best = typeof bests[key] === 'number' ? bests[key] : undefined;
   // The secrets of this run go into the hero's notebook before counting.
   const columns = sim.things

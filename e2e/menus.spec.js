@@ -247,3 +247,56 @@ test('landscape phones keep every close button on screen', async ({ page }) => {
   await expect(page.locator('#posterImg')).toHaveAttribute('src', /^data:image/);
   for (const id of ['#posterPrev', '#postersClose', '#posterNext']) await inView(id);
 });
+
+test('Chapitres lists the cleared stages and plays one in « Sans filet » after the credits', async ({
+  page,
+}) => {
+  // A finished game: the envelope is signed, Kévin has a gold on the parking.
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('seeded')) return;
+    sessionStorage.setItem('seeded', '1');
+    localStorage.setItem('naorush.stage', '0');
+    localStorage.setItem('naorush.best', JSON.stringify({ 'parking:kevin': 21.3 }));
+    localStorage.setItem(
+      'naorush.medals',
+      JSON.stringify({ 'parking:kevin': { tier: 'gold', star: true } }),
+    );
+    localStorage.setItem('naorush.trophies', JSON.stringify({ got: { nao: true } }));
+  });
+  await toTitle(page);
+  await page.locator('#chaptersBtn').click();
+  await expect(page.locator('body')).toHaveAttribute('data-screen', 'chapters');
+  await expect(page.locator('#chapterList > li')).toHaveCount(8);
+  await expect(page.locator('#chapterList .chapter-hero')).toHaveCount(16);
+  await expect(page.locator('#chapterList .chapter-hero.kevin').first()).toHaveAttribute(
+    'aria-label',
+    /Médaille : Or, sans retour au badge/,
+  );
+  await page.locator('#chapterModes [data-mode="sansFilet"]').click();
+  await expect(page.locator('#chapterModes [data-mode="sansFilet"]')).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await page.locator('#chapterList .chapter-hero.charline').first().click();
+  await expect(page.locator('body')).toHaveAttribute('data-screen', 'talk', { timeout: 120000 });
+  await expect(page.locator('#stageNum')).toHaveText('Étape 1 sur 5 · Sans filet');
+  await expect(page.locator('.hero-card[data-hero="charline"]')).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+});
+
+test('Chapitres stays hidden on a fresh save and opens once a stage is cleared', async ({
+  page,
+}) => {
+  await toTitle(page);
+  await expect(page.locator('#chaptersBtn')).toBeHidden();
+  await page.evaluate(() => localStorage.setItem('naorush.stage', '2'));
+  await page.reload();
+  await expect(page.locator('body')).toHaveAttribute('data-screen', 'title', { timeout: 120000 });
+  await page.locator('#chaptersBtn').click();
+  await expect(page.locator('#chapterList > li:not(.locked)')).toHaveCount(2);
+  await expect(page.locator('#chapterModes')).toContainText('après le générique');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('body')).toHaveAttribute('data-screen', 'title');
+});

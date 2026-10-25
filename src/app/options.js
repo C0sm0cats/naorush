@@ -76,7 +76,7 @@ const ACTION_LABELS = {
  * @param {() => void} changed Called after any preference changes.
  */
 export function setupOptions(audio, input, changed) {
-  for (const sel of ['#options .options', '#trophyList', '#cast .card'])
+  for (const sel of ['#options .options', '#trophyList', '#chapterList', '#cast .card'])
     scrollCue(document.querySelector(sel));
   const padSelect = /** @type {HTMLSelectElement} */ ($('optPad'));
   const SWITCHES = /** @type {const} */ ([
