@@ -695,6 +695,46 @@ function ream() {
 }
 
 /**
+ * The pile of files a stunned intern drops: a one-tile step, exactly 1 wide and 1
+ * high (origin at the bottom centre) and as deep as a floor tile (1.9). Folders and
+ * reams stacked a little askew, but every layer stays inside the tile and the top
+ * is flat, so it reads as something to stand on, not an archive box to knock out.
+ */
+function filePile() {
+  const b = new MeshBuilder();
+  const folders = ['#f2c14e', PINK, '#4fb3ff', LIME, '#f2c14e'];
+  const turn = [0.02, -0.025, 0.015, -0.02, 0.01];
+  const shift = [0.0, 0.015, -0.012, 0.01, 0.0];
+  for (let i = 0; i < 5; i++) {
+    const y0 = i * 0.2;
+    const ream = i % 2 === 1;
+    posed(b, rotY(turn[i]), [shift[i], y0, 0], () => {
+      if (ream) {
+        // A ream of paper, sheet edges showing on the front.
+        rb(b, [0, 0.1, 0], [0.45, 0.098, 0.9], 0.02, PAPER, MATTE, 3);
+        for (let k = 0; k < 6; k++)
+          flatBox(b, [0, 0.03 + k * 0.028, 0.902], [0.43, 0.002, 0.002], '#d8d8d0');
+        rb(b, [0, 0.1, 0], [0.457, 0.05, 0.905], 0.012, '#3d8bfd', GLOSSY, 2);
+      } else {
+        // A fat folder: coloured covers round a block of white sheets, label on the spine.
+        const c = folders[i];
+        rb(b, [0, 0.012, 0], [0.46, 0.012, 0.9], 0.01, c, GLOSSY, 2);
+        rb(b, [0, 0.188, 0], [0.46, 0.012, 0.9], 0.01, c, GLOSSY, 2);
+        flatBox(b, [-0.01, 0.1, 0], [0.43, 0.078, 0.88], PAPER);
+        rb(b, [0, 0.1, 0.89], [0.46, 0.1, 0.014], 0.012, c, GLOSSY, 2);
+        flatBox(b, [-0.18, 0.1, 0.906], [0.14, 0.045, 0.002], '#ffffff');
+        flatBox(b, [-0.18, 0.11, 0.909], [0.1, 0.008, 0.001], INK);
+      }
+    });
+  }
+  // A loose sheet lies on top, flat.
+  posed(b, rotY(0.12), [0.04, 1.0, 0.25], () =>
+    flatBox(b, [0, -0.003, 0], [0.26, 0.003, 0.34], PAPER),
+  );
+  return b;
+}
+
+/**
  * The way out: a lift doorway facing the camera, set back so characters stand in
  * front of it. Locked (no key item yet): steel doors shut, slate trims and an amber
  * padlock above. Open: doors slid aside on a lit car, lime glow strips, a lit
@@ -907,16 +947,17 @@ function bolts() {
 }
 
 /**
- * 5 x 7 pixel font of the arena signs (rows top to bottom). É keeps its accent
- * in the two top rows over a shorter E.
+ * 5 x 7 pixel font of the arena signs (rows top to bottom). É is a full-height E
+ * with its accent in three extra rows above the line (accent, gap): it never reads
+ * as a lowercase é next to the other capitals.
  * @type {Record<string, string[]>}
  */
-const FONT = {
+export const FONT = {
   A: ['.###.', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
   C: ['.###.', '#...#', '#....', '#....', '#....', '#...#', '.###.'],
   D: ['####.', '#...#', '#...#', '#...#', '#...#', '#...#', '####.'],
   E: ['#####', '#....', '#....', '####.', '#....', '#....', '#####'],
-  É: ['...#.', '..#..', '#####', '#....', '####.', '#....', '#####'],
+  É: ['...#.', '..#..', '.....', '#####', '#....', '#....', '####.', '#....', '#....', '#####'],
   F: ['#####', '#....', '#....', '####.', '#....', '#....', '#....'],
   G: ['.###.', '#...#', '#....', '#.###', '#...#', '#...#', '.###.'],
   H: ['#...#', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
@@ -942,7 +983,8 @@ const FONT = {
 
 /**
  * A line of sign text centred on x = 0, bottom at y = `y`, facing +z: square LEDs,
- * or round bulbs for a show marquee. Emissive white, tinted when drawn.
+ * or round bulbs for a show marquee. Emissive white, tinted when drawn. Capitals
+ * are 7 pixels high; an accent adds 3 above (see {@link SIGN_ROWS}).
  * @param {string} text @param {number} px Pixel pitch. @param {number} y @param {number} z
  * @param {boolean} [bulbs]
  */
@@ -953,10 +995,10 @@ function signText(text, px, y, z, bulbs = false) {
     const glyph = FONT[text[i]];
     if (!glyph) continue;
     const x0 = -width / 2 + i * 6 * px;
-    for (let r = 0; r < 7; r++)
+    for (let r = 0; r < glyph.length; r++)
       for (let c = 0; c < 5; c++) {
         if (glyph[r][c] !== '#') continue;
-        const p = [x0 + (c + 0.5) * px, y + (6.5 - r) * px, z];
+        const p = [x0 + (c + 0.5) * px, y + (glyph.length - 0.5 - r) * px, z];
         if (bulbs)
           b.ellipsoid(p, [px * 0.36, px * 0.36, px * 0.24], WHITE, { mat: EMISSIVE, seg: 3 });
         else flatBox(b, p, [px * 0.4, px * 0.4, 0.006], WHITE, EMISSIVE);
@@ -964,6 +1006,9 @@ function signText(text, px, y, z, bulbs = false) {
   }
   return b;
 }
+
+/** Rows a sign line may light, accents included: 7 for the capitals, 3 above. */
+export const SIGN_ROWS = 10;
 
 /** Julien's supervision display: half width and height (7.6 x 1.8), origin at the bottom centre. */
 const SIGN_HW = 3.8,
@@ -1003,6 +1048,9 @@ function nocLeds() {
 /** Rodolphe's stage apron: 16 tiles wide from x = 0, 0.9 high, top at y = 0. */
 const APRON_W = 16,
   APRON_H = 0.9;
+/** The marquee's bulb pitch and baseline: a full line with accents fits the apron. */
+export const MARQUEE_PX = 0.08,
+  MARQUEE_Y = -APRON_H + 0.05;
 
 /**
  * The LED fascia across the front of Rodolphe's stage: a navy board between two
@@ -1051,10 +1099,10 @@ export const SIGN_TEXT = {
 function bossModels(gl) {
   /** @param {MeshBuilder} b */
   const mesh = (b) => new Mesh(gl, b.build());
-  /** Julien's captions: small LEDs under his name. @param {string} text */
-  const led = (text) => mesh(signText(text, 0.05, 0.25, 0.012));
-  /** Rodolphe's captions: bulbs on the stage apron. @param {string} text */
-  const bulbs = (text) => mesh(signText(text, 0.1, -APRON_H / 2 - 0.35, 0.04, true));
+  /** Julien's captions: small LEDs under his name (accents stop short of it). @param {string} text */
+  const led = (text) => mesh(signText(text, 0.05, 0.22, 0.012));
+  /** Rodolphe's captions: bulbs on the stage apron, accents inside its top edge. @param {string} text */
+  const bulbs = (text) => mesh(signText(text, MARQUEE_PX, MARQUEE_Y, 0.04, true));
   return {
     halo: mesh(halo()),
     shock: mesh(shockRing()),
@@ -1110,6 +1158,7 @@ export function buildThings(gl) {
     concert: mesh(concertTickets()),
     valve: mesh(valve(false)),
     valveOn: mesh(valve(true)),
+    pile: mesh(filePile()),
     boss: bossModels(gl),
   };
 }

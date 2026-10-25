@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HERO, HERO_STATS, TILE, tileAt } from '../src/game/sim.js';
+import { pileColumn } from '../src/game/enemies.js';
 import { IDLE, fill, has, input, room, run, runUntil, sim, throwCr } from './mechanics-kit.js';
 
 /** @typedef {import('./mechanics-kit.js').Sim} Sim */
@@ -340,6 +341,75 @@ describe('walkers on loose floor', () => {
       runUntil(s, IDLE, (x) => x.hero.state !== 'dead', 200);
       expect([walker.alive, walker.y], ch).toEqual([true, 3]);
     }
+  });
+});
+
+describe("a stunned intern's pile of files", () => {
+  /** A stunned intern at column 10 (x = 10.5), floor top at y = 3, facing right. */
+  const setup = (/** @type {import('./mechanics-kit.js').Mark[]} */ marks = [], hero = 3) => {
+    const s = sim(room(20, [['S', hero, 3], ['i', 10, 3], ...marks]));
+    const intern = find(s, 'intern');
+    Object.assign(intern, { vx: 2.2, state: 'stunned', t: 0 });
+    run(s, IDLE, 1);
+    return { s, intern };
+  };
+
+  it('lands beside them as a solid one-tile step, for the length of the break', () => {
+    const { s, intern } = setup();
+    expect(pileColumn(intern)).toBe(11);
+    expect(tileAt(s, 11, 3)).toBe(TILE.SOLID);
+    // Clear of the intern's body: the pile never overlaps them.
+    expect(11 - (intern.x + 0.3)).toBeGreaterThanOrEqual(0);
+    // Standable: dropped on top, the hero stands on it.
+    Object.assign(s.hero, { x: 11.2, y: 4.5, vy: 0, state: 'air' });
+    run(s, IDLE, 40);
+    expect(s.hero.state).toBe('ground');
+    expect(s.hero.y).toBe(4);
+    // Solid from the side: walking into it stops at its face.
+    Object.assign(s.hero, { x: 13, y: 3, vx: 0, vy: 0, state: 'ground' });
+    run(s, input({ left: true }), 40);
+    expect(s.hero.x).toBeGreaterThanOrEqual(12 - 1e-6);
+    // Gathered up when the break is over: the tile is free again.
+    const back = runUntil(s, IDLE, () => intern.state === 'walk', 300);
+    expect(back.ok).toBe(true);
+    expect(has(back.events, 'pileGone')).toBe(true);
+    expect(s.time).toBeGreaterThan(3.9);
+    expect(tileAt(s, 11, 3)).toBe(TILE.EMPTY);
+    expect(pileColumn(intern)).toBe(-1);
+  });
+
+  it('never closes on the hero: it falls behind them, or not at all', () => {
+    const behind = setup([], 11);
+    expect(pileColumn(behind.intern)).toBe(9);
+    expect(tileAt(behind.s, 11, 3)).toBe(TILE.EMPTY);
+    // Boxed in on the other side too (a wall), no pile.
+    const none = setup(
+      [
+        ['#', 8, 3],
+        ['#', 9, 3],
+      ],
+      11,
+    );
+    expect(pileColumn(none.intern)).toBe(-1);
+    expect(tileAt(none.s, 11, 3)).toBe(TILE.EMPTY);
+  });
+
+  it('only lands where one can stand on it, on firm floor', () => {
+    // A low ceiling over both sides: a pile there would block the corridor.
+    const low = setup([...fill('#', 8, 13, 5, 5)]);
+    expect(pileColumn(low.intern)).toBe(-1);
+    // A loose slab under the spot: the pile would hang in the air once it goes.
+    const slab = setup([['-', 11, 2]]);
+    expect(pileColumn(slab.intern)).toBe(9);
+  });
+
+  it('scatters when a hero ends up inside it (a respawn on the spot)', () => {
+    const { s, intern } = setup();
+    Object.assign(s.hero, { x: 11.2, y: 3, vy: 0, state: 'ground' });
+    const events = run(s, IDLE, 1);
+    expect(has(events, 'pileGone')).toBe(true);
+    expect(tileAt(s, 11, 3)).toBe(TILE.EMPTY);
+    expect(pileColumn(intern)).toBe(-1);
   });
 });
 

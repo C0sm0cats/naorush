@@ -1,7 +1,8 @@
 import { CAST } from '../data/cast.js';
 import { FRESH, poseCharacter, poseOptions } from '../gfx/characters.js';
-import { PATTERNS, WARN } from '../game/boss.js';
+import { WARN, consultLength, teleportTarget } from '../game/boss.js';
 import { HERO } from '../game/sim.js';
+import { pileColumn } from '../game/enemies.js';
 import { PERIOD, phaseOf } from '../game/traps.js';
 import { multiply, rotationX, rotationY, rotationZ, scaling, translation } from '../gfx/mat4.js';
 import { blinkAt, idlePose } from './poses.js';
@@ -27,14 +28,11 @@ const E3 = new Float32Array(16);
 const TICKET_GLOW = [1.6, 1.3, 0.5];
 const KEY_SPARK = [1.5, 1.45, 1.1];
 const STREAK_TINT = [0.9, 0.95, 1.1];
-const DRAWER_GLOW = [1.5, 0.75, 0.15];
 const STUN_GLOW = [1.6, 1.4, 0.35];
 const RING_GLOW = [0.75, 1.5, 0.4];
 const VALVE_SPARK = [0.6, 0.9, 1.6];
 const SPRAY_TINT = [0.75, 0.9, 1.25];
 const DRIP_GLOW = [0.5, 0.8, 1];
-const PRINTER_GLOW = [1, 0.25, 0.2];
-const BEAMER_GLOW = [1.4, 1.4, 1.8];
 const SECRET_GLOW = [1.4, 1.2, 0.5];
 const RACK_GLOW = [1, 0.5, 0.15];
 /** @type {Pose} */
@@ -50,14 +48,22 @@ const INTERN_STUNNED = {
 /** @type {Pose} */
 const VISIO_MUTED = { legL: 0, legR: 0, armL: 0.1, armR: 0.1, head: 0.35, mood: 'ouch' };
 /** @type {Pose} */
-const VISIO_RING = { legL: 0, legR: 0, armL: 0.4, armR: 2.6, head: -0.2 };
+const VISIO_RING = {
+  legL: 0,
+  legR: 0,
+  armL: 1.1,
+  armR: 1.3,
+  armSpread: -0.2,
+  head: 0.15,
+  mood: 'happy',
+};
 // Animated poses, rewritten in place every frame (no per-frame objects).
 /** @type {Pose} */
 const CHEER = { legL: 0, legR: 0, armL: 0, armR: 0, bob: 0, mood: 'happy' };
 /** @type {Pose} */
 const MEETING = { legL: 1.4, legR: 1.4, armL: 0, armR: 0, bob: -5, head: 0.25, mood: 'focus' };
 /** @type {Pose} */
-const RUSH = { legL: 0, legR: 0, armL: 0, armR: 2.5, armSpread: -0.3, bob: 0, head: -0.1 };
+const RUSH = { legL: 0, legR: 0, armL: 0, armR: 1.35, armSpread: -0.3, bob: 0, head: 0.2 };
 /** @type {Pose} */
 const INTERN_RUN = { legL: 0, legR: 0, armL: 1.5, armR: 1.5, lean: 0.25, bob: 0 };
 
@@ -127,6 +133,254 @@ function sparkle(view, x, y, z, size, spin, color, thick = 0.16) {
   }
 }
 
+// ---- One warning language ---------------------------------------------------------------
+// Every trap speaks the same way: amber while it arms (at least 0.6 s, the lights
+// filling one by one), red while it can hurt, white while it recovers. With the
+// « Repères renforcés » option on, live hazards also get a hatched outline, and
+// the countdown lights change size with the state, so shape tells it without colour.
+
+/** Amber (arming), red (live) and white (recovering). */
+export const WARN_AMBER = [1.55, 0.62, 0.04];
+export const WARN_RED = [1.45, 0.06, 0.04];
+export const WARN_WHITE = [1.6, 1.6, 1.58];
+const LED_OFF = [0.22, 0.15, 0.07];
+const LED_PLATE = [0.03, 0.03, 0.045];
+
+/**
+ * When each periodic trap arms, strikes, recovers and settles, in seconds of its
+ * cycle (counted past the end of the cycle when it wraps). Arming covers the sim's
+ * own tell and starts earlier where that tell is short (the drawer rattles 0.4 s).
+ * @type {Record<keyof typeof PERIOD, [number, number, number, number]>}
+ */
+export const SIGNALS = {
+  drawer: [1.2, 1.9, 2.78, 3.2],
+  sprinkler: [1.6, 2.2, 3.2, 3.6],
+  printer: [1.9, 2.6, 2.95, 3.4],
+  beamer: [2.6, 3.4, 3.75, 4.2],
+};
+
+/** What a trap is saying right now (one object, rewritten by signalAt()). */
+export const SIGNAL = { state: /** @type {'idle'|'arm'|'live'|'recover'} */ ('idle'), k: 0 };
+
+/**
+ * The warning state of a periodic trap at phase `k` of its cycle, with the progress
+ * through that state (0 to 1).
+ * @param {keyof typeof PERIOD} kind @param {number} k
+ */
+export function signalAt(kind, k) {
+  const sig = SIGNALS[kind];
+  const arm = sig[0],
+    live = sig[1],
+    recover = sig[2],
+    end = sig[3];
+  // Late in the recovery, the phase has wrapped round to the start of the cycle.
+  const u = k < end - PERIOD[kind] ? k + PERIOD[kind] : k;
+  if (u >= arm && u < live) return setSignal('arm', (u - arm) / (live - arm));
+  if (u >= live && u < recover) return setSignal('live', (u - live) / (recover - live));
+  if (u >= recover && u < end) return setSignal('recover', (u - recover) / (end - recover));
+  return setSignal('idle', 0);
+}
+
+/** @param {typeof SIGNAL.state} state @param {number} k */
+function setSignal(state, k) {
+  SIGNAL.state = state;
+  SIGNAL.k = k;
+  return SIGNAL;
+}
+
+/**
+ * Display switches the options set (read defensively: absent means off). `cues` is
+ * « Repères renforcés » (prefs.cues): main.js sets `view.cues` on the LevelView, or
+ * this object; either one turns the hatched outlines on.
+ */
+export const drawPrefs = { cues: false };
+/** Whether hatched outlines are drawn during the current drawThing() call. */
+let cues = false;
+
+/**
+ * Countdown lights on a trap, on a dark plate so they read on any wall from across
+ * the room: three LEDs fill up amber while it arms (the last one blinking), all
+ * three swell red while it is live and shrink to white dots while it recovers.
+ * @param {import('./scene.js').LevelView} view @param {number} x @param {number} y
+ * @param {number} z @param {typeof SIGNAL} sig @param {number} t
+ */
+function countdown(view, x, y, z, sig, t) {
+  lit(view.cube, x, y, z - 0.03, LED_PLATE, scaling(0.8, 0.3, 0.04, E1));
+  for (let i = 0; i < 3; i++) {
+    let tint = LED_OFF,
+      size = 0.17;
+    if (sig.state === 'arm') {
+      const on = sig.k >= i / 3;
+      const blink = sig.k > 2 / 3 && Math.sin(t * 50) < 0;
+      if (on && !(i === 2 && blink)) tint = WARN_AMBER;
+    } else if (sig.state === 'live') {
+      tint = WARN_RED;
+      size = 0.22;
+    } else if (sig.state === 'recover') {
+      const f = 1 - sig.k * 0.7;
+      tint = pool.tint(WARN_WHITE[0] * f, WARN_WHITE[1] * f, WARN_WHITE[2] * f);
+      size = 0.1;
+    }
+    lit(view.cube, x + (i - 1) * 0.24, y, z, tint, scaling(size, size, 0.05, E1));
+  }
+  if (sig.state === 'live') out.push(view.glow(x, y, z - 0.06, 0.2, WARN_RED));
+}
+
+/**
+ * A hatched outline in the screen plane around a live hazard (« Repères renforcés »):
+ * a red frame with white diagonal ticks along its edges.
+ * @param {import('./scene.js').LevelView} view @param {number} x0 @param {number} y0
+ * @param {number} x1 @param {number} y1 @param {number} z @param {number} t
+ */
+function hatchBox(view, x0, y0, x1, y1, z, t) {
+  const w = x1 - x0,
+    h = y1 - y0;
+  const cx = (x0 + x1) / 2,
+    cy = (y0 + y1) / 2;
+  lit(view.cube, cx, y0, z, WARN_RED, scaling(w, 0.04, 0.02, E1));
+  lit(view.cube, cx, y1, z, WARN_RED, scaling(w, 0.04, 0.02, E1));
+  lit(view.cube, x0, cy, z, WARN_RED, scaling(0.04, h, 0.02, E1));
+  lit(view.cube, x1, cy, z, WARN_RED, scaling(0.04, h, 0.02, E1));
+  // The ticks crawl along the frame so a still screenshot and a moving one agree.
+  const roll = (t * 0.6) % 0.25;
+  for (let x = x0 + 0.1 + roll; x < x1 - 0.05; x += 0.25)
+    for (let e = 0; e < 2; e++)
+      lit(
+        view.cube,
+        x,
+        e ? y1 - 0.07 : y0 + 0.07,
+        z,
+        WARN_WHITE,
+        rotationZ(0.8, E1),
+        scaling(0.14, 0.025, 0.02, E2),
+      );
+  for (let y = y0 + 0.1 + roll; y < y1 - 0.05; y += 0.25)
+    for (let e = 0; e < 2; e++)
+      lit(
+        view.cube,
+        e ? x1 - 0.07 : x0 + 0.07,
+        y,
+        z,
+        WARN_WHITE,
+        rotationZ(0.8, E1),
+        scaling(0.14, 0.025, 0.02, E2),
+      );
+}
+
+/**
+ * The same hatched frame lying on the floor, from x0 to x1 and z0 to z1.
+ * @param {import('./scene.js').LevelView} view @param {number} x0 @param {number} x1
+ * @param {number} y @param {number} z0 @param {number} z1 @param {number} t
+ */
+function hatchFloor(view, x0, x1, y, z0, z1, t) {
+  const w = x1 - x0;
+  for (let e = 0; e < 2; e++)
+    lit(view.cube, (x0 + x1) / 2, y, e ? z1 : z0, WARN_RED, scaling(w, 0.012, 0.05, E1));
+  const roll = (t * 0.6) % 0.3;
+  for (let x = x0 + 0.12 + roll; x < x1 - 0.1; x += 0.3)
+    for (let e = 0; e < 2; e++)
+      lit(
+        view.cube,
+        x,
+        y + 0.004,
+        e ? z1 - 0.1 : z0 + 0.1,
+        WARN_WHITE,
+        rotationY(0.8, E1),
+        scaling(0.2, 0.01, 0.035, E2),
+      );
+}
+
+// ---- Incoming projectiles -------------------------------------------------------------
+// A projectile flying in from beyond the screen edge shows a red chevron on that edge
+// for the last 0.6 s before it comes into view. The main loop tells where the camera
+// is (watchCamera()); edgeCue hands the sound side to whoever plays it.
+
+/** The part of the z = 0 plane in view (on: watchCamera() has been called). */
+export const camView = { on: false, x: 0, y: 0, hw: 0, hh: 0 };
+
+/** Half the camera's vertical field of view (camera.js uses 30°). */
+const HALF_FOV = (15 * Math.PI) / 180;
+
+/**
+ * Where the camera looks this frame: its focus and distance, and the screen aspect.
+ * @param {number} x @param {number} y @param {number} dist @param {number} aspect
+ */
+export function watchCamera(x, y, dist, aspect) {
+  camView.on = true;
+  camView.x = x;
+  camView.y = y;
+  camView.hh = dist * Math.tan(HALF_FOV);
+  camView.hw = camView.hh * aspect;
+}
+
+/** How long before it comes into view an incoming projectile is announced (s). */
+export const INCOMING = 0.6;
+
+/** Projectiles that hurt the hero. */
+const PROJECTILES = new Set(['paper', 'invite', 'kpi', 'wave']);
+
+/**
+ * Which screen edge a projectile is about to come in from: -1 left, +1 right, 0 when
+ * it is in view, flying away, or more than {@link INCOMING} seconds out.
+ * @param {Thing} th @param {typeof camView} [cam]
+ */
+export function incomingSide(th, cam = camView) {
+  if (!cam.on || !PROJECTILES.has(th.kind) || !th.vx) return 0;
+  const dx = th.x - cam.x;
+  const gap = Math.abs(dx) - cam.hw;
+  if (gap <= 0 || Math.sign(th.vx) !== -Math.sign(dx)) return 0;
+  return gap < Math.abs(th.vx) * INCOMING ? Math.sign(dx) : 0;
+}
+
+/**
+ * The latest projectile announced at a screen edge, for a panned sound: `fresh` turns
+ * true once per projectile (the reader sets it back to false), `side` is -1 / +1,
+ * `kind` the projectile and `y` its height.
+ */
+export const edgeCue = { fresh: false, side: 0, kind: '', y: 0 };
+/** Projectiles already announced (each one plays its sound once). */
+const announced = new WeakSet();
+
+/**
+ * The chevron on the screen edge for an incoming projectile, pointing the way it flies.
+ * @param {import('./scene.js').LevelView} view @param {Thing} th @param {number} side
+ * @param {number} t
+ */
+function edgeArrow(view, th, side, t) {
+  const cam = camView;
+  const gap = Math.abs(th.x - cam.x) - cam.hw;
+  const near = 1 - Math.min(1, gap / (Math.abs(th.vx) * INCOMING));
+  const x = cam.x + side * (cam.hw - 0.55);
+  const y = Math.max(cam.y - cam.hh + 0.6, Math.min(cam.y + cam.hh - 0.9, th.y));
+  const pulse = 0.75 + 0.25 * Math.sin(t * 24);
+  const size = 0.32 + 0.14 * near;
+  const tint = pool.tint(WARN_RED[0] * pulse, WARN_RED[1] * pulse, WARN_RED[2] * pulse);
+  // '<' on the right edge, '>' on the left: it points where the projectile goes.
+  for (let k = -1; k <= 1; k += 2)
+    bar(view, x + side * size * 0.3, y + k * size * 0.32, 0.3, size, 0.07, k * side * 0.85, tint);
+  out.push(view.glow(x, y, 0.25, 0.18 + 0.08 * near, tint));
+  if (!announced.has(th)) {
+    announced.add(th);
+    edgeCue.fresh = true;
+    edgeCue.side = side;
+    edgeCue.kind = th.kind;
+    edgeCue.y = th.y;
+  }
+}
+
+/**
+ * What a projectile adds to itself: the edge chevron while it is about to come into
+ * view, and its hatched outline (« Repères renforcés »), `r` either side of it and
+ * from `y0` to `y1` around its height.
+ * @param {import('./scene.js').LevelView} view @param {Thing} th @param {number} r
+ * @param {number} y0 @param {number} y1 @param {number} t
+ */
+function projectileCues(view, th, r, y0, y1, t) {
+  const side = incomingSide(th);
+  if (side) edgeArrow(view, th, side, t);
+  else if (cues) hatchBox(view, th.x - r, th.y + y0, th.x + r, th.y + y1, 0.3, t);
+}
+
 /**
  * @param {import('./scene.js').LevelView} view
  * @param {DrawItem[]} items
@@ -140,6 +394,8 @@ export function drawThing(view, items, sim, th, t) {
   out = items;
   // Recycled items during a LevelView frame; new ones otherwise.
   pool = view.pool ?? FRESH;
+  cues =
+    drawPrefs.cues || Boolean(/** @type {{cues?: boolean}} */ (/** @type {unknown} */ (view)).cues);
   const partner = sim.heroId === 'kevin' ? 'charline' : 'kevin';
   switch (th.kind) {
     case 'concert':
@@ -267,8 +523,8 @@ export function drawThing(view, items, sim, th, t) {
         /** @type {Pose} */
         let pose = CHEER;
         if (sim.won) {
-          CHEER.armL = 2.8 + Math.sin(k) * 0.2;
-          CHEER.armR = 2.8 - Math.sin(k) * 0.2;
+          CHEER.armL = CHEER.armR = 2.65 + Math.abs(Math.sin(k)) * 0.2;
+          CHEER.armSpread = -0.4;
           CHEER.bob = Math.abs(Math.sin(k)) * 1.8;
         } else pose = idlePose(t + 1);
         if (!sim.won && sim.hasKey) {
@@ -300,10 +556,15 @@ export function drawThing(view, items, sim, th, t) {
       break;
     }
     case 'lift':
+      if (th.variant === 'riser') {
+        drawRiser(view, th);
+        break;
+      }
       at(view.props.lift, th.x + (th.w ?? 2) / 2, th.y - 0.25, -0.2, scaling(th.w ?? 2, 1, 1, E1));
       break;
     case 'kpi':
       at(view.props.kpi, th.x, th.y, 0.1, rotationZ(th.t * 9, E1));
+      projectileCues(view, th, 0.36, -0.36, 0.36, t);
       break;
     case 'wave':
       at(
@@ -313,6 +574,7 @@ export function drawThing(view, items, sim, th, t) {
         0,
         scaling(Math.sign(th.vx) || 1, 1 + Math.sin(th.t * 30) * 0.15, 1, E1),
       );
+      projectileCues(view, th, 0.45, 0, 0.5, t);
       break;
     case 'boss':
       drawBossShow(view, sim, th, t);
@@ -332,6 +594,9 @@ export function drawThing(view, items, sim, th, t) {
         ),
         rotationX(wob ? -0.12 + Math.sin(t * 60) * 0.04 : 0, E2),
       );
+      if (wob) items.push(view.glow(th.x, th.y + 1.15, 0, 0.1, WARN_AMBER));
+      if (cues && th.state === 'rolling')
+        hatchBox(view, th.x - 0.36, th.y, th.x + 0.36, th.y + 0.75, 0.4, t);
       break;
     }
     case 'drawer': {
@@ -347,8 +612,13 @@ export function drawThing(view, items, sim, th, t) {
         -0.2,
         scaling(dir, 1, 1, E1),
       );
-      if (rattle && Math.floor(t * 10) % 2 === 0)
-        items.push(view.glow(base + dir * 0.06, th.y + 0.98, 0.22, 0.1, DRAWER_GLOW));
+      // Countdown lights on the wall above the slot, readable from across the room.
+      const sig = signalAt('drawer', phaseOf(sim, th, PERIOD.drawer));
+      countdown(view, base + dir * 0.36, th.y + 1.3, -0.05, sig, t);
+      if (cues && sig.state === 'live') {
+        const tip = base + dir * (th.w ?? 0);
+        hatchBox(view, Math.min(base, tip), th.y + 0.5, Math.max(base, tip), th.y + 1.0, 0.35, t);
+      }
       break;
     }
     case 'sprinkler': {
@@ -369,6 +639,13 @@ export function drawThing(view, items, sim, th, t) {
       if (th.state === 'drip') {
         const k = ((t * 1.6) % 1) * (top - (th.y0 ?? 0));
         items.push(view.glow(th.x, top - 0.25 - k, -0.3, 0.07, DRIP_GLOW));
+      }
+      if (th.state !== 'dry') {
+        // Countdown lights beside the head, under the ceiling.
+        const sig = signalAt('sprinkler', phaseOf(sim, th, PERIOD.sprinkler));
+        countdown(view, th.x + 0.62, top - 0.28, -0.3, sig, t);
+        if (cues && sig.state === 'live')
+          hatchBox(view, th.x - 0.32, th.y0 ?? 0, th.x + 0.32, top - 0.1, 0.3, t);
       }
       // A puddle grows on the floor while it drips and dries up after the spray.
       if (th.state !== 'dry') {
@@ -400,9 +677,15 @@ export function drawThing(view, items, sim, th, t) {
           scaling(dir, 1, 1, E1),
           rotationX(0.6, E2),
         );
-        if (Math.floor(t * 12) % 2 === 0)
-          items.push(view.glow(th.x + dir * 0.35, th.y + 1.02, -0.1, 0.11, PRINTER_GLOW));
       }
+      countdown(
+        view,
+        th.x,
+        th.y + 1.22,
+        -0.2,
+        signalAt('printer', phaseOf(sim, th, PERIOD.printer)),
+        t,
+      );
       break;
     case 'beamer':
       at(P.monitor, th.x, th.y, -0.3, scaling(1.3, 1.3, 1.3, E1));
@@ -412,8 +695,16 @@ export function drawThing(view, items, sim, th, t) {
         const sc = 0.35 + k * 0.6;
         at(P.kpi, th.x, th.y + 0.42, -0.24 + k * 0.1, scaling(sc, sc, sc, E1));
         if (Math.floor(t * 16) % 2 === 0)
-          items.push(view.glow(th.x, th.y + 0.45, 0, 0.16, BEAMER_GLOW));
+          items.push(view.glow(th.x, th.y + 0.45, 0, 0.16, WARN_AMBER));
       }
+      countdown(
+        view,
+        th.x,
+        th.y + 1.55,
+        -0.2,
+        signalAt('beamer', phaseOf(sim, th, PERIOD.beamer)),
+        t,
+      );
       break;
     case 'paper': {
       // Tilted towards the camera so the sheet reads, with two speed streaks behind.
@@ -438,6 +729,7 @@ export function drawThing(view, items, sim, th, t) {
         it.tint = STREAK_TINT;
         it.noShadow = true;
       }
+      projectileCues(view, th, 0.24, -0.12, 0.12, t);
       break;
     }
     case 'crate':
@@ -474,7 +766,17 @@ export function drawThing(view, items, sim, th, t) {
           scaling(0.6, 0.6, 0.6, E1),
         );
       else {
-        at(P.cup, th.x + 0.35, th.y, 0.2);
+        // The pile of files lies on its tile, solid as any floor; near the end of the
+        // break it trembles and blinks white: they are about to pick it up.
+        const c = pileColumn(th);
+        if (c >= 0) {
+          const ending = th.t > 3.2;
+          const jitter = ending ? Math.sin(t * 60) * 0.015 : 0;
+          at(things.pile, c + 0.5 + jitter, th.y, -0.5);
+          if (ending && Math.sin(t * 18) > 0)
+            items.push(view.glow(c + 0.5, th.y + 1.05, 0.3, 0.09, WARN_WHITE));
+        }
+        at(P.cup, th.x - Math.sign(c >= 0 ? c + 0.5 - th.x : -1) * 0.35, th.y, 0.2);
         // Dizzy stars circle the stunned intern's head.
         for (let k = 0; k < 3; k++) {
           const a = t * 5 + (k * Math.PI * 2) / 3;
@@ -500,7 +802,7 @@ export function drawThing(view, items, sim, th, t) {
       let pose = muted ? VISIO_MUTED : th.state === 'ring' ? VISIO_RING : null;
       if (!pose) {
         pose = idlePose(t);
-        pose.armR = 1.2 + Math.sin(t * 5) * 0.4;
+        pose.armR = 1.15 + Math.sin(t * 5) * 0.3;
       }
       const o = poseOptions(CAST.visio.scale, 0.7, 0.3);
       poseCharacter(view.cast.visio, th.x - dir * 0.15, th.y, -0.5, dir, pose, o, items, pool);
@@ -534,12 +836,13 @@ export function drawThing(view, items, sim, th, t) {
       break;
     case 'invite':
       at(P.invite, th.x, th.y, 0, rotationZ(Math.sin(th.t * 12) * 0.2, E1));
+      projectileCues(view, th, 0.3, -0.2, 0.2, t);
       break;
     case 'rack':
       drawRack(view, th, t);
       break;
     case 'zone':
-      drawZone(view, th, t);
+      drawZone(view, sim, th, t);
       break;
     default:
       break;
@@ -692,12 +995,12 @@ function drawBossShow(view, sim, b, t) {
       break;
     }
     case 'consult':
-      drawConsult(view, b, t, floor, id);
+      drawConsult(view, sim, b, t, floor);
       break;
     case 'teleport': {
       // Failover: a column of data rises where he stands, and the spot he will
       // reappear on lights up before he gets there.
-      const to = b.x > mid ? x0 + 4 : x1 - 4;
+      const to = teleportTarget(sim, b);
       if (bt < 0.55) {
         const k = bt / 0.55;
         dataColumn(view, b.x, floor, t, k);
@@ -783,6 +1086,33 @@ function drawBossShow(view, sim, b, t) {
 }
 
 /**
+ * A boss riser: `th.y` is its top, the 2×1 block below it is solid once
+ * `th.state` is 'set'. Julien's (dir +1) is a server rack lying on its side,
+ * rising out of the raised floor; Rodolphe's (dir -1) a box truss lowered from
+ * the rig on two cables.
+ * @param {import('./scene.js').LevelView} view @param {Thing} th
+ */
+function drawRiser(view, th) {
+  const w = th.w ?? 2;
+  const cx = th.x + w / 2;
+  if ((th.dir ?? 1) > 0) {
+    at(
+      view.props.rack,
+      th.x + w,
+      th.y - 0.5,
+      -0.1,
+      rotationZ(Math.PI / 2, E1),
+      scaling(1, w / 2, 1, E2),
+    );
+    return;
+  }
+  at(view.props.truss, cx, th.y + 0.05, -0.1, scaling(w / 2, 3.7, 3, E1));
+  const cable = pool.tint(0.12, 0.12, 0.14);
+  for (let side = -1; side <= 1; side += 2)
+    bar(view, cx + side * 0.8, th.y + 6, -0.1, 12, 0.02, Math.PI / 2, cable);
+}
+
+/**
  * Data rising in a column: a handful of cyan bits climbing, `k` from 0 to 1.
  * @param {import('./scene.js').LevelView} view @param {number} x @param {number} floor
  * @param {number} t @param {number} k
@@ -807,12 +1137,12 @@ function dataColumn(view, x, floor, t, k) {
  * The consult window, unmistakable on the director himself: a lime ring at his
  * feet whose twelve segments go out with the time left, lime motes rising, and a
  * marker over his head.
- * @param {import('./scene.js').LevelView} view @param {Thing} b @param {number} t
- * @param {number} floor @param {import('../game/world.js').BossId} id
+ * @param {import('./scene.js').LevelView} view @param {Sim} sim @param {Thing} b @param {number} t
+ * @param {number} floor
  */
-function drawConsult(view, b, t, floor, id) {
+function drawConsult(view, sim, b, t, floor) {
   const B = view.things.boss;
-  const length = PATTERNS[id].consult[(b.phase ?? 1) - 1] ?? 1;
+  const length = consultLength(sim, b);
   const left = Math.max(0, 1 - (b.t ?? 0) / length);
   const on = Math.ceil(left * 12);
   const pulse = 0.75 + 0.25 * Math.sin(t * 10);
@@ -1150,6 +1480,8 @@ function drawRack(view, th, t) {
     return;
   }
   at(P.rackFall, th.x, th.y, -0.1);
+  if (th.state === 'fall' && cues)
+    hatchBox(view, th.x - 0.55, floor, th.x + 0.55, th.y + 2.1, 0.45, t);
   if (th.state === 'fall') {
     const len = Math.min(1.6, Math.abs(th.vy ?? 0) * 0.07);
     for (let i = -1; i <= 1; i += 2)
@@ -1160,13 +1492,34 @@ function drawRack(view, th, t) {
   }
 }
 
+/** Half the depth of a spotlight pool: it stays behind the footlights at the stage front. */
+export const POOL_HALF_DEPTH = 1;
+
+/**
+ * The stretch of floor a zone covers as drawn: the zone, kept on the arena floor
+ * (from just past the gate to the far wall) and inset a hair so neighbouring pools
+ * and the stage edge never overlap. Written into ZONE_SPAN.
+ * @param {Sim} sim @param {Thing} th
+ */
+export function zoneSpan(sim, th) {
+  const arena = sim.boss?.arena;
+  const lo = arena ? arena[0] + 1 : -Infinity,
+    hi = arena ? arena[1] + 1 : Infinity;
+  ZONE_SPAN[0] = Math.max(lo, th.x) + 0.06;
+  ZONE_SPAN[1] = Math.min(hi, th.x + (th.w ?? 1)) - 0.06;
+  return ZONE_SPAN;
+}
+const ZONE_SPAN = [0, 0];
+
 /**
  * Floor zones. Cable runs crackle blue as they charge, then arc white-hot; spotlight
- * zones are pools of stage light that swell, then blaze; a dash lane is a runway of
- * arrows rolling the way he will run, with a stop line where he will stop.
- * @param {import('./scene.js').LevelView} view @param {Thing} th @param {number} t
+ * zones are pools of stage light that swell amber, then blaze red; a dash lane is a
+ * runway of arrows rolling the way he will run, with a stop line where he will stop.
+ * Both kinds of strip speak the traps' language: amber while armed, red while live.
+ * @param {import('./scene.js').LevelView} view @param {Sim} sim @param {Thing} th
+ * @param {number} t
  */
-function drawZone(view, th, t) {
+function drawZone(view, sim, th, t) {
   const B = view.things.boss;
   const floor = th.y0 ?? th.y;
   const w = th.w ?? 1;
@@ -1210,7 +1563,9 @@ function drawZone(view, th, t) {
       live ? pool.tint(1.5 * f, 1.9 * f, 2.2 * f) : pool.tint(0.55 * f, 1.6 * f, 2.2 * f),
       scaling(w - 0.1, 1, 1, E1),
     );
-    const edge = live ? SHOW_WHITE : pool.tint(1.95 * blink, 0.62 * blink, 0.1 * blink);
+    const edge = live
+      ? WARN_RED
+      : pool.tint(WARN_AMBER[0] * blink, WARN_AMBER[1] * blink, WARN_AMBER[2] * blink);
     for (let side = -1; side <= 1; side += 2)
       lit(
         view.cube,
@@ -1220,18 +1575,25 @@ function drawZone(view, th, t) {
         edge,
         scaling(w - 0.12, 0.01, 0.06, E1),
       );
+    if (live && cues) hatchFloor(view, th.x, th.x + w, floor + 0.02, -1.25, 1.25, t);
     return;
   }
-  // Spotlight.
+  // Spotlight: a pool on the stage floor, never past its ends or over the footlights.
+  const span = zoneSpan(sim, th);
+  const x0 = span[0],
+    x1 = span[1];
+  if (x1 <= x0) return;
   const p = live
     ? 0.9 + 0.1 * Math.sin(t * 40)
     : (0.3 + 0.55 * k) * (0.85 + 0.15 * Math.sin(t * 14)) * blink;
+  const c = live ? WARN_RED : WARN_AMBER;
   lit(
     B.pool,
-    th.x + w / 2,
+    (x0 + x1) / 2,
     floor + 0.012,
     0,
-    live ? pool.tint(2.2 * p, 1.35 * p, 1.75 * p) : pool.tint(1.95 * p, 0.42 * p, 0.95 * p),
-    scaling(w, 1, 2.4, E1),
+    pool.tint(c[0] * p, c[1] * p + (live ? 0.25 : 0), c[2] * p + (live ? 0.2 : 0)),
+    scaling(x1 - x0, 1, POOL_HALF_DEPTH * 2, E1),
   );
+  if (live && cues) hatchFloor(view, x0, x1, floor + 0.02, -POOL_HALF_DEPTH, POOL_HALF_DEPTH, t);
 }

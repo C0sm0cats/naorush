@@ -1,4 +1,4 @@
-import { hitBoss } from './boss.js';
+import * as boss from './boss.js';
 import { knockDown, weigh } from './traps.js';
 import {
   DT,
@@ -25,6 +25,16 @@ import {
  * @typedef {import('./sim.js').Sim} Sim
  * @typedef {import('./world.js').Thing} Thing
  */
+
+/**
+ * How tall the director is (tiles), so a CR at head height still reaches him:
+ * boss.js's bossHeight() once it lands, 1.8 until then.
+ * @type {(s: Sim) => number}
+ */
+const bossHeight = (s) =>
+  /** @type {{bossHeight?: (s: Sim) => number}} */ (/** @type {unknown} */ (boss)).bossHeight?.(
+    s,
+  ) ?? 1.8;
 
 /** How tall each walker is (tiles): walls and overhangs below that turn them back. */
 const HEIGHT = { colleague: 1.75, intern: 1.5, vacuum: 0.18, visio: 1.6 };
@@ -94,18 +104,110 @@ export const INTERN_HURT = 1.2;
 /** Same for the video-call manager standing at the laptop. */
 export const VISIO_HURT = 1.3;
 
+/** Kinds that keep the pile of files from landing on their tile. */
+const NO_PILE = new Set(['lift', 'zone', 'rack']);
+
+/**
+ * The tile beside a stunned intern where their pile of files can land, as a step:
+ * empty, on a solid floor that stays (no slab, no archive box), with room to stand
+ * on top (two free tiles above), clear of the hero, of anyone or anything lying
+ * there and of a lift's track.
+ * @param {Sim} s @param {Thing} t The intern. @param {number} c @param {number} r
+ */
+function pileFits(s, t, c, r) {
+  if (tileAt(s, c, r) !== TILE.EMPTY || tileAt(s, c, r - 1) !== TILE.SOLID) return false;
+  if (solid(s, c, r + 1) || solid(s, c, r + 2) || tileAt(s, c, r + 1) === TILE.HAZARD) return false;
+  const h = s.hero;
+  if (h.state !== 'dead' && h.x < c + 1 && h.x + HERO.w > c && h.y < r + 1 && h.y + HERO.h > r)
+    return false;
+  for (const k of s.things) {
+    if (!k.alive || k === t) continue;
+    if (k.kind === 'lift') {
+      const lo = Math.min(k.y0 ?? k.y, k.y1 ?? k.y),
+        hi = Math.max(k.y0 ?? k.y, k.y1 ?? k.y);
+      if (k.x < c + 1 && k.x + (k.w ?? 2) > c && lo < r + 3 && hi > r - 0.5) return false;
+    } else if (
+      !NO_PILE.has(k.kind) &&
+      k.x >= c - 0.3 &&
+      k.x < c + 1.3 &&
+      k.y > r - 1 &&
+      k.y < r + 1
+    )
+      return false;
+  }
+  return true;
+}
+
+/**
+ * Where a stunned intern's pile of files lies: the column, or -1 when there is none.
+ * `dir` keeps its offset from the intern's column (0 or unset: no pile); the intern
+ * does not move while stunned, so the pile stays at their row.
+ * @param {Thing} t
+ */
+export const pileColumn = (t) =>
+  t.kind === 'intern' && t.state === 'stunned' && t.dir ? Math.floor(t.x) + t.dir : -1;
+
+/**
+ * The pile goes (picked up, or scattered): its tile is free again.
+ * @param {Sim} s @param {Thing} t @param {number} c Its column. @param {number} r Its row.
+ */
+function clearPile(s, t, c, r) {
+  if (c >= 0 && c < s.w && r >= 0 && r < s.h && tileAt(s, c, r) === TILE.SOLID)
+    s.tiles[c + r * s.w] = TILE.EMPTY;
+  t.dir = 0;
+  emit(s, 'pileGone', c + 0.5, r + 0.5);
+}
+
 /**
  * Intern rushing with a pile of files: hurts on contact; a CR earns them a coffee break.
  * Spotting you ahead on their floor, they stop dead (0.4 s, a telegraph), then rush.
+ * Stunned, they drop the pile beside them: a solid one-tile step for the length of
+ * the break, gathered up when they get back to work.
  * @param {Sim} s @param {Thing} t
  */
 export function stepIntern(s, t) {
   const hero = s.hero;
+  if (t.dir) {
+    // The pile only holds while its intern sits by it on firm ground; it never
+    // closes on a hero (a respawn on that very spot scatters it).
+    const c = Math.floor(t.x) + t.dir;
+    const r = Math.round(t.y);
+    const h = hero;
+    const inside =
+      h.state !== 'dead' &&
+      h.x < c + 1 &&
+      h.x + HERO.w > c &&
+      h.y < r + 1 - 1e-6 &&
+      h.y + HERO.h > r;
+    if (
+      t.state !== 'stunned' ||
+      t.t > 4 ||
+      t.y !== r ||
+      !solid(s, Math.floor(t.x), r - 1) ||
+      inside
+    )
+      clearPile(s, t, c, r);
+  }
   if (!grounded(s, t)) return;
   if (t.state === 'stunned') {
     if (t.t > 4) {
       Object.assign(t, { state: 'walk', t: 0, vx: Math.sign(t.vx || 1) * INTERN_WALK });
       emit(s, 'wake', t.x, t.y + 1.6);
+    } else if (!t.dir && t.t < DT * 2 && Number.isInteger(t.y)) {
+      // Dropped the moment they are hit (a scattered pile stays scattered).
+      // Files hit the floor on the side they were heading, or else behind them,
+      // in the first column clear of their body.
+      const ahead = Math.sign(t.vx) || 1;
+      const home = Math.floor(t.x);
+      for (let i = 0; i < 2; i++) {
+        const side = i ? -ahead : ahead;
+        const c = Math.floor(t.x + side * 0.35) + side;
+        if (!pileFits(s, t, c, t.y)) continue;
+        t.dir = c - home;
+        s.tiles[c + t.y * s.w] = TILE.SOLID;
+        emit(s, 'pile', c + 0.5, t.y + 0.5);
+        break;
+      }
     }
     return;
   }
@@ -270,12 +372,12 @@ export function stepCr(s, t) {
       emit(s, 'poof', t.x, t.y);
       return;
     }
-    const body = dx < 0.5 && t.y > k.y && t.y < k.y + 1.8;
+    const body = dx < 0.5 && t.y > k.y && t.y < k.y + (k.kind === 'boss' ? bossHeight(s) : 1.8);
     if (!body) continue;
     if (k.kind === 'boss') {
       t.alive = false;
       // Before the duel and once convinced, a CR just bounces off his jacket.
-      if (k.state !== 'idle' && k.state !== 'convinced' && k.state !== 'sign') hitBoss(s, k);
+      if (k.state !== 'idle' && k.state !== 'convinced' && k.state !== 'sign') boss.hitBoss(s, k);
       else emit(s, 'block', t.x, t.y);
       return;
     }

@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import {
+  POOL_HALF_DEPTH,
+  SIGNALS,
+  camView,
+  incomingSide,
+  signalAt,
+  watchCamera,
+  zoneSpan,
+} from '../src/app/draw-things.js';
 import { HERO, TILE, tileAt } from '../src/game/sim.js';
+import { PERIOD, phaseOf } from '../src/game/traps.js';
+import { FONT, SIGN_ROWS, SIGN_TEXT } from '../src/gfx/things.js';
 import { IDLE, fill, has, input, room, run, runUntil, sim, throwCr } from './mechanics-kit.js';
 
 /** @typedef {import('./mechanics-kit.js').Sim} Sim */
@@ -444,5 +455,196 @@ describe('water-cooler bottle support', () => {
     const events = throwCr(s).concat(runUntil(s, IDLE, () => bottle.state === 'burst', 120).events);
     expect(has(events, 'archive')).toBe(true);
     expect(has(events, 'splash')).toBe(true);
+  });
+});
+
+describe('one warning language: amber arming, red live, white recovering', () => {
+  /**
+   * Steps a periodic trap's room through two cycles, recording at each step the
+   * drawn signal and whether the trap could hurt (drawer out, spray on) or fired.
+   * @param {import('./mechanics-kit.js').Mark[]} marks @param {'drawer'|'sprinkler'|'printer'|'beamer'} kind
+   * @param {(s: Sim, t: import('../src/game/sim.js').Thing) => boolean} danger
+   */
+  function trace(marks, kind, danger) {
+    const s = sim(room(20, marks));
+    const trap = find(s, kind);
+    /** @type {{state: string, danger: boolean}[]} */
+    const out = [];
+    for (let i = 0; i < 2 * 60 * PERIOD[kind]; i++) {
+      run(s, IDLE, 1);
+      const sig = signalAt(kind, phaseOf(s, trap, PERIOD[kind]));
+      out.push({ state: sig.state, danger: danger(s, trap) });
+    }
+    return out;
+  }
+
+  /** @param {{state: string, danger: boolean}[]} steps */
+  function check(steps) {
+    // Every dangerous step is drawn red, and the step before danger starts is amber
+    // after at least 0.6 s of amber.
+    for (let i = 1; i < steps.length; i++) {
+      if (steps[i].danger) expect(steps[i].state).toBe('live');
+      if (steps[i].state === 'live' && steps[i - 1].state !== 'live') {
+        let amber = 0;
+        for (let j = i - 1; j >= 0 && steps[j].state === 'arm'; j--) amber++;
+        if (i > 60) expect(amber / 60).toBeGreaterThanOrEqual(0.6 - 1e-9);
+      }
+    }
+    // After live comes white, then rest: never straight from red to nothing.
+    const order = steps.map((x) => x.state).filter((x, i, a) => x !== a[i - 1]);
+    for (let i = 0; i + 1 < order.length; i++) {
+      if (order[i] === 'live') expect(order[i + 1]).toBe('recover');
+      if (order[i] === 'arm') expect(order[i + 1]).toBe('live');
+    }
+    expect(new Set(order)).toEqual(new Set(['idle', 'arm', 'live', 'recover']));
+  }
+
+  it('drawer: amber well before it rattles out, red while it is out', () => {
+    check(
+      trace(
+        [
+          ['S', 8, 3],
+          ['d', 1, 3],
+        ],
+        'drawer',
+        (_, t) => (t.w ?? 0) > 0.2 && t.state !== 'rattle',
+      ),
+    );
+  });
+
+  it('sprinkler: amber while it drips, red while it sprays', () => {
+    check(
+      trace(
+        [
+          ['S', 12, 3],
+          ['w', 6, 10],
+        ],
+        'sprinkler',
+        (_, t) => t.state === 'on',
+      ),
+    );
+  });
+
+  it('printer and projector: amber before the shot, red as it leaves', () => {
+    const fired = (/** @type {string} */ kind) => (/** @type {Sim} */ s) =>
+      s.events.some((e) => e.type === kind);
+    check(
+      trace(
+        [
+          ['S', 2, 3],
+          ['P', 14, 3],
+        ],
+        'printer',
+        fired('paperShot'),
+      ),
+    );
+    check(
+      trace(
+        [
+          ['S', 2, 3],
+          ['J', 14, 3],
+        ],
+        'beamer',
+        fired('bossThrow'),
+      ),
+    );
+  });
+
+  it('countdown signals cover every periodic trap and never overlap round the cycle', () => {
+    for (const kind of /** @type {(keyof typeof PERIOD)[]} */ (Object.keys(PERIOD))) {
+      const [arm, live, recover, end] = SIGNALS[kind];
+      expect(live - arm).toBeGreaterThanOrEqual(0.6);
+      expect(arm < live && live < recover && recover < end).toBe(true);
+      expect(end - PERIOD[kind]).toBeLessThan(arm);
+    }
+  });
+});
+
+describe('incoming projectiles', () => {
+  const cam = { on: true, x: 10, y: 5, hw: 7, hh: 4 };
+  /** @param {Partial<import('../src/game/sim.js').Thing>} o */
+  const thing = (o) =>
+    /** @type {import('../src/game/sim.js').Thing} */ ({
+      kind: 'paper',
+      x: 0,
+      y: 4,
+      vx: 0,
+      vy: 0,
+      state: 'fly',
+      t: 0,
+      alive: true,
+      ...o,
+    });
+
+  it('flags the edge a projectile comes in from in its last 0.6 s off screen', () => {
+    // Right edge at x = 17: at 7 tiles/s, 0.6 s is 4.2 tiles out.
+    expect(incomingSide(thing({ x: 20, vx: -7 }), cam)).toBe(1);
+    expect(incomingSide(thing({ x: 22, vx: -7 }), cam)).toBe(0);
+    expect(incomingSide(thing({ x: 0, vx: 6 }), cam)).toBe(-1);
+    // Flying away, already in view, or not a projectile: nothing.
+    expect(incomingSide(thing({ x: 20, vx: 7 }), cam)).toBe(0);
+    expect(incomingSide(thing({ x: 12, vx: -7 }), cam)).toBe(0);
+    expect(incomingSide(thing({ kind: 'cr', x: 20, vx: -7 }), cam)).toBe(0);
+    expect(incomingSide(thing({ x: 20, vx: -7 }), { ...cam, on: false })).toBe(0);
+  });
+
+  it('works from the camera the main loop reports', () => {
+    watchCamera(10, 5, 4 / Math.tan((15 * Math.PI) / 180), 7 / 4);
+    expect(camView.hh).toBeCloseTo(4, 6);
+    expect(camView.hw).toBeCloseTo(7, 6);
+    expect(incomingSide(thing({ kind: 'invite', x: 19, vx: -6 }))).toBe(1);
+    camView.on = false;
+  });
+});
+
+describe("Rodolphe's spotlight pools stay on the stage", () => {
+  it('are clipped to the arena floor and kept behind the footlights', () => {
+    const s = sim(
+      room(
+        30,
+        [
+          ['S', 3, 3],
+          ['X', 20, 3],
+        ],
+        { boss: { id: 'regionalDirector', hp: 5, arena: [12, 28] } },
+      ),
+    );
+    // A zone reaching past both ends of the floor (13 to 29).
+    const z = /** @type {import('../src/game/sim.js').Thing} */ ({
+      kind: 'zone',
+      x: 11,
+      y: 3,
+      w: 20,
+      vx: 0,
+      vy: 0,
+      state: 'warn',
+      t: 0,
+      alive: true,
+    });
+    const [x0, x1] = zoneSpan(s, z);
+    expect(x0).toBeGreaterThanOrEqual(13);
+    expect(x1).toBeLessThanOrEqual(29);
+    // Thirds side by side never overlap.
+    const a = zoneSpan(s, { ...z, x: 13, w: 16 / 3 })[1];
+    const b = zoneSpan(s, { ...z, x: 13 + 16 / 3, w: 16 / 3 })[0];
+    expect(a).toBeLessThan(b);
+    // The footlights stand at z = 1.18 in front of the stage floor.
+    expect(POOL_HALF_DEPTH).toBeLessThan(1.18 - 0.1);
+  });
+});
+
+describe('arena sign font', () => {
+  it('draws É as a full-height capital E with the accent above the line', () => {
+    const e = FONT['É'];
+    expect(e.length).toBe(SIGN_ROWS);
+    // The bottom seven rows are exactly the E: same height as every capital.
+    expect(e.slice(-7)).toEqual(FONT.E);
+    // An accent, then a free row before the top bar.
+    expect(e[0].includes('#') && e[1].includes('#')).toBe(true);
+    expect(e[2]).toBe('.....');
+    for (const [ch, g] of Object.entries(FONT)) if (ch !== 'É') expect(g.length, ch).toBe(7);
+    // Every caption can be lit.
+    for (const text of Object.values(SIGN_TEXT))
+      for (const ch of text) if (ch !== ' ') expect(FONT[ch], ch).toBeDefined();
   });
 });
