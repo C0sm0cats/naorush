@@ -12,7 +12,7 @@ import { DynamicResolution, bossLighting, fightFocus, withLights } from './app/s
 import { findSpot, heroRegion, title } from './app/title.js';
 import { Trophies } from './app/trophies.js';
 import { LevelView, boardUrl } from './app/scene.js';
-import { PROLOGUE } from './data/barks.js';
+import { CREDITS, EPILOGUE, PROLOGUE } from './data/barks.js';
 import { CAST } from './data/cast.js';
 import { CAMPAIGN, LEVELS, ROOM_W } from './data/levels/index.js';
 import { POSTER_LIST, renderPoster } from './gfx/posters.js';
@@ -173,6 +173,7 @@ async function loadStage(i) {
   wonTimer = 0;
   hud.clearToast();
   bubbles.clear();
+  bubbles.stage(level);
   gameOverTimer = 0;
 }
 
@@ -212,6 +213,8 @@ const dialogue = new Dialogue(audio, (who) =>
         : '',
 );
 const bubbles = new Bubbles();
+// Queued lines (the set-piece teasers) get the same little voice as the others.
+bubbles.onLine = (who) => audio.sfx('bubble', { who });
 
 /** @param {Line[]} lines @param {() => void} done */
 function talk(lines, done) {
@@ -504,7 +507,7 @@ function stageWon() {
   if (!bonus) store(SAVE_KEY, last ? 0 : stage + 1);
   trophies.stageWon(sim, level.id, last);
   if (challenge) trophies.dailyDone(challenge.key);
-  if (last) return credits();
+  if (last) return talk(EPILOGUE, credits);
   $('next').hidden = bonus;
   $('wonKicker').textContent = challenge
     ? `Défi du jour · ${challenge.twist.label}`
@@ -562,12 +565,7 @@ function credits() {
       `${count(run.tickets, 'ticket')} Swile · ${count(run.secrets, 'secret')} · ${clock(run.time)} · ${count(run.deaths, 'retour')} au badge`,
     ],
     ['Avec', 'h'],
-    ['Kévin · Directeur de Projets'],
-    ['Charline · Business Manager'],
-    ['Julien · Directeur Technologies & Services Pays de la Loire'],
-    ['Rodolphe · Directeur Région Ouest'],
-    ['Le stagiaire et ses dossiers · Le chef de projet en visio'],
-    ['Le robot aspirateur · La bonbonne d’eau · Les fauteuils à roulettes'],
+    ...CREDITS.flatMap((c) => [[`${c.name} · ${c.role}`], [c.line, 's']]),
     ['Fabriqué avec', 'h'],
     ['Un moteur WebGL2 maison · des affiches dessinées en code'],
     ['Une musique et des bruitages synthétisés en direct'],
@@ -577,6 +575,7 @@ function credits() {
     ...lines.map(([text, kind]) => {
       const el = document.createElement(kind === 't' ? 'h2' : kind === 'h' ? 'h3' : 'p');
       el.textContent = text;
+      if (kind === 's') el.className = 'creditLine';
       return el;
     }),
   );
@@ -784,7 +783,9 @@ function onEvent(e) {
       if (e.y - sim.hero.y < 2.5) say(heroId, 'block');
       break;
     default:
-      if (QUIPS.has(e.type)) say(heroId, e.type);
+      if (e.type === 'checkpoint' && bubbles.teaser(heroId, e.x))
+        audio.sfx('bubble', { who: heroId });
+      else if (QUIPS.has(e.type)) say(heroId, e.type);
   }
 }
 
