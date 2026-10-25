@@ -5,7 +5,12 @@
  * Kévin carries more weight (bigger squash, slower settle, broader arms), Charline
  * is lighter and nimbler (bouncier stride, quicker recovery, a tucked front flip
  * on her double jump). Julien moves with technical precision, Rodolphe with grand,
- * generous gestures. Nobody waves or salutes: the arms have no elbows.
+ * generous gestures. Nobody waves or salutes: the arms have no elbows, and no arm
+ * goes above the shoulder except both together in a victory V or holding a ledge.
+ *
+ * Nothing here allocates: every function writes into a pose kept for that caller
+ * (one for the hero, one per boss, one for idles) and rewrites all of its fields,
+ * so a tweak made by the caller never leaks into the next frame.
  *
  * @typedef {import('../game/sim.js').Sim} Sim
  * @typedef {import('../game/sim.js').Thing} Thing
@@ -24,7 +29,82 @@ const backOut = (k) => 1 + 2.4 * (k - 1) ** 3 + 1.4 * (k - 1) ** 2;
 const settle = (k) => Math.exp(-k * 7) * Math.sin(k * 22);
 /** Slower, heavier sway: momentum carried after stopping. @param {number} k @param {number} f */
 const rock = (k, f) => Math.exp(-k * 5) * Math.sin(k * f);
+/** Rises over `a` seconds from `t0`, falls over `a` seconds to `t1`. @param {number} k @param {number} t0 @param {number} t1 @param {number} a */
+const span = (k, t0, t1, a) => smooth(clamp((k - t0) / a)) * (1 - smooth(clamp((k - t1 + a) / a)));
 const TAU = Math.PI * 2;
+/** Arm swing at shoulder height: above it, a single arm would read as a wave or a salute. */
+export const SHOULDER = 1.55;
+
+/** @returns {Required<Pose>} */
+const blankPose = () => ({
+  legL: 0,
+  legR: 0,
+  armL: 0,
+  armR: 0,
+  armSpread: 0,
+  lean: 0,
+  bob: 0,
+  head: 0,
+  squash: 0,
+  blink: 0,
+  mood: 'neutral',
+  hair: 0,
+  hem: 0,
+  flip: 0,
+  gaze: 0,
+});
+const HERO = blankPose();
+const AIR = blankPose();
+const IDLE = blankPose();
+const DANCER = blankPose();
+const BOSS = { technical: blankPose(), grand: blankPose() };
+/** bossPose()'s result, rewritten on every call. */
+const BOSS_OUT = {
+  pose: /** @type {Required<Pose>} */ (BOSS.technical),
+  y: 0,
+  turn: 1,
+  /** @type {number[] | undefined} */
+  tint: undefined,
+  facing: 1,
+};
+const TINT = [1, 1, 1];
+
+/**
+ * Resets every field of `p`: the legs and arms as given, the rest neutral, eyes
+ * blinking on their own clock.
+ * @param {Required<Pose>} p @param {number} t
+ * @param {number} legL @param {number} legR @param {number} armL @param {number} armR
+ */
+function base(p, t, legL, legR, armL, armR) {
+  p.legL = legL;
+  p.legR = legR;
+  p.armL = armL;
+  p.armR = armR;
+  p.armSpread = 0;
+  p.lean = 0;
+  p.bob = 0;
+  p.head = 0;
+  p.squash = 0;
+  p.blink = blinkAt(t);
+  p.mood = 'neutral';
+  p.hair = 0;
+  p.hem = 0;
+  p.flip = 0;
+  p.gaze = 0;
+  return p;
+}
+
+/**
+ * Keeps both arms at or below the shoulders.
+ * @template {Pose} P
+ * @param {P} p
+ * @returns {P}
+ */
+function lowArms(p) {
+  if (p.armL > SHOULDER) p.armL = SHOULDER;
+  if (p.armR > SHOULDER) p.armR = SHOULDER;
+  return p;
+}
 
 /** Boss temperament: the moves that only one of them makes give him away. */
 const SIGNATURE = /** @type {Record<string, 'technical'|'grand'>} */ ({
@@ -54,15 +134,18 @@ function bossStyle(b, id) {
 
 /**
  * The boss's pose for its current attack. Each wind-up is held long enough to
- * read as a warning: arm cocked for a volley, a hand raised to lower the racks,
+ * read as a warning: arm cocked for a volley, a hand held out to lower the racks,
  * crouch before a leap, lean before the dash. Breathing and a glance at the
- * hero run underneath.
+ * hero run underneath. The result (and its pose) is shared and rewritten by the
+ * next call for the same boss.
  * @param {Thing} b @param {number} hx Hero centre x. @param {number} t Seconds.
  * @param {string} [id] Boss id ('techServicesDirector' | 'regionalDirector').
  * @returns {{pose: Pose, y: number, turn: number, tint: number[] | undefined, facing: number}}
  */
 export function bossPose(b, hx, t, id) {
-  const grand = bossStyle(b, id) === 'grand';
+  const style = bossStyle(b, id);
+  const grand = style === 'grand';
+  const p = BOSS[style];
   const done = b.state === 'convinced' || b.state === 'sign';
   const facing = b.state === 'dash' ? (b.dir ?? 1) : done ? 1 : Math.sign(hx - b.x) || -1;
   const bt = b.t ?? 0;
@@ -71,9 +154,8 @@ export function bossPose(b, hx, t, id) {
   const glance = clamp((5 - Math.abs(hx - b.x)) / 5) * 0.18 - 0.05;
   // Wind-up tremor: tension building before the release.
   const charge = Math.sin(t * 34) * 0.05;
+  const bt1 = t + 1.3;
   let y = b.y;
-  /** @type {Pose} */
-  let pose;
   let turn = 1;
   /** @type {number[] | undefined} */
   let tint;
@@ -83,123 +165,95 @@ export function bossPose(b, hx, t, id) {
         // Rodolphe takes the stage: arms open wide, chest out, a rise onto the toes.
         const k = backOut(clamp(bt / 0.7));
         const rise = Math.sin(Math.PI * clamp(bt / 0.7));
-        pose = {
-          legL: 0.12,
-          legR: -0.12,
-          armL: 0.8 * k + Math.sin(t * 1.6) * 0.04,
-          armR: 0.8 * k + Math.sin(t * 1.6 + 1) * 0.04,
-          armSpread: 1.05 * k,
-          lean: -0.12 * k + breath * 0.02,
-          head: -0.18 * k + Math.sin(t * 1.3) * 0.03,
-          bob: rise * 0.9 + breath * 0.2,
-          squash: -0.03 * rise,
-          hem: 0.25 * rise,
-        };
+        base(
+          p,
+          bt1,
+          0.12,
+          -0.12,
+          0.8 * k + Math.sin(t * 1.6) * 0.04,
+          0.8 * k + Math.sin(t * 1.6 + 1) * 0.04,
+        );
+        p.armSpread = 1.05 * k;
+        p.lean = -0.12 * k + breath * 0.02;
+        p.head = -0.18 * k + Math.sin(t * 1.3) * 0.03;
+        p.bob = rise * 0.9 + breath * 0.2;
+        p.squash = -0.03 * rise;
+        p.hem = 0.25 * rise;
       } else {
-        // Julien: tablet up, a measured open hand, one crisp nod.
+        // Julien: tablet up, a measured open hand, one crisp nod over the glasses.
         const k = smooth(clamp(bt / 0.4));
         const nod = Math.sin(Math.PI * clamp((bt - 0.35) / 0.4));
-        pose = {
-          legL: 0.04,
-          legR: -0.04,
-          armL: 0.4 * k,
-          armR: 0.95 * k,
-          armSpread: 0.28 * k,
-          lean: 0.03 + breath * 0.01,
-          head: glance + nod * 0.16,
-          bob: breath * 0.15,
-        };
+        base(p, bt1, 0.04, -0.04, 0.4 * k, 0.95 * k);
+        p.armSpread = 0.28 * k;
+        p.lean = 0.03 + breath * 0.01;
+        p.head = glance + nod * 0.16;
+        p.gaze = nod * 0.8;
+        p.bob = breath * 0.15;
       }
+      p.mood = 'happy';
       turn = 0.5;
       break;
     }
     case 'volley': {
+      // A flat sidearm throw, like dealing cards across a table: the arm cocks back
+      // low behind him and sweeps through at chest height (never overhead).
       const k = ((bt + 0.05) % 0.55) / 0.55;
       if (bt < 0.5) {
         const w = smooth(clamp(bt / 0.3));
-        pose = {
-          legL: 0.3 * w,
-          legR: -0.35 * w,
-          armL: 0.5 * w,
-          armR: -1.3 * w + charge,
-          lean: -0.12 * w,
-          head: glance - 0.05,
-          squash: 0.04 * w,
-        };
+        base(p, bt1, 0.3 * w, -0.35 * w, 0.5 * w, -1.3 * w + charge);
+        p.lean = -0.12 * w;
+        p.head = glance - 0.05;
+        p.squash = 0.04 * w;
       } else if (k < 0.7) {
         // Cocks the arm back, weight on the back foot.
         const w = smooth(k / 0.7);
-        pose = {
-          legL: 0.3,
-          legR: -0.35,
-          armL: mix(-0.3, 0.6, w),
-          armR: -1.3 * mix(0.4, 1, w) + charge,
-          lean: mix(0.1, -0.15, w),
-          head: glance - 0.05,
-          squash: 0.04 * w,
-        };
+        base(p, bt1, 0.3, -0.35, mix(-0.3, 0.6, w), -1.3 * mix(0.4, 1, w) + charge);
+        p.lean = mix(0.1, -0.15, w);
+        p.head = glance - 0.05;
+        p.squash = 0.04 * w;
       } else {
         // Throws through, then the arm settles: follow-through.
         const f = (k - 0.7) / 0.3;
-        pose = {
-          legL: 0.4,
-          legR: -0.25,
-          armL: mix(-0.6, -0.3, f),
-          armR: mix(2.7, 1.4, smooth(f)),
-          lean: mix(0.28, 0.1, f),
-          head: glance + 0.1,
-          squash: -0.03 * (1 - f),
-          hem: 0.3 * (1 - f),
-        };
+        base(p, bt1, 0.4, -0.25, mix(-0.6, -0.3, f), mix(1.5, 1.0, smooth(f)));
+        p.armSpread = 0.25 * (1 - f);
+        p.lean = mix(0.28, 0.1, f);
+        p.head = glance + 0.1;
+        p.squash = -0.03 * (1 - f);
+        p.hem = 0.3 * (1 - f);
       }
       break;
     }
     case 'fan':
       if (bt < 0.55) {
         const w = smooth(clamp(bt / 0.35));
-        pose = {
-          legL: 0.4 * w,
-          legR: -0.4 * w,
-          armL: -1.4 * w + charge,
-          armR: -1.4 * w - charge,
-          armSpread: 0.6 * w,
-          lean: -0.15 * w,
-          squash: 0.07 * w,
-          head: glance,
-        };
+        base(p, bt1, 0.4 * w, -0.4 * w, -1.4 * w + charge, -1.4 * w - charge);
+        p.armSpread = 0.6 * w;
+        p.lean = -0.15 * w;
+        p.squash = 0.07 * w;
+        p.head = glance;
       } else {
         const k = clamp((bt - 0.55) / 0.35);
         const o = backOut(k);
-        pose = {
-          legL: 0.2,
-          legR: -0.2,
-          armL: mix(-1.4, 1.4, o),
-          armR: mix(-1.4, 1.4, o),
-          armSpread: mix(0.6, 1.1, k) + settle(bt - 0.55) * 0.1,
-          lean: 0.2 * (1 - k * 0.5),
-          squash: -0.05 * (1 - k),
-          bob: breath * 0.3,
-          head: -0.1,
-          hem: 0.35 * (1 - k),
-        };
+        base(p, bt1, 0.2, -0.2, mix(-1.4, 1.4, o), mix(-1.4, 1.4, o));
+        p.armSpread = mix(0.6, 1.1, k) + settle(bt - 0.55) * 0.1;
+        p.lean = 0.2 * (1 - k * 0.5);
+        p.squash = -0.05 * (1 - k);
+        p.bob = breath * 0.3;
+        p.head = -0.1;
+        p.hem = 0.35 * (1 - k);
       }
       break;
     case 'rackDrop': {
-      // Precise: tablet held out, the other hand points at the racks and lowers them one
-      // notch at a time (kept below the head: no raised hand).
+      // Precise: tablet held out, the other hand points at the racks and lowers them
+      // one notch at a time (from shoulder height down: no raised hand).
       const w = smooth(clamp(bt / 0.3));
       const step = bt * 4;
       const notch = (Math.floor(step) % 4) + smooth(clamp((step % 1) / 0.3));
-      pose = {
-        legL: 0.15 * w,
-        legR: -0.15 * w,
-        armL: (1.85 - notch * 0.1) * w,
-        armR: 1.05 * w,
-        armSpread: 0.05 * w,
-        head: -0.28 * w + Math.max(0, Math.sin(step * TAU)) * 0.02,
-        bob: breath * 0.15,
-        lean: -0.05 * w,
-      };
+      base(p, bt1, 0.15 * w, -0.15 * w, (1.5 - notch * 0.1) * w, 1.05 * w);
+      p.armSpread = 0.05 * w;
+      p.head = -0.28 * w + Math.max(0, Math.sin(step * TAU)) * 0.02;
+      p.bob = breath * 0.15;
+      p.lean = -0.05 * w;
       turn = 0.6;
       break;
     }
@@ -207,33 +261,35 @@ export function bossPose(b, hx, t, id) {
       // Routes the current from the tablet: steady stance, a pointing hand, crisp taps.
       const w = smooth(clamp(bt / 0.3));
       const tap = Math.max(0, Math.sin(t * 11)) ** 3;
-      pose = {
-        legL: 0.22 * w,
-        legR: -0.22 * w,
-        armL: 1.35 * w + Math.max(0, Math.sin(t * 2.5)) * 0.08,
-        armR: (1.0 + tap * 0.12) * w,
-        armSpread: 0.12 * w,
-        head: mix(glance, 0.3, w) + tap * 0.02,
-        lean: 0.06 * w,
-        bob: breath * 0.15,
-      };
+      base(
+        p,
+        bt1,
+        0.22 * w,
+        -0.22 * w,
+        1.35 * w + Math.max(0, Math.sin(t * 2.5)) * 0.08,
+        (1.0 + tap * 0.12) * w,
+      );
+      p.armSpread = 0.12 * w;
+      p.head = mix(glance, 0.3, w) + tap * 0.02;
+      p.lean = 0.06 * w;
+      p.bob = breath * 0.15;
       turn = 0.6;
       break;
     }
     case 'teleport': {
       const k = clamp(bt / 0.55);
-      pose = {
-        legL: 0,
-        legR: 0,
-        armL: 1.45,
-        armR: 1.45,
-        armSpread: 0.9 + k * 0.35,
-        head: -0.2,
-        squash: bt < 0.55 ? -0.1 * k : 0.12 * Math.max(0, 1 - (bt - 0.55) / 0.2),
-        bob: bt < 0.55 ? k * 1.5 : 0,
-        hem: bt < 0.55 ? 0.5 * k : 0,
-      };
-      tint = bt < 0.55 ? [1 + bt * 2, 1 + bt * 2.4, 1 + bt * 3] : undefined;
+      base(p, bt1, 0, 0, 1.45, 1.45);
+      p.armSpread = 0.9 + k * 0.35;
+      p.head = -0.2;
+      p.squash = bt < 0.55 ? -0.1 * k : 0.12 * Math.max(0, 1 - (bt - 0.55) / 0.2);
+      p.bob = bt < 0.55 ? k * 1.5 : 0;
+      p.hem = bt < 0.55 ? 0.5 * k : 0;
+      if (bt < 0.55) {
+        TINT[0] = 1 + bt * 2;
+        TINT[1] = 1 + bt * 2.4;
+        TINT[2] = 1 + bt * 3;
+        tint = TINT;
+      }
       turn = 0.5 + bt * 4;
       break;
     }
@@ -241,70 +297,64 @@ export function bossPose(b, hx, t, id) {
       if (bt < 0.5) {
         // Deep crouch, arms swung back: the slam is coming.
         const w = smooth(clamp(bt / 0.3));
-        pose = {
-          legL: 1.1 * w,
-          legR: 1.1 * w,
-          armL: -0.8 * w + charge,
-          armR: -0.8 * w - charge,
-          squash: 0.2 * w,
-          lean: 0.35 * w,
-          head: glance - 0.2 * w,
-        };
+        base(p, bt1, 1.1 * w, 1.1 * w, -0.8 * w + charge, -0.8 * w - charge);
+        p.squash = 0.2 * w;
+        p.lean = 0.35 * w;
+        p.head = glance - 0.2 * w;
+        p.mood = 'effort';
       } else if (bt < 1.1) {
+        // Airborne: knees tucked, both arms swung forward and wide for balance.
         const k = Math.min(1, (bt - 0.5) / 0.6);
         y += Math.sin(Math.PI * k) * 1.8;
         const tuck = Math.sin(Math.PI * k);
-        pose = {
-          legL: 0.4 + tuck * 0.8,
-          legR: 0.2 + tuck * 0.6,
-          armL: mix(1.8, 2.8, tuck),
-          armR: mix(1.8, 2.8, tuck),
-          armSpread: -0.35 * tuck,
-          squash: k > 0.95 ? 0.18 : k < 0.15 ? -0.1 : -0.04,
-          lean: 0.1 - tuck * 0.15,
-          hem: k < 0.5 ? 0.2 : 0.7 * k,
-        };
+        base(p, bt1, 0.4 + tuck * 0.8, 0.2 + tuck * 0.6, mix(1.1, 1.5, tuck), mix(1.1, 1.5, tuck));
+        p.armSpread = 0.35 + 0.45 * tuck;
+        p.squash = k > 0.95 ? 0.18 : k < 0.15 ? -0.1 : -0.04;
+        p.lean = 0.1 - tuck * 0.15;
+        p.hem = k < 0.5 ? 0.2 : 0.7 * k;
+        p.mood = 'effort';
       } else {
         // Landing: squash and the arms follow through down.
         const k = clamp((bt - 1.1) / 0.4);
-        pose = {
-          legL: mix(0.9, 0.2, k),
-          legR: mix(0.9, -0.2, k),
-          armL: mix(-0.6, 0, smooth(k)),
-          armR: mix(-0.6, 0, smooth(k)),
-          armSpread: 0.5 * (1 - k),
-          squash: 0.2 * (1 - k) + settle(bt - 1.1) * 0.04,
-          lean: 0.3 * (1 - k),
-          hem: -0.3 * settle(bt - 1.1) + 0.3 * (1 - k),
-        };
+        base(
+          p,
+          bt1,
+          mix(0.9, 0.2, k),
+          mix(0.9, -0.2, k),
+          mix(-0.6, 0, smooth(k)),
+          mix(-0.6, 0, smooth(k)),
+        );
+        p.armSpread = 0.5 * (1 - k);
+        p.squash = 0.2 * (1 - k) + settle(bt - 1.1) * 0.04;
+        p.lean = 0.3 * (1 - k);
+        p.hem = -0.3 * settle(bt - 1.1) + 0.3 * (1 - k);
+        p.mood = 'focus';
       }
       break;
     }
     case 'dash':
       if (bt < 0.85) {
         const w = smooth(clamp(bt / 0.4));
-        pose = {
-          legL: 0.8 * w,
-          legR: -0.6 * w,
-          armL: -0.9 * w + charge,
-          armR: 0.9 * w - charge,
-          lean: 0.45 * w,
-          squash: 0.08 * w,
-          head: -0.15 * w,
-        };
+        base(p, bt1, 0.8 * w, -0.6 * w, -0.9 * w + charge, 0.9 * w - charge);
+        p.lean = 0.45 * w;
+        p.squash = 0.08 * w;
+        p.head = -0.15 * w;
       } else {
         const ph = t * 22;
         const s = Math.sin(ph);
-        pose = {
-          legL: s * 1.2 + 0.15,
-          legR: -s * 1.2 + 0.15,
-          armL: -Math.sin(ph - 0.3) * 1.2,
-          armR: Math.sin(ph - 0.3) * 1.2,
-          lean: 0.45,
-          bob: Math.abs(Math.cos(ph)) * 1.8,
-          head: -0.2 + Math.cos(ph * 2) * 0.03,
-          hem: 0.7 + Math.sin(ph * 2) * 0.1,
-        };
+        base(
+          p,
+          bt1,
+          s * 1.2 + 0.15,
+          -s * 1.2 + 0.15,
+          -Math.sin(ph - 0.3) * 1.2,
+          Math.sin(ph - 0.3) * 1.2,
+        );
+        p.lean = 0.45;
+        p.bob = Math.abs(Math.cos(ph)) * 1.8;
+        p.head = -0.2 + Math.cos(ph * 2) * 0.03;
+        p.hem = 0.7 + Math.sin(ph * 2) * 0.1;
+        p.mood = 'effort';
       }
       break;
     case 'zones': {
@@ -312,94 +362,73 @@ export function bossPose(b, hx, t, id) {
       // the danger spots, the other open; chin up.
       const w = backOut(clamp(bt / 0.4));
       const sweep = Math.sin(t * 0.9);
-      pose = {
-        legL: 0.3,
-        legR: -0.3,
-        armL: 0.9 * w,
-        armR: 1.55 * w + sweep * 0.12,
-        armSpread: 0.55 + sweep * 0.25,
-        head: -0.18 + sweep * 0.04,
-        lean: -0.06,
-        bob: breath * 0.4,
-      };
+      base(p, bt1, 0.3, -0.3, 0.9 * w, 1.45 * w + sweep * 0.08);
+      p.armSpread = 0.55 + sweep * 0.25;
+      p.head = -0.18 + sweep * 0.04;
+      p.lean = -0.06;
+      p.bob = breath * 0.4;
       turn = 0.4;
       break;
     }
     case 'consult': {
       // Reads the tablet (Julien taps away) or the folder (Rodolphe turns a page);
-      // looks up at the hero now and then.
+      // looks up at the hero now and then, Julien over the top of his glasses.
       const tap = grand ? 0 : Math.max(0, Math.sin(t * 11)) ** 3;
       const page = grand ? smooth(clamp((Math.sin(t * 1.6) - 0.6) * 4)) : 0;
       const peek = smooth(clamp((Math.sin(t * 0.9) - 0.75) * 5));
-      pose = {
-        legL: 0,
-        legR: Math.max(0, Math.sin(t * 2)) * 0.08,
-        armL: 0.95 + tap * 0.15 + page * 0.25,
-        armSpread: -0.25 - page * 0.12,
-        armR: 1.1 + (grand ? 0 : Math.sin(t * 11) * 0.05),
-        head: mix(grand ? 0.32 : 0.45, glance, peek),
-        lean: (grand ? -0.03 : 0.05) + breath * 0.02,
-        bob: breath * 0.3,
-      };
+      base(
+        p,
+        bt1,
+        0,
+        Math.max(0, Math.sin(t * 2)) * 0.08,
+        0.95 + tap * 0.15 + page * 0.25,
+        1.1 + (grand ? 0 : Math.sin(t * 11) * 0.05),
+      );
+      p.armSpread = -0.25 - page * 0.12;
+      p.head = grand ? mix(0.32, glance, peek) : mix(0.45, 0.28, peek);
+      p.gaze = grand ? -0.3 * (1 - peek) : mix(-0.4, 1, peek);
+      p.lean = (grand ? -0.03 : 0.05) + breath * 0.02;
+      p.bob = breath * 0.3;
       turn = 0.35;
       break;
     }
-    case 'hit': {
-      // Recoil with a damped wobble: Julien stays compact, Rodolphe staggers back.
-      const w = settle(bt);
-      pose = grand
-        ? {
-            legL: -0.3,
-            legR: 0.4,
-            armL: 1.5 + w * 0.25,
-            armR: 1.25 - w * 0.25,
-            armSpread: 0.45,
-            lean: -0.35 + w * 0.1,
-            squash: 0.08 + w * 0.05,
-            head: -0.25 + w * 0.15,
-            hem: 0.4 + w * 0.2,
-          }
-        : {
-            legL: -0.15,
-            legR: 0.25,
-            armL: 0.5 + w * 0.2,
-            armR: 1.2 - w * 0.15,
-            armSpread: 0.15,
-            lean: -0.22 + w * 0.08,
-            squash: 0.05 + w * 0.04,
-            head: -0.18 + w * 0.12,
-            hem: 0.2,
-          };
-      tint = bt < 0.2 ? [1.6, 1.3, 1.2] : undefined;
+    case 'hit':
+      hitPose(p, bt, t, grand);
+      tint = bt < 0.2 ? HIT_TINT : undefined;
       break;
-    }
     case 'phase': {
       const w = backOut(clamp(bt / 0.4));
-      pose = grand
-        ? {
-            // Second wind: a power pose, arms raised wide.
-            legL: 0.5,
-            legR: -0.5,
-            armL: 2.85 * w + Math.sin(t * 18) * 0.03,
-            armR: 2.85 * w + Math.sin(t * 18) * 0.03,
-            armSpread: -0.55,
-            head: -0.35,
-            squash: mix(0.1, -0.05, w),
-            bob: breath * 0.4,
-            hem: 0.3,
-          }
-        : {
-            // Reboots: stands tall, hands out at the sides, a single focused nod.
-            legL: 0.18,
-            legR: -0.18,
-            armL: 0.25 * w,
-            armR: 0.8 * w,
-            armSpread: 0.45 * w,
-            head: -0.15 + Math.sin(Math.PI * clamp((bt - 0.3) / 0.35)) * 0.18,
-            squash: mix(0.06, -0.04, w),
-            bob: breath * 0.2,
-          };
-      tint = [1.2 + Math.sin(t * 18) * 0.2, 1.15, 1.3];
+      if (grand) {
+        // Second wind: a power stance, feet wide, arms flung open at shoulder height,
+        // chest out and chin up.
+        base(
+          p,
+          bt1,
+          0.5,
+          -0.5,
+          1.15 * w + Math.sin(t * 18) * 0.02,
+          1.15 * w + Math.sin(t * 18) * 0.02,
+        );
+        p.armSpread = 1.1 * w;
+        p.lean = -0.1 * w;
+        p.head = -0.3;
+        p.squash = mix(0.1, -0.05, w);
+        p.bob = breath * 0.4;
+        p.hem = 0.3;
+        p.mood = 'effort';
+      } else {
+        // Reboots: stands tall, hands out at the sides, a single focused nod.
+        base(p, bt1, 0.18, -0.18, 0.25 * w, 0.8 * w);
+        p.armSpread = 0.45 * w;
+        p.head = -0.15 + Math.sin(Math.PI * clamp((bt - 0.3) / 0.35)) * 0.18;
+        p.squash = mix(0.06, -0.04, w);
+        p.bob = breath * 0.2;
+        p.mood = 'focus';
+      }
+      TINT[0] = 1.2 + Math.sin(t * 18) * 0.2;
+      TINT[1] = 1.15;
+      TINT[2] = 1.3;
+      tint = TINT;
       turn = 0.3;
       break;
     }
@@ -408,132 +437,247 @@ export function bossPose(b, hx, t, id) {
         // Won over, and generous about it: arms wide open, chin up, a hearty laugh.
         const laugh = Math.max(0, Math.sin(t * 13)) * clamp(1 - ((bt % 2.4) - 1.2) * 2);
         const k = backOut(clamp(bt / 0.5));
-        pose = {
-          legL: 0.15,
-          legR: -0.15,
-          armL: 0.55 * k,
-          armR: 0.55 * k,
-          armSpread: 1.45 * k,
-          lean: -0.1 * k,
-          head: -0.22 + laugh * 0.05,
-          bob: laugh * 0.5 + breath * 0.3,
-          squash: -0.02 * laugh,
-          hem: 0.15,
-        };
+        base(p, bt1, 0.15, -0.15, 0.55 * k, 0.55 * k);
+        p.armSpread = 1.45 * k;
+        p.lean = -0.1 * k;
+        p.head = -0.22 + laugh * 0.05;
+        p.bob = laugh * 0.5 + breath * 0.3;
+        p.squash = -0.02 * laugh;
+        p.hem = 0.15;
       } else {
         // Approves: the tablet tucked away, an open hand forward, a satisfied nod.
         const k = smooth(clamp(bt / 0.35));
         const nod = Math.max(0, Math.sin(t * 3)) ** 2;
-        pose = {
-          legL: 0.05,
-          legR: -0.05,
-          armL: 1.25 * k,
-          armR: 0.55,
-          armSpread: 0.15 * k - 0.1,
-          lean: 0.04,
-          head: -0.05 + nod * 0.12,
-          bob: breath * 0.2 + Math.sin(Math.PI * clamp(bt / 0.4)) * 0.8,
-        };
+        base(p, bt1, 0.05, -0.05, 1.25 * k, 0.55);
+        p.armSpread = 0.15 * k - 0.1;
+        p.lean = 0.04;
+        p.head = -0.05 + nod * 0.12;
+        p.bob = breath * 0.2 + Math.sin(Math.PI * clamp(bt / 0.4)) * 0.8;
       }
+      p.mood = 'happy';
       turn = 0.3;
       break;
     }
     case 'sign':
       // Signs the envelope, then offers a handshake with a polite bow.
-      if (bt < 1.2)
-        pose = {
-          legL: 0,
-          legR: 0,
-          armL: 0.9,
-          armR: 1.2 + Math.sin(t * 16) * 0.12,
-          head: 0.4 + Math.sin(t * 16) * 0.02,
-          lean: 0.08,
-          bob: breath * 0.2,
-        };
-      else {
+      if (bt < 1.2) {
+        base(p, bt1, 0, 0, 0.9, 1.2 + Math.sin(t * 16) * 0.12);
+        p.head = 0.4 + Math.sin(t * 16) * 0.02;
+        p.gaze = -0.5;
+        p.lean = 0.08;
+        p.bob = breath * 0.2;
+        p.mood = 'focus';
+      } else {
         const k = clamp((bt - 1.2) / 0.5);
         const bow = Math.sin(Math.PI * k) * (grand ? 0.24 : 0.14);
-        pose = {
-          legL: 0,
-          legR: 0,
-          armL: grand ? 0.35 * k : 0.1,
-          armR: mix(1.2, 1.4, smooth(k)) + Math.sin(t * 5) * 0.06 * k,
-          armSpread: grand ? 0.3 * k : 0,
-          head: -0.05 + bow,
-          lean: bow,
-          bob: Math.sin(t * 2) * 0.3,
-        };
+        base(
+          p,
+          bt1,
+          0,
+          0,
+          grand ? 0.35 * k : 0.1,
+          mix(1.2, 1.4, smooth(k)) + Math.sin(t * 5) * 0.06 * k,
+        );
+        p.armSpread = grand ? 0.3 * k : 0;
+        p.head = -0.05 + bow;
+        p.lean = bow;
+        p.bob = Math.sin(t * 2) * 0.3;
+        p.mood = 'happy';
       }
       turn = bt < 1.2 ? 0.4 : 0.8;
       break;
-    default: {
-      // Waiting: Julien upright with his tablet, Rodolphe chest out, hands open.
-      const p = idlePose(t);
-      pose = {
-        ...p,
-        head: glance + Math.sin(t * 0.7) * 0.05,
-        lean: grand ? -0.04 + p.lean : 0.02 + p.lean,
-        armSpread: grand ? 0.14 : 0.03,
-        armR: grand ? p.armR : 0.75,
-      };
+    default:
+      // Waiting: each in character (see bossIdle()).
+      turn = bossIdle(p, t, grand, glance);
       break;
-    }
   }
-  pose.mood = BOSS_MOOD[b.state];
-  pose.blink = blinkAt(t + 1.3);
-  return { pose, y, turn, tint, facing };
+  const st = b.state;
+  if (st === 'rackDrop' || st === 'cables' || st === 'consult' || st === 'volley') p.mood = 'focus';
+  if (st === 'zones' || st === 'fan') p.mood = 'happy';
+  if (st === 'dash' && bt < 0.85) p.mood = 'focus';
+  lowArms(p);
+  const out = BOSS_OUT;
+  out.pose = p;
+  out.y = y;
+  out.turn = turn;
+  out.tint = tint;
+  out.facing = facing;
+  return out;
+}
+
+const HIT_TINT = [1.6, 1.3, 1.2];
+
+/**
+ * Hit by a CR while consulting (0.6 s): a clear recoil, then each takes it in his
+ * own way. Julien rocks back clutching the tablet to his chest, then composes
+ * himself with a crisp nod; Rodolphe staggers back with his arms thrown open, then
+ * lays a hand on his heart and laughs it off like a good sport ("touché!").
+ * @param {Required<Pose>} p @param {number} bt Seconds since the hit. @param {number} t
+ * @param {boolean} grand
+ */
+function hitPose(p, bt, t, grand) {
+  const w = settle(bt);
+  // Recoil peaks fast, then recovers over the rest of the state.
+  const jolt = Math.min(1, bt / 0.06) * (1 - smooth(clamp((bt - 0.12) / 0.4)));
+  const after = smooth(clamp((bt - 0.2) / 0.25));
+  if (grand) {
+    base(
+      p,
+      0,
+      mix(-0.3, 0.05, after),
+      mix(0.45, -0.05, after),
+      mix(0.45, 1.15, after) + w * 0.2,
+      mix(0.45, 0.45, after) - w * 0.2,
+    );
+    p.armSpread = mix(1.4, -0.35, after);
+    p.lean = -0.4 * jolt + w * 0.1 - 0.04 * after;
+    p.squash = 0.09 * jolt + w * 0.05;
+    p.head = -0.3 * jolt + w * 0.15 - 0.15 * after + Math.max(0, Math.sin(t * 13)) * 0.04 * after;
+    p.bob = Math.max(0, Math.sin(t * 13)) * 0.4 * after;
+    p.hem = 0.45 * jolt + w * 0.2;
+    p.mood = bt < 0.22 ? 'ouch' : 'happy';
+  } else {
+    const nod = Math.sin(Math.PI * clamp((bt - 0.32) / 0.22));
+    base(
+      p,
+      0,
+      mix(-0.2, 0.04, after),
+      mix(0.3, -0.04, after),
+      mix(0.55, 0.35, after),
+      mix(0.6, 0.8, after) - w * 0.12,
+    );
+    p.armSpread = mix(-0.45, -0.1, after);
+    p.lean = -0.28 * jolt + w * 0.08;
+    p.squash = 0.06 * jolt + w * 0.04;
+    p.head = -0.25 * jolt + w * 0.12 + nod * 0.16;
+    p.gaze = nod * 0.6;
+    p.hem = 0.25 * jolt;
+    p.mood = bt < 0.22 ? 'ouch' : 'focus';
+  }
+  p.blink = 0;
+}
+
+/**
+ * Bosses waiting (before the duel, during the dialogues): Julien works through his
+ * tablet, glancing up at the hero over his glasses, then lowers it for a word;
+ * Rodolphe addresses the crowd with both arms open (symmetric, nothing like a wave),
+ * looks round the room, stresses a point with both hands, gathers them in. Returns
+ * the body turn.
+ * @param {Required<Pose>} p @param {number} t @param {boolean} grand @param {number} glance
+ */
+function bossIdle(p, t, grand, glance) {
+  idlePose(t, p);
+  p.blink = blinkAt(t + 1.3);
+  const breath = Math.sin(t * 2.2);
+  if (!grand) {
+    const k = t % 9;
+    const up = span(k, -1, 6.4, 0.45) + span(k, 8.2, 10, 0.45);
+    const tap = Math.max(0, Math.sin(t * 9)) ** 3 * span(k, 0.6, 3.6, 0.3);
+    const peek = span(k, 2.2, 3.4, 0.25) + span(k, 4.6, 5.6, 0.25);
+    const word = span(k, 6.4, 8.4, 0.4);
+    p.armR = mix(0.35, 0.95, up) + Math.sin(t * 1.7) * 0.03;
+    p.armL = mix(p.armL + 0.05, 0.8 + tap * 0.14, up * (1 - peek * 0.4));
+    p.armSpread = mix(0.03, -0.3, up);
+    p.head = mix(glance + Math.sin(t * 0.7) * 0.05, mix(0.42, 0.3, peek), up);
+    p.gaze =
+      mix(0, mix(-0.35, 1, peek), up) + word * Math.sin(Math.PI * clamp((k - 6.6) / 0.5)) * 0.4;
+    p.lean = 0.02 + p.lean + up * 0.03;
+    p.head += word * Math.sin(Math.PI * clamp((k - 6.6) / 0.5)) * 0.1;
+    p.mood = up > 0.5 ? 'focus' : 'neutral';
+    return 1;
+  }
+  const k = t % 8;
+  const open = span(k, -1, 2.8, 0.5) + span(k, 6.4, 9, 0.5);
+  const stress = span(k, 2.6, 4.8, 0.3);
+  const gather = span(k, 4.6, 6.6, 0.4);
+  // Beats of the speech: both hands press forward together on each point.
+  const beat = Math.max(0, Math.sin((k - 2.6) * 7)) ** 2 * stress;
+  const arms = 0.12 + open * 0.6 + stress * (0.85 + beat * 0.2) + gather * 0.7;
+  p.armL = arms;
+  p.armR = arms;
+  p.armSpread = open * 1.05 + stress * 0.4 - gather * 0.25 + 0.14 * (1 - open - stress - gather);
+  p.lean = -0.04 - open * 0.05 + beat * 0.05 + breath * 0.015;
+  p.head = -0.12 * open + beat * 0.08 + gather * 0.12 + Math.sin(t * 0.7) * 0.04;
+  p.bob = breath * 0.3 + open * Math.sin(t * 1.2) * 0.2;
+  p.mood = open + stress > 0.5 ? 'happy' : 'neutral';
+  // Faces the audience (the camera), looking round it: one side, then the other.
+  return 0.3 + Math.sin(t * 0.8) * 0.22 * (open + stress);
 }
 
 /**
  * Airborne body, from vertical speed. Rising: the leading knee drives up, the back
  * leg trails, the arms swing through. Falling: legs reach for the floor, arms rise
  * for balance. Kévin drives harder and spreads wider; Charline stays long and light.
- * @param {number} vy @param {number} jump @param {number} t @param {boolean} kev
- * @returns {Pose}
+ * @param {Required<Pose>} p @param {number} vy @param {number} jump @param {number} t
+ * @param {boolean} kev
+ * @returns {Required<Pose>} `p`.
  */
-function airPose(vy, jump, t, kev) {
+function airPose(p, vy, jump, t, kev) {
   const rise = clamp(vy / jump);
   const fall = clamp(-vy / 14);
   // Apex: a loose arm flail while weightless.
   const apex = clamp(1 - Math.abs(vy) / 3.5);
   const flail = Math.sin(t * 15) * (kev ? 0.3 : 0.4) * apex;
-  if (vy > 0)
-    return {
-      legL: mix(0.55, kev ? 1.2 : 1.1, rise),
-      legR: mix(-0.1, kev ? -0.35 : -0.55, rise),
-      armL: mix(0.6, kev ? -0.8 : -1.0, rise) + flail,
-      armR: mix(1.2, kev ? 1.6 : 1.7, rise) - flail,
-      armSpread: (kev ? 0.28 : 0.15) + apex * 0.3,
-      lean: 0.18 * rise + 0.06,
-      head: -0.12 * rise,
-      squash: (kev ? -0.07 : -0.09) * rise,
-      // Hair and coat tails trail down while rising, float up at the apex.
-      hair: 0.05 + apex * 0.2,
-      hem: 0.1 + apex * 0.25,
-    };
-  return {
-    legL: mix(0.55, 0.25, fall),
-    legR: mix(-0.1, 0.05, fall),
-    armL: mix(0.6, 1.35, fall) + flail,
-    armR: mix(1.2, 1.5, fall) - flail,
-    armSpread: (kev ? 0.3 : 0.15) + apex * 0.3 + fall * (kev ? 0.8 : 0.65),
-    lean: mix(0.06, -0.08, fall),
-    head: mix(0, 0.15, fall),
-    squash: -0.04 * fall,
-    hair: 0.25 + fall * 0.55,
-    hem: 0.3 + fall * 0.6,
-  };
+  if (vy > 0) {
+    base(
+      p,
+      t,
+      mix(0.55, kev ? 1.2 : 1.1, rise),
+      mix(-0.1, kev ? -0.35 : -0.55, rise),
+      mix(0.6, kev ? -0.8 : -1.0, rise) + flail,
+      mix(1.2, kev ? 1.45 : 1.5, rise) - flail,
+    );
+    p.armSpread = (kev ? 0.28 : 0.15) + apex * 0.3;
+    p.lean = 0.18 * rise + 0.06;
+    p.head = -0.12 * rise;
+    p.squash = (kev ? -0.07 : -0.09) * rise;
+    // Hair and coat tails trail down while rising, float up at the apex.
+    p.hair = 0.05 + apex * 0.2;
+    p.hem = 0.1 + apex * 0.25;
+    // Pushing off: teeth gritted on the way up, relaxed at the top.
+    p.mood = rise > 0.55 ? 'effort' : 'neutral';
+    return p;
+  }
+  base(
+    p,
+    t,
+    mix(0.55, 0.25, fall),
+    mix(-0.1, 0.05, fall),
+    mix(0.6, 1.35, fall) + flail,
+    mix(1.2, 1.45, fall) - flail,
+  );
+  p.armSpread = (kev ? 0.3 : 0.15) + apex * 0.3 + fall * (kev ? 0.8 : 0.65);
+  p.lean = mix(0.06, -0.08, fall);
+  p.head = mix(0, 0.15, fall);
+  p.gaze = -0.6 * fall;
+  p.squash = -0.04 * fall;
+  p.hair = 0.25 + fall * 0.55;
+  p.hem = 0.3 + fall * 0.6;
+  p.mood = fall > 0.6 ? 'focus' : 'neutral';
+  return p;
 }
 
 /**
+ * The hero's pose, face included: neutral by default, effort when pushing off,
+ * hanging, climbing or skidding, ouch when hurt, joy on success. Shared and
+ * rewritten by every call (see heroLayers() for the scene's extra layers).
  * @param {Sim} sim
  * @param {number} t
  * @param {number} still Seconds standing still.
- * @returns {Pose} A fresh pose, or the shared idle pose (see idlePose()).
+ * @returns {Required<Pose>}
  */
 export function heroPose(sim, t, still) {
+  const p = heroBody(sim, t, still);
+  const h = sim.hero;
+  if (h.state === 'hang' || h.state === 'climb' || sim.won) return p;
+  return lowArms(p);
+}
+
+/** @param {Sim} sim @param {number} t @param {number} still @returns {Required<Pose>} */
+function heroBody(sim, t, still) {
   const h = sim.hero;
   const kev = sim.heroId !== 'charline';
+  const p = HERO;
   if (h.state === 'hang') {
     // Hanging from the ledge: a pendulum, legs trailing the swing. Kévin's weight
     // stretches him and slows the swing; Charline keeps her knees tucked.
@@ -544,17 +688,22 @@ export function heroPose(sim, t, still) {
     const settleIn = kev
       ? Math.exp(-k * 4) * Math.sin(k * 12)
       : Math.exp(-k * 6) * Math.sin(k * 18);
-    return {
-      legL: (kev ? 0.1 : 0.32) + lag * 0.14 + settleIn * 0.3,
-      legR: (kev ? -0.1 : 0.12) + lag * 0.1 + settleIn * 0.2,
-      armL: Math.PI * 0.95 + s * 0.03,
-      armR: Math.PI * 0.95 - s * 0.03,
-      lean: 0.08 + s * 0.06,
-      head: -0.15 + s * 0.03,
-      squash: (kev ? -0.06 : -0.03) + settleIn * 0.05,
-      hair: -0.12 - lag * 0.12 + settleIn * 0.3,
-      hem: 0.05 + lag * 0.08 + settleIn * 0.4,
-    };
+    base(
+      p,
+      t,
+      (kev ? 0.1 : 0.32) + lag * 0.14 + settleIn * 0.3,
+      (kev ? -0.1 : 0.12) + lag * 0.1 + settleIn * 0.2,
+      Math.PI * 0.95 + s * 0.03,
+      Math.PI * 0.95 - s * 0.03,
+    );
+    p.lean = 0.08 + s * 0.06;
+    p.head = -0.15 + s * 0.03;
+    p.gaze = 0.5;
+    p.squash = (kev ? -0.06 : -0.03) + settleIn * 0.05;
+    p.hair = -0.12 - lag * 0.12 + settleIn * 0.3;
+    p.hem = 0.05 + lag * 0.08 + settleIn * 0.4;
+    p.mood = 'effort';
+    return p;
   }
   if (h.state === 'climb') {
     // Pull-up then push-over: hands go from overhead to pressing down behind,
@@ -569,19 +718,24 @@ export function heroPose(sim, t, still) {
         : mix(0.9, -0.35, smooth((k - 0.5) / 0.5));
     const pull = k < 0.4 ? Math.sin((Math.PI * k) / 0.4) : 0;
     const push = Math.max(0, (k - 0.8) / 0.2);
-    return {
-      legL: arc * (kev ? 1.35 : 1.7),
-      legR: Math.sin(Math.PI * Math.min(1, k * 1.4)) * (kev ? 0.5 : 0.7) - (kev ? 0.15 : 0.4) * e,
-      armL: arm,
-      armR: arm,
-      armSpread: arc * (kev ? 0.38 : 0.25),
-      lean: arc * (kev ? 0.82 : 0.7) + 0.1 * e,
-      head: -0.25 * (1 - e) + arc * 0.2,
-      squash: (kev ? -0.1 : -0.06) * pull + (kev ? 0.11 : 0.06) * push,
-      bob: arc * (kev ? 1.0 : 1.5),
-      hair: 0.15 + arc * 0.35,
-      hem: arc * 0.5,
-    };
+    base(
+      p,
+      t,
+      arc * (kev ? 1.35 : 1.7),
+      Math.sin(Math.PI * Math.min(1, k * 1.4)) * (kev ? 0.5 : 0.7) - (kev ? 0.15 : 0.4) * e,
+      arm,
+      arm,
+    );
+    p.armSpread = arc * (kev ? 0.38 : 0.25);
+    p.lean = arc * (kev ? 0.82 : 0.7) + 0.1 * e;
+    p.head = -0.25 * (1 - e) + arc * 0.2;
+    p.squash = (kev ? -0.1 : -0.06) * pull + (kev ? 0.11 : 0.06) * push;
+    p.bob = arc * (kev ? 1.0 : 1.5);
+    p.hair = 0.15 + arc * 0.35;
+    p.hem = arc * 0.5;
+    // Strains on the pull, relieved once over the top.
+    p.mood = k < 0.8 ? 'effort' : 'neutral';
+    return p;
   }
   if (h.state === 'dead') {
     const st = h.stateTime;
@@ -590,36 +744,44 @@ export function heroPose(sim, t, still) {
       const flinch = clamp(1 - st / 0.08);
       const k = clamp((st - 0.06) / 0.29);
       const up = backOut(Math.min(1, k * 2.5));
-      return {
-        legL: 0.4 * k + 0.25 * flinch,
-        legR: -0.4 * k + 0.25 * flinch,
-        armL: mix(0.5, 1.45, up) + Math.sin(t * 40) * 0.06 * k,
-        armR: mix(0.5, 1.45, up) - Math.sin(t * 40) * 0.06 * k,
-        armSpread: 1.0 * k,
-        squash: mix(0.1, -0.12, k),
-        head: mix(0.2, -0.3, k),
-        bob: Math.sin(Math.PI * k) * (kev ? 1.6 : 2.4),
-        hair: 0.6 * k,
-        hem: 0.5 * k,
-      };
+      base(
+        p,
+        t,
+        0.4 * k + 0.25 * flinch,
+        -0.4 * k + 0.25 * flinch,
+        mix(0.5, 1.45, up) + Math.sin(t * 40) * 0.06 * k,
+        mix(0.5, 1.45, up) - Math.sin(t * 40) * 0.06 * k,
+      );
+      p.armSpread = 1.0 * k;
+      p.squash = mix(0.1, -0.12, k);
+      p.head = mix(0.2, -0.3, k);
+      p.bob = Math.sin(Math.PI * k) * (kev ? 1.6 : 2.4);
+      p.hair = 0.6 * k;
+      p.hem = 0.5 * k;
+    } else {
+      // Then a cartoon flop onto the back, arms spread out to the sides: Kévin drops
+      // heavily and bounces once, Charline lands lighter, legs kicking up.
+      const k = Math.min(1, (st - 0.35) / (kev ? 0.34 : 0.44));
+      const w = settle(Math.max(0, st - (kev ? 0.69 : 0.79)));
+      base(
+        p,
+        t,
+        (kev ? 1.1 : 1.45) * k + w * 0.3,
+        (kev ? 0.55 : 0.85) * k + w * 0.4,
+        1.45 - w * 0.2,
+        1.3 + w * 0.2,
+      );
+      p.armSpread = 1.0 + 0.25 * k;
+      p.lean = -1.1 * k;
+      p.squash = (kev ? 0.24 : 0.16) * k + w * (kev ? 0.08 : 0.04);
+      p.bob = -6 * k;
+      p.head = -0.2 * k;
+      p.hair = 0.5 * (1 - k) + w * 0.4;
+      p.hem = 0.6 * (1 - k) - w * 0.4;
     }
-    // Then a cartoon flop: Kévin drops heavily and bounces once, Charline lands
-    // lighter, legs kicking up.
-    const k = Math.min(1, (st - 0.35) / (kev ? 0.34 : 0.44));
-    const w = settle(Math.max(0, st - (kev ? 0.69 : 0.79)));
-    return {
-      legL: (kev ? 1.1 : 1.45) * k + w * 0.3,
-      legR: (kev ? 0.55 : 0.85) * k + w * 0.4,
-      armL: 2.4 - w * 0.3,
-      armR: 1.8 + w * 0.3,
-      armSpread: 0.3 * k,
-      lean: -1.1 * k,
-      squash: (kev ? 0.24 : 0.16) * k + w * (kev ? 0.08 : 0.04),
-      bob: -6 * k,
-      head: -0.2 * k,
-      hair: 0.5 * (1 - k) + w * 0.4,
-      hem: 0.6 * (1 - k) - w * 0.4,
-    };
+    p.mood = 'ouch';
+    p.blink = 0;
+    return p;
   }
   if (sim.won) {
     // Victory hops with both arms up in a V, pumping in time with the hop (no waving).
@@ -628,37 +790,30 @@ export function heroPose(sim, t, still) {
       // Kévin: big stomping hops, fists high, a heavy squash on each landing.
       const hop = Math.abs(Math.sin(t * 5.5));
       const land = (1 - hop) ** 4;
-      return {
-        legL: hop * 0.35,
-        legR: hop * 0.2,
-        armL: 2.55 + hop * 0.3,
-        armR: 2.55 + hop * 0.3,
-        armSpread: -0.3 - hop * 0.08,
-        bob: hop * 1.7,
-        head: -0.2 - hop * 0.08,
-        squash: land * 0.15 - hop * 0.03,
-        lean: -0.04 + land * 0.06,
-        hem: 0.15 + hop * 0.5,
-      };
+      base(p, t, hop * 0.35, hop * 0.2, 2.55 + hop * 0.3, 2.55 + hop * 0.3);
+      p.armSpread = -0.3 - hop * 0.08;
+      p.bob = hop * 1.7;
+      p.head = -0.2 - hop * 0.08;
+      p.squash = land * 0.15 - hop * 0.03;
+      p.lean = -0.04 + land * 0.06;
+      p.hem = 0.15 + hop * 0.5;
+    } else {
+      // Charline: light, springy hops with a heel kick, arms in a wide V, hair flying.
+      const ph = t * 7;
+      const hop = Math.abs(Math.sin(ph));
+      // Coming down, the hair floats up.
+      const down = Math.cos(ph) * Math.sin(ph) < 0;
+      base(p, t, -hop * 0.55, -hop * 0.3, 2.65 + hop * 0.2, 2.65 + hop * 0.2);
+      p.armSpread = -0.45 - hop * 0.12;
+      p.bob = hop * 2.6;
+      p.head = -0.22 - hop * 0.08;
+      p.squash = (1 - hop) ** 4 * 0.07 - hop * 0.05;
+      p.lean = 0.05 * hop;
+      p.hair = 0.15 + hop * (down ? 0.35 : 0.15);
+      p.hem = 0.2 + hop * 0.4;
     }
-    // Charline: light, springy hops with a heel kick, arms in a wide V, hair flying.
-    const ph = t * 7;
-    const hop = Math.abs(Math.sin(ph));
-    // Coming down, the hair floats up.
-    const down = Math.cos(ph) * Math.sin(ph) < 0;
-    return {
-      legL: -hop * 0.55,
-      legR: -hop * 0.3,
-      armL: 2.65 + hop * 0.2,
-      armR: 2.65 + hop * 0.2,
-      armSpread: -0.45 - hop * 0.12,
-      bob: hop * 2.6,
-      head: -0.22 - hop * 0.08,
-      squash: (1 - hop) ** 4 * 0.07 - hop * 0.05,
-      lean: 0.05 * hop,
-      hair: 0.15 + hop * (down ? 0.35 : 0.15),
-      hem: 0.2 + hop * 0.4,
-    };
+    p.mood = 'happy';
+    return p;
   }
   if (h.state === 'air') {
     const jump = sim.stats.jump;
@@ -668,58 +823,72 @@ export function heroPose(sim, t, still) {
       const since = 1.4 - h.invuln;
       const w = settle(since);
       const flail = kev ? 0.06 : 0.12;
-      return {
-        legL: 0.7 * k + 0.2 + w * 0.15,
-        legR: 0.35 * k - w * 0.1,
-        armL: 1.55 + Math.sin(t * 30) * flail,
-        armR: 1.3 - Math.sin(t * 30) * flail,
-        armSpread: kev ? 0.7 : 0.55,
-        lean: -0.5 * k - w * 0.12,
-        head: -0.35 * k + w * 0.15,
-        squash: -0.06 * k + w * 0.04,
-        hair: 0.7 * k + w * 0.3,
-        hem: 0.6 * k,
-      };
+      base(
+        p,
+        t,
+        0.7 * k + 0.2 + w * 0.15,
+        0.35 * k - w * 0.1,
+        1.4 + Math.sin(t * 30) * flail,
+        1.25 - Math.sin(t * 30) * flail,
+      );
+      p.armSpread = kev ? 0.7 : 0.55;
+      p.lean = -0.5 * k - w * 0.12;
+      p.head = -0.35 * k + w * 0.15;
+      p.squash = -0.06 * k + w * 0.04;
+      p.hair = 0.7 * k + w * 0.3;
+      p.hem = 0.6 * k;
+      p.mood = 'ouch';
+      p.blink = 0;
+      return p;
     }
-    // Charline's double jump: a tucked front flip, opening out into the fall.
+    // Charline's double jump: a tucked front flip, opening out into the fall. She
+    // enjoys this one.
     if (h.airJumps < sim.stats.airJumps && h.vy > -4) {
       const v0 = jump * 0.9;
-      const p = clamp((v0 - h.vy) / (v0 + 4));
-      const tuck = Math.sin(Math.PI * p);
-      const base = airPose(h.vy, jump, t, kev);
-      return {
-        legL: mix(base.legL, 2.0, tuck),
-        legR: mix(base.legR, 1.85, tuck),
-        armL: mix(base.armL, 1.1, tuck),
-        armR: mix(base.armR, 1.1, tuck),
-        armSpread: mix(base.armSpread ?? 0, -0.1, tuck),
-        lean: mix(base.lean ?? 0, 0.75, tuck),
-        head: mix(base.head ?? 0, 0.45, tuck),
-        squash: mix(base.squash ?? 0, 0.06, tuck),
-        flip: TAU * smooth(p),
-        hair: mix(base.hair ?? 0, 0.55, tuck),
-        hem: mix(base.hem ?? 0, 0.6, tuck),
-      };
+      const k = clamp((v0 - h.vy) / (v0 + 4));
+      const tuck = Math.sin(Math.PI * k);
+      const a = airPose(AIR, h.vy, jump, t, kev);
+      base(
+        p,
+        t,
+        mix(a.legL, 2.0, tuck),
+        mix(a.legR, 1.85, tuck),
+        mix(a.armL, 1.1, tuck),
+        mix(a.armR, 1.1, tuck),
+      );
+      p.armSpread = mix(a.armSpread, -0.1, tuck);
+      p.lean = mix(a.lean, 0.75, tuck);
+      p.head = mix(a.head, 0.45, tuck);
+      p.squash = mix(a.squash, 0.06, tuck);
+      p.flip = TAU * smooth(k);
+      p.hair = mix(a.hair, 0.55, tuck);
+      p.hem = mix(a.hem, 0.6, tuck);
+      p.mood = tuck > 0.3 ? 'happy' : a.mood;
+      return p;
     }
-    return airPose(h.vy, jump, t, kev);
+    return airPose(p, h.vy, jump, t, kev);
   }
   const speed = Math.abs(h.vx);
   // Skid: still sliding one way while facing the other, arms windmilling; the coat
   // swings forward with the momentum.
   if (speed > 2 && Math.sign(h.vx) !== h.facing) {
     const j = Math.sin(t * 45) * 0.05;
-    return {
-      legL: (kev ? 0.8 : 0.7) + j,
-      legR: -0.5 - j,
-      armL: -1 + Math.sin(t * 16) * 0.25,
-      armR: 1.3 - Math.sin(t * 16) * 0.25,
-      armSpread: kev ? 0.4 : 0.25,
-      lean: kev ? -0.42 : -0.32,
-      head: -0.15,
-      squash: kev ? 0.09 : 0.05,
-      hair: -0.25,
-      hem: -0.35,
-    };
+    base(
+      p,
+      t,
+      (kev ? 0.8 : 0.7) + j,
+      -0.5 - j,
+      -1 + Math.sin(t * 16) * 0.25,
+      1.3 - Math.sin(t * 16) * 0.25,
+    );
+    p.armSpread = kev ? 0.4 : 0.25;
+    p.lean = kev ? -0.42 : -0.32;
+    p.head = -0.15;
+    p.squash = kev ? 0.09 : 0.05;
+    p.hair = -0.25;
+    p.hem = -0.35;
+    p.mood = 'effort';
+    return p;
   }
   if (speed > 0.3) {
     const ph = h.run * 2.3;
@@ -729,107 +898,209 @@ export function heroPose(sim, t, still) {
     const s = Math.sin(ph);
     // Knee drive: the forward swing goes higher and snappier than the push-off.
     const drive = kev ? 1.1 : 1.2;
-    /** @param {number} v */
-    const leg = (v) => (v > 0 ? v * mix(0.55, drive, r) : v * mix(0.5, 0.75, r)) * a ** 0.4;
+    const lift = mix(0.55, drive, r) * a ** 0.4;
+    const push = mix(0.5, 0.75, r) * a ** 0.4;
     // Contact (legs apart) is low, passing (legs together) and flight are high.
     const contact = Math.abs(Math.sin(ph + 0.25));
     const arms = mix(0.4, kev ? 0.95 : 0.85, r) * a ** 0.5;
     // Hair and coat tails trail behind, bouncing a beat after each footfall.
     const lagBounce = Math.sin(ph * 2 - 0.9);
-    return {
-      legL: leg(s),
-      legR: leg(-s),
-      armL: -Math.sin(ph - 0.3) * arms + r * 0.15,
-      armR: Math.sin(ph - 0.3) * arms + r * 0.15,
-      armSpread: (kev ? 0.08 : 0.04) + r * (kev ? 0.07 : 0.03),
-      lean: mix(0.04, kev ? 0.28 : 0.24, r) * a,
-      bob: (1 - contact) * mix(0.5, kev ? 1.5 : 2.1, r) * a,
-      head: mix(0, -0.06, r) + Math.cos(ph * 2) * (kev ? 0.05 : 0.035) * a,
-      squash: contact ** 6 * (kev ? 0.075 : 0.035) * r,
-      hair: (0.1 + 0.3 * r + lagBounce * 0.08) * a,
-      hem: (0.1 + 0.45 * r + lagBounce * 0.12 * r) * a,
-    };
+    base(
+      p,
+      t,
+      s > 0 ? s * lift : s * push,
+      -s > 0 ? -s * lift : -s * push,
+      -Math.sin(ph - 0.3) * arms + r * 0.15,
+      Math.sin(ph - 0.3) * arms + r * 0.15,
+    );
+    p.armSpread = (kev ? 0.08 : 0.04) + r * (kev ? 0.07 : 0.03);
+    p.lean = mix(0.04, kev ? 0.28 : 0.24, r) * a;
+    p.bob = (1 - contact) * mix(0.5, kev ? 1.5 : 2.1, r) * a;
+    p.head = mix(0, -0.06, r) + Math.cos(ph * 2) * (kev ? 0.05 : 0.035) * a;
+    p.squash = contact ** 6 * (kev ? 0.075 : 0.035) * r;
+    p.hair = (0.1 + 0.3 * r + lagBounce * 0.08) * a;
+    p.hem = (0.1 + 0.45 * r + lagBounce * 0.12 * r) * a;
+    return p;
   }
   // Standing. Just stopped: momentum rocks the body forward and back, and the coat
   // and hair follow through (Kévin's heavier sway lasts a little longer).
-  const p = idlePose(t);
+  idlePose(t, p);
   if (kev) {
-    p.armSpread = (p.armSpread ?? 0) + 0.03;
-    p.bob = (p.bob ?? 0) * 1.2;
+    p.armSpread += 0.03;
+    p.bob *= 1.2;
   } else {
     p.legL += Math.sin(t * 0.5) * 0.03;
-    p.lean = (p.lean ?? 0) + Math.sin(t * 0.5) * 0.01;
+    p.lean += Math.sin(t * 0.5) * 0.01;
   }
   if (still < 1.2) {
     const m = kev ? rock(still, 11) * 0.14 : rock(still * 1.3, 14) * 0.09;
-    p.lean = (p.lean ?? 0) + m;
-    p.head = (p.head ?? 0) - m * 0.5;
+    p.lean += m;
+    p.head -= m * 0.5;
     p.hair = -m * 2.5;
     p.hem = -m * 3;
   }
   // Waiting around, each in character: Kévin checks his watch (the planning!),
   // straightens his jacket and taps his foot; Charline checks her phone (a client!),
   // looks up thinking, and stretches her back (arms low: no gesture near the face).
-  if (still > 4 && !(sim.bossActive && !sim.bossDone)) {
-    const k = (still - 4) % 7;
-    if (kev) {
-      if (k < 2.5) {
-        const up = backOut(clamp(k / 0.35));
-        p.armL = 1.6 * up;
-        p.armSpread = -0.4 * up;
-        p.head = 0.35 * up + Math.sin(t * 4) * 0.02;
-        p.mood = 'focus';
-      } else if (k < 4) {
-        // Tugs both jacket fronts straight, with a little shrug.
-        const g = Math.sin(Math.PI * clamp((k - 2.6) / 1.2));
-        const tug = Math.max(0, Math.sin((k - 2.6) * 9)) * g;
-        p.armL = 0.45 * g;
-        p.armR = 0.45 * g;
-        p.armSpread = -0.3 * g;
-        p.bob = (p.bob ?? 0) + tug * 0.4;
-        p.squash = -0.02 * tug;
-        p.head = -0.08 * g;
-        p.hem = 0.15 * tug;
-      } else {
-        const tap = Math.max(0, Math.sin(t * 9));
-        p.legR = tap * 0.3;
-        p.armL = 0.3;
-        p.armR = 0.3;
-        p.armSpread = -0.15;
-        p.bob = tap * 0.3;
-        p.head = -0.08 + tap * 0.03;
-      }
+  if (still > 4 && !(sim.bossActive && !sim.bossDone)) heroIdle(p, t, (still - 4) % 7, kev);
+  return p;
+}
+
+/**
+ * The heroes' idle loops (7 s, after 4 s standing still).
+ * @param {Required<Pose>} p @param {number} t @param {number} k Seconds into the loop.
+ * @param {boolean} kev
+ */
+function heroIdle(p, t, k, kev) {
+  if (kev) {
+    if (k < 2.5) {
+      // The watch: wrist up in front of the chest, a glance down at it.
+      const up = backOut(clamp(k / 0.35));
+      p.armL = 1.5 * up;
+      p.armSpread = -0.4 * up;
+      p.head = 0.35 * up + Math.sin(t * 4) * 0.02;
+      p.gaze = -0.4 * up;
+      p.mood = 'focus';
+    } else if (k < 4) {
+      // Tugs both jacket fronts straight, with a little shrug.
+      const g = Math.sin(Math.PI * clamp((k - 2.6) / 1.2));
+      const tug = Math.max(0, Math.sin((k - 2.6) * 9)) * g;
+      p.armL = 0.45 * g;
+      p.armR = 0.45 * g;
+      p.armSpread = -0.3 * g;
+      p.bob += tug * 0.4;
+      p.squash = -0.02 * tug;
+      p.head = -0.08 * g;
+      p.hem = 0.15 * tug;
     } else {
-      if (k < 3) {
-        const up = backOut(clamp(k / 0.35));
-        const scroll = Math.max(0, Math.sin(t * 6)) ** 3;
-        p.armR = 1.4 * up + scroll * 0.06;
-        p.head = 0.3 * up;
-        p.lean = 0.04;
-        p.legL = Math.max(0, Math.sin(t * 1.5)) * 0.1;
-        p.mood = 'happy';
-      } else if (k < 4.5) {
-        // Looks up, thinking it over, weight on one foot.
-        const g = smooth(clamp((k - 3) / 0.4)) * (1 - smooth(clamp((k - 4.1) / 0.4)));
-        p.head = mix(p.head ?? 0, -0.3, g);
-        p.lean = mix(p.lean ?? 0, -0.05, g);
-        p.legL = mix(p.legL, -0.12, g);
-        p.armL = mix(p.armL, 0.15, g);
-        p.armSpread = mix(p.armSpread ?? 0, 0.12, g);
-      } else {
-        const st = smooth(clamp((k - 4.5) / 0.6)) * (1 - smooth(clamp((k - 6.4) / 0.6)));
-        // Back stretch with the arms low: hands behind her back, chest out, up on her toes.
-        p.armL = mix(p.armL, -0.45, st);
-        p.armR = mix(p.armR, -0.45, st);
-        p.armSpread = mix(p.armSpread ?? 0, -0.12, st);
-        p.lean = -0.12 * st;
-        p.head = -0.2 * st;
-        p.squash = -0.04 * st;
-        p.bob = (p.bob ?? 0) + st * 0.8;
-        if (st > 0.8) p.blink = 1;
-      }
+      const tap = Math.max(0, Math.sin(t * 9));
+      p.legR = tap * 0.3;
+      p.armL = 0.3;
+      p.armR = 0.3;
+      p.armSpread = -0.15;
+      p.bob = tap * 0.3;
+      p.head = -0.08 + tap * 0.03;
+      p.gaze = 0.3;
     }
+    return;
   }
+  if (k < 3) {
+    const up = backOut(clamp(k / 0.35));
+    const scroll = Math.max(0, Math.sin(t * 6)) ** 3;
+    p.armR = 1.4 * up + scroll * 0.06;
+    p.head = 0.3 * up;
+    p.gaze = -0.4 * up;
+    p.lean = 0.04;
+    p.legL = Math.max(0, Math.sin(t * 1.5)) * 0.1;
+    p.mood = 'happy';
+  } else if (k < 4.5) {
+    // Looks up, thinking it over, weight on one foot.
+    const g = smooth(clamp((k - 3) / 0.4)) * (1 - smooth(clamp((k - 4.1) / 0.4)));
+    p.head = mix(p.head, -0.3, g);
+    p.gaze = 0.7 * g;
+    p.lean = mix(p.lean, -0.05, g);
+    p.legL = mix(p.legL, -0.12, g);
+    p.armL = mix(p.armL, 0.15, g);
+    p.armSpread = mix(p.armSpread, 0.12, g);
+  } else {
+    const st = smooth(clamp((k - 4.5) / 0.6)) * (1 - smooth(clamp((k - 6.4) / 0.6)));
+    // Back stretch with the arms low: hands behind her back, chest out, up on her toes.
+    p.armL = mix(p.armL, -0.45, st);
+    p.armR = mix(p.armR, -0.45, st);
+    p.armSpread = mix(p.armSpread, -0.12, st);
+    p.lean = -0.12 * st;
+    p.head = -0.2 * st;
+    p.squash = -0.04 * st;
+    p.bob += st * 0.8;
+    if (st > 0.8) p.blink = 1;
+  }
+}
+
+/**
+ * Seconds since the hero's last moves (negative or huge: long ago), as tracked by
+ * the scene from the sim events, and how far the last landing dropped.
+ * @typedef {Object} HeroBeats
+ * @property {number} land Since landing ('land' or 'step').
+ * @property {number} jump Since taking off ('jump' or 'airjump').
+ * @property {number} throw Since throwing a CR.
+ * @property {number} joy Since a small success (ticket, secret, key, checkpoint).
+ * @property {number} drop Tiles fallen from the top of the arc to that landing.
+ */
+
+/**
+ * Layers on top of heroPose() (in place): the throwing arm, a landing squash that
+ * grows with the drop (and settles with a small rebound), a stretch on take-off,
+ * a grin after a small success.
+ * @param {Pose} p @param {Sim} sim @param {HeroBeats} beats
+ * @returns {Pose} `p`.
+ */
+export function heroLayers(p, sim, beats) {
+  const h = sim.hero;
+  const kev = sim.heroId !== 'charline';
+  const free = h.state === 'ground' || h.state === 'air';
+  // Throw: a flat sidearm sweep at chest height, the body leaning into it.
+  const th = beats.throw;
+  if (free && th >= 0 && th < 0.28) {
+    const swing = th < 0.08 ? -1.3 * (th / 0.08) : mix(-1.3, SHOULDER, smooth((th - 0.08) / 0.2));
+    p.armR = swing;
+    p.lean = (p.lean ?? 0) + 0.12;
+    if (p.mood === 'neutral' || p.mood === undefined) p.mood = 'effort';
+  }
+  // Landing: the higher the drop, the deeper and longer the squash; arms dip out,
+  // chin down, then a small rebound. Kévin lands heavier.
+  const land = beats.land;
+  const drop = clamp(beats.drop, 0, 8);
+  const dur = 0.11 + drop * 0.025;
+  if (h.state === 'ground' && land >= 0 && land < dur + 0.14) {
+    const amt = (0.05 + drop * 0.026) * (kev ? 1.15 : 0.85);
+    if (land < dur) {
+      const k = 1 - land / dur;
+      const e = k * k;
+      p.squash = (p.squash ?? 0) + amt * e;
+      p.armSpread = (p.armSpread ?? 0) + amt * 1.6 * e;
+      p.head = (p.head ?? 0) + amt * 1.4 * e;
+      p.lean = (p.lean ?? 0) + amt * 0.7 * e;
+      p.hem = (p.hem ?? 0) - amt * 2 * e;
+      p.hair = (p.hair ?? 0) + amt * 2.5 * e;
+      if (drop > 3 && p.mood === 'neutral') p.mood = 'effort';
+    } else p.squash = (p.squash ?? 0) - amt * 0.3 * Math.sin((Math.PI * (land - dur)) / 0.14);
+  }
+  // Take-off: a quick stretch, longest on a full jump.
+  const jump = beats.jump;
+  if (h.state === 'air' && jump >= 0 && jump < 0.13) {
+    const k = 1 - jump / 0.13;
+    p.squash = (p.squash ?? 0) - (kev ? 0.1 : 0.12) * k;
+  }
+  if (h.state !== 'dead' && h.invuln <= 1.1 && beats.joy >= 0 && beats.joy < 0.7)
+    if (p.mood !== 'effort' || beats.joy < 0.35) p.mood = 'happy';
+  return p;
+}
+
+/**
+ * The end party: everybody dances, both arms pumping together in a victory V
+ * (never one hand up: no waving). Shared pose, rewritten by every call.
+ * @param {number} t @param {number} i Dancer index (offsets the beat).
+ * @returns {Required<Pose>}
+ */
+export function dancePose(t, i) {
+  const ph = t * 6 + i * 1.3;
+  const s = Math.sin(ph);
+  const hop = Math.abs(s);
+  const p = base(
+    DANCER,
+    t + i,
+    Math.max(0, s) * 0.7,
+    Math.max(0, -s) * 0.7,
+    2.5 + hop * 0.3,
+    2.5 + hop * 0.3,
+  );
+  p.armSpread = -0.35 - hop * 0.1;
+  p.bob = hop * 2;
+  p.head = Math.sin(ph * 0.5) * 0.2;
+  p.lean = Math.sin(ph * 0.5) * 0.05;
+  p.hem = hop * 0.3;
+  p.hair = hop * 0.3;
+  p.mood = 'happy';
   return p;
 }
 
@@ -838,39 +1109,6 @@ export function blinkAt(t) {
   const k = t % 3.7;
   return k < 0.14 ? Math.sin((Math.PI * k) / 0.14) : 0;
 }
-
-/** Facial expression of a boss for each phase of the duel. @type {Record<string, Pose['mood']>} */
-const BOSS_MOOD = {
-  intro: 'happy',
-  consult: 'focus',
-  hit: 'ouch',
-  phase: 'focus',
-  convinced: 'happy',
-  sign: 'happy',
-  rackDrop: 'focus',
-  cables: 'focus',
-  dash: 'focus',
-  zones: 'happy',
-  fan: 'happy',
-};
-
-/** The shared idle pose, rewritten by every idlePose() call. @type {Required<Pose>} */
-const IDLE = {
-  legL: 0,
-  legR: 0,
-  armL: 0,
-  armR: 0,
-  armSpread: 0,
-  lean: 0,
-  bob: 0,
-  head: 0,
-  squash: 0,
-  blink: 0,
-  mood: 'neutral',
-  hair: 0,
-  hem: 0,
-  flip: 0,
-};
 
 /**
  * Standing: breathing, a slight weight shift, a wandering glance. Writes every
@@ -897,5 +1135,6 @@ export function idlePose(t, out = IDLE) {
   out.hair = Math.sin(t * 2.4 - 0.8) * 0.02;
   out.hem = 0;
   out.flip = 0;
+  out.gaze = 0;
   return out;
 }

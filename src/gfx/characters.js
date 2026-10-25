@@ -36,6 +36,8 @@ import { MAT, rgb } from './voxels.js';
  * @property {string} [badge] Lanyard colour, with an ID badge hanging on the chest.
  * @property {string} [backpack] Backpack colour: straps over the shoulders, the pack on the back.
  * @property {string} [stripe] Sneaker side stripe colour (navy by default).
+ * @property {number} [stature] Leg length factor (1 = the designer-toy heroes): adult
+ *   proportions for the directors, longer thighs and shins, same shoes.
  *
  * @typedef {{mesh: Mesh, upright?: boolean, pivot?: number[]}} Part
  */
@@ -48,6 +50,7 @@ const SHOULDER_X = 0.235;
 const NECK_Y = 0.52;
 const EYE_Y = 0.27; // Eye centre, in head space.
 const FLIP_Y = 0.9; // Body centre a somersault turns around.
+const ANKLE_Y = -0.5; // Below the hip: legs stretch above it, the shoes keep their size.
 
 /** Cat paw prints on the jacket: ring angle (0 = front), height, tilt. */
 const JACKET_PAWS = [
@@ -957,6 +960,31 @@ export function buildCharacter(gl, look) {
         { nu: 5, nv: 8 },
       );
   });
+  // Effort: teeth gritted in a wide, flat grimace, corners pulled down a touch.
+  const mouthEffort = part(gl, (b) => {
+    const w = look.beard ? 0.04 : 0.044,
+      h = 0.017;
+    const cy = my - 0.002;
+    /** Rounded slot, its bottom edge a little lower at the corners. @param {number} kw @param {number} kh */
+    const slot = (kw, kh) => /** @param {number} a */ (a) => {
+      const c = Math.cos(a),
+        sn = Math.sin(a);
+      return [kw * spow(c, 0.6), kh * spow(sn, 0.7) - 0.25 * kh * c * c];
+    };
+    if (lips) decal(b, 0, cy, slot(w + 0.008, h + 0.008), 0.002, 0.002, lips, { mat: gloss });
+    decal(b, 0, cy, slot(w, h), 0.004, 0.001, mouthDark, { nu: 22 });
+    decal(b, 0, cy, slot(w * 0.84, h * 0.62), 0.0055, 0.001, '#ffffff', { nu: 22 });
+    tube(
+      b,
+      (t) => {
+        const x = lerp(-w * 0.8, w * 0.8, t);
+        return [x, cy, faceZ(x, cy, 0.0065)];
+      },
+      () => [0.0022, 0.002],
+      '#b9b2bd',
+      { nu: 4, nv: 3 },
+    );
+  });
 
   // Long hair down the back, as its own part so it sways with the body.
   const longHair =
@@ -1435,6 +1463,7 @@ export function buildCharacter(gl, look) {
 
   // Leg: origin at the hip joint; tapered trousers with a hem, shoes with toe cap and sole.
   const lightShoes = luma(look.shoes) > 0.6;
+  const stature = look.stature ?? 1;
   const sole = lightShoes ? '#c9ccd4' : shade(look.shoes, -0.55);
   const leg = part(gl, (b) => {
     if (skirted) {
@@ -1588,7 +1617,14 @@ export function buildCharacter(gl, look) {
         b.roundedBox([0, -0.608, 0.032], [0.074, 0.013, 0.118], 0.011, sole, { seg: 3 });
       }
     }
+    // Adult legs: thighs and shins stretch, the ankle and shoe below keep their size.
+    if (stature !== 1)
+      for (let i = 1; i < b.pos.length; i += 3) {
+        const y = b.pos[i];
+        b.pos[i] = y > ANKLE_Y ? (y < 0 ? y * stature : y) : y + ANKLE_Y * (stature - 1);
+      }
   });
+  if (stature !== 1) leg.pivot = [HIP_X, HIP_Y - ANKLE_Y * (stature - 1), 0];
 
   /** @type {Part | null} */
   let prop = null;
@@ -1675,10 +1711,12 @@ export function buildCharacter(gl, look) {
     browHappy: brows(0.012, -0.002, 0.018),
     browOuch: brows(0.004, 0.014, 0.006),
     browFocus: brows(-0.008, -0.014, 0.008),
+    browEffort: brows(-0.014, -0.024, 0.003),
     mouthNeutral,
     mouthHappy,
     mouthOuch,
     mouthFocus,
+    mouthEffort,
   };
   if (longHair) parts.hair = longHair;
   if (tails) parts.tails = tails;
@@ -1699,13 +1737,21 @@ export function buildCharacter(gl, look) {
  * @property {number} [head] Head nod.
  * @property {number} [squash] Vertical squash (−0.2..0.2).
  * @property {number} [blink] Eyelids, 0 = open, 1 = closed.
- * @property {'neutral'|'happy'|'ouch'|'focus'} [mood] Facial expression.
+ * @property {'neutral'|'happy'|'ouch'|'focus'|'effort'} [mood] Facial expression: neutral,
+ *   happy (joy), ouch, focus (concentration), effort (teeth gritted, brows knitted).
+ * @property {number} [gaze] Eyes looking up (+) or down (−), −1..1: a glance over the glasses.
  * @property {number} [hair] Long hair swing (radians, + = streams back).
  * @property {number} [hem] Jacket tails and skirt flare (+ = out behind, − = swung forward).
  * @property {number} [flip] Somersault angle around the body centre (+ = forward).
  */
 
-const MOOD_NAMES = { neutral: 'Neutral', happy: 'Happy', ouch: 'Ouch', focus: 'Focus' };
+const MOOD_NAMES = {
+  neutral: 'Neutral',
+  happy: 'Happy',
+  ouch: 'Ouch',
+  focus: 'Focus',
+  effort: 'Effort',
+};
 
 /**
  * @typedef {import('./renderer.js').DrawItem} DrawItem
@@ -1817,6 +1863,8 @@ export function poseCharacter(parts, x, y, z, facing, pose, o = {}, out = [], po
   const spread = pose.armSpread ?? 0;
   const rim = o.rim ?? 0.35;
   const tint = o.tint;
+  // Longer-legged (adult) characters carry their hips higher.
+  const hipY = parts.legL.pivot?.[1] ?? HIP_Y;
   // root = T(feet)·Ry(yaw)·S(squash)·T(bob); torso = root·T(hip)·Rx(lean); head = torso·T(neck)·Rx(nod).
   multiply(translation(x, y, z, F1), rotationY(yaw, F2), ROOT);
   multiply(
@@ -1827,11 +1875,12 @@ export function poseCharacter(parts, x, y, z, facing, pose, o = {}, out = [], po
   multiply(ROOT, translation(0, (pose.bob ?? 0) / 16, 0, F1), ROOT);
   const flip = pose.flip ?? 0;
   if (flip) {
-    multiply(ROOT, translation(0, FLIP_Y, 0, F1), ROOT);
+    const fy = FLIP_Y + hipY - HIP_Y;
+    multiply(ROOT, translation(0, fy, 0, F1), ROOT);
     multiply(ROOT, rotationX(flip, F1), ROOT);
-    multiply(ROOT, translation(0, -FLIP_Y, 0, F1), ROOT);
+    multiply(ROOT, translation(0, -fy, 0, F1), ROOT);
   }
-  mul3(ROOT, translation(0, HIP_Y, 0, F1), rotationX(lean, F2), TORSO);
+  mul3(ROOT, translation(0, hipY, 0, F1), rotationX(lean, F2), TORSO);
   mul3(TORSO, translation(0, NECK_Y, 0, F1), rotationX(pose.head ?? 0, F2), HEAD);
   /** Appends the next part and returns its model matrix. @param {string} name @param {true} [face] */
   const part = (name, face) => {
@@ -1839,8 +1888,8 @@ export function poseCharacter(parts, x, y, z, facing, pose, o = {}, out = [], po
     out.push(it);
     return it.model;
   };
-  mul3(ROOT, translation(-HIP_X, HIP_Y, 0, F1), rotationX(-pose.legL, F2), part('legL'));
-  mul3(ROOT, translation(HIP_X, HIP_Y, 0, F1), rotationX(-pose.legR, F2), part('legR'));
+  mul3(ROOT, translation(-HIP_X, hipY, 0, F1), rotationX(-pose.legL, F2), part('legL'));
+  mul3(ROOT, translation(HIP_X, hipY, 0, F1), rotationX(-pose.legR, F2), part('legR'));
   part('torso').set(TORSO);
   part('head').set(HEAD);
   const armL = mul3(
@@ -1861,25 +1910,28 @@ export function poseCharacter(parts, x, y, z, facing, pose, o = {}, out = [], po
     // Face decals cast no shadow.
     const mood = pose.mood ?? 'neutral';
     const name = MOOD_NAMES[mood] ?? 'Neutral';
+    const gaze = Math.max(-1, Math.min(1, pose.gaze ?? 0)) * 0.014;
     if (mood === 'ouch') part('squint', true).set(HEAD);
     else {
       // Lids close towards a line a little below the eye centre; happy cheeks push the
       // eyes up into smiling crescents, focus lowers the upper lid.
+      // Effort squeezes them narrower still.
       const open =
         Math.max(0.08, 1 - Math.min(1, Math.max(0, pose.blink ?? 0))) *
-        (mood === 'happy' ? 0.78 : mood === 'focus' ? 0.8 : 1);
-      const py = EYE_Y - (mood === 'focus' ? 0.03 : 0.006);
+        (mood === 'happy' ? 0.78 : mood === 'focus' ? 0.8 : mood === 'effort' ? 0.62 : 1);
+      const py = EYE_Y - (mood === 'focus' ? 0.03 : mood === 'effort' ? 0.022 : 0.006);
       const eyes = mul3(
         HEAD,
-        translation(0, py, 0, F1),
+        translation(0, py + gaze, 0, F1),
         scaling(1, open, 1, F2),
         part('eyes', true),
       );
       multiply(eyes, translation(0, -py, 0, F1), eyes);
     }
-    const cheekUp = mood === 'happy' ? 0.008 : 0;
+    const cheekUp = mood === 'happy' ? 0.008 : mood === 'effort' ? 0.004 : 0;
     multiply(HEAD, translation(0, cheekUp, 0, F1), part('cheeks', true));
-    part('brow' + name, true).set(HEAD);
+    // The brows follow the eyes a little when glancing up or down.
+    multiply(HEAD, translation(0, gaze * 0.5, 0, F1), part('brow' + name, true));
     part('mouth' + name, true).set(HEAD);
   }
   const hem = pose.hem ?? 0;
