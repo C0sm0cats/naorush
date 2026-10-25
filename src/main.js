@@ -389,11 +389,28 @@ $('trophiesClose').onclick = () => {
 };
 /** Where the cast lines up on the loaded stage. */
 let castX = 8.6;
+/** Shares of the canvas width the cast card leaves free (the line-up stands there). */
+const castFree = { left: 0, right: 1 };
+/** Measures the cast card: on opening and on resizing, never per frame. */
+function measureCast() {
+  const card = $('cast').querySelector('.card');
+  const w = canvas.clientWidth;
+  if (screen !== 'cast' || !card || !w) return;
+  const box = card.getBoundingClientRect();
+  const x0 = canvas.getBoundingClientRect().left;
+  const l = (box.left - x0) / w,
+    r = (box.right - x0) / w;
+  // The wider side of the card.
+  castFree.left = 1 - r >= l ? Math.max(0, r) : 0;
+  castFree.right = 1 - r >= l ? 1 : Math.min(1, l);
+}
+addEventListener('resize', measureCast);
 $('castBtn').onclick = () => {
   castX = clearFloor(sim, tileAt, TILE);
   renderCast($('castList'));
   audio.sfx('select');
   show('cast');
+  measureCast();
 };
 $('castClose').onclick = () => {
   audio.sfx('back');
@@ -1022,7 +1039,7 @@ function frame(now) {
   view.galleryX = castLike ? castX : 1.4;
   const focus = view.gallery
     ? castLike
-      ? { x: castX + 0.7, y: 1.6, facing: 0.001, visH: 5.4 }
+      ? view.castFocus(renderer.width / renderer.height, castFree.left, castFree.right)
       : { x: 4.1, y: 1.6, facing: 0 }
     : screen === 'credits'
       ? { x: view.party - 3.2, y: 3, facing: 0.001 }
