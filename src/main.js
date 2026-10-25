@@ -345,7 +345,7 @@ $('readerClose').onclick = () => {
 $('talk').onclick = () => screen === 'talk' && dialogue.advance();
 function pause() {
   $('pauseInfo').textContent =
-    `${level.name} · ${sim.tickets} tickets · secrets ${sim.secrets}/${sim.secretTotal} · ` +
+    `${level.name} · ${count(sim.tickets, 'ticket')} · secrets ${sim.secrets}/${sim.secretTotal} · ` +
     `${clock(sim.time)}`;
   audio.sfx('pause');
   show('pause');
@@ -441,6 +441,12 @@ for (const type of ['pointerdown', 'keydown'])
 
 /** Whiteboards stay on the wall while a boss fight is on. */
 const fighting = () => sim.bossActive && !sim.bossDone;
+/** The signing scene, until the hero picks the envelope up: no board prompt over it. */
+const signing = () =>
+  !sim.hasKey &&
+  sim.things.some((t) => t.kind === 'boss' && (t.state === 'convinced' || t.state === 'sign'));
+/** « 1 ticket », « 2 tickets ». @param {number} n @param {string} word */
+const count = (n, word) => `${n} ${word}${Math.abs(n) > 1 ? 's' : ''}`;
 
 function openBoard() {
   if (fighting()) return false;
@@ -553,7 +559,7 @@ function credits() {
     ['Les NAO sont sauvées !', 'h'],
     [`${hero.name}, ${hero.title}, a fait signer l’enveloppe.`],
     [
-      `${run.tickets} tickets Swile · ${run.secrets} ${run.secrets > 1 ? 'secrets' : 'secret'} · ${clock(run.time)} · ${run.deaths} ${run.deaths > 1 ? 'retours' : 'retour'} au badge`,
+      `${count(run.tickets, 'ticket')} Swile · ${count(run.secrets, 'secret')} · ${clock(run.time)} · ${count(run.deaths, 'retour')} au badge`,
     ],
     ['Avec', 'h'],
     ['Kévin · Directeur de Projets'],
@@ -608,14 +614,14 @@ $('share').onclick = () => {
     (challenge
       ? `NAO Rush · Défi du ${challenge.key.split('-').reverse().join('/')} (${challenge.twist.label})\n`
       : `NAO Rush · ${level.name}\n`) +
-      `${card}\n${hero}, ${sim.tickets} tickets Swile, ${sim.deaths} retour(s) au badge.`,
+      `${card}\n${hero}, ${count(sim.tickets, 'ticket')} Swile, ${count(sim.deaths, 'retour')} au badge.`,
     $('share'),
   );
 };
 $('creditsShare').onclick = () =>
   share(
-    `J’ai sauvé les NAO dans NAO Rush avec ${CAST[heroId].name} : ${run.tickets} tickets Swile, ` +
-      `${run.secrets} secrets, ${clock(run.time)}. Julien et Rodolphe ont signé !`,
+    `J’ai sauvé les NAO dans NAO Rush avec ${CAST[heroId].name} : ${count(run.tickets, 'ticket')} Swile, ` +
+      `${count(run.secrets, 'secret')}, ${clock(run.time)}. Julien et Rodolphe ont signé !`,
     $('creditsShare'),
   );
 
@@ -681,7 +687,11 @@ const vibrate = (pattern) => {
 /** @param {import('./game/sim.js').SimEvent} e */
 function onEvent(e) {
   // Clockwork traps tick all over the stage: only the ones in view make noise.
-  if (AMBIENT.has(e.type) && !sim.bossActive && Math.abs(e.x - sim.hero.x) > 12) return;
+  // During a duel, only the arena counts: the traps left behind stay silent.
+  if (AMBIENT.has(e.type)) {
+    const arena = sim.bossActive ? sim.boss?.arena : undefined;
+    if (arena ? e.x < arena[0] - 1 || e.x > arena[1] + 1 : Math.abs(e.x - sim.hero.x) > 12) return;
+  }
   hud.event(e);
   trophies.event(e, sim, level.id);
   view.event(e, sim.time);
@@ -1062,7 +1072,7 @@ function frame(now) {
       { rooms: level.rooms, roomW: ROOM_W, keyLabel: level.keyLabel, timer: Boolean(challenge) },
       {
         poster: screen === 'play' ? poster?.id : undefined,
-        board: !fighting() && Boolean(view.boardAt(sim)),
+        board: !fighting() && !signing() && Boolean(view.boardAt(sim)),
         tip: screen === 'play' ? tipAt() : undefined,
       },
     );
