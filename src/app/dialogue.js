@@ -1,4 +1,4 @@
-import { BARKS } from '../data/barks.js';
+import { BARKS, STAGE_BARKS } from '../data/barks.js';
 import { CAST } from '../data/cast.js';
 import { project } from '../gfx/mat4.js';
 
@@ -120,6 +120,61 @@ export class ShuffleBag {
     this.last.set(key, pick);
     return pick;
   }
+
+  /** Forgets every round: the next draws start fresh bags (a new stage). */
+  reset() {
+    this.bags.clear();
+    this.last.clear();
+  }
+}
+
+/**
+ * Picks the bubble lines of a stage. The stage's own lines come first, then the
+ * shared ones, and only once both are used up does a line come back: nothing
+ * repeats within a stage until every line of that moment has been said.
+ */
+export class BarkDeck {
+  /** @param {() => number} [random] */
+  constructor(random = Math.random) {
+    this.bag = new ShuffleBag(random);
+    /** The stage's own lines. @type {Record<string, Record<string, string[]>>} */
+    this.local = {};
+    /** Lines dealt this stage, per speaker and moment. @type {Map<string, number>} */
+    this.used = new Map();
+  }
+
+  /** A new stage (or a restart): fresh bags. @param {Record<string, Record<string, string[]>>} [local] */
+  stage(local = {}) {
+    this.bag.reset();
+    this.local = local;
+    this.used.clear();
+  }
+
+  /** @param {string} who @param {string} moment @returns {string | undefined} */
+  next(who, moment) {
+    const local = this.local[who]?.[moment] ?? [];
+    const shared = BARKS[who]?.[moment] ?? [];
+    const key = `${who}:${moment}`;
+    const used = this.used.get(key) ?? 0;
+    this.used.set(key, used + 1);
+    if (used < local.length) return local[this.bag.next(`${key}:stage`, local.length)];
+    if (used < local.length + shared.length) return shared[this.bag.next(key, shared.length)];
+    const all = [...local, ...shared];
+    return all[this.bag.next(`${key}:all`, all.length)];
+  }
+}
+
+/**
+ * The column of the checkpoint just before a stage's set piece: the last 'C'
+ * left of `at`, at most 30 tiles before it. @param {string[]} map @param {number} at
+ * @returns {number | null} Centre of that checkpoint (as in the checkpoint event).
+ */
+export function teaserCheckpoint(map, at) {
+  let best = null;
+  for (const row of map)
+    for (let x = row.indexOf('C'); x >= 0; x = row.indexOf('C', x + 1))
+      if (x + 0.5 < at && at - x <= 30 && (best === null || x + 0.5 > best)) best = x + 0.5;
+  return best;
 }
 
 /** A short line in a bubble above a character's head. */
@@ -131,30 +186,71 @@ export class Bubbles {
     this.time = 0;
     /** Last time each speaker said each moment. @type {Record<string, number>} */
     this.last = {};
-    this.bag = new ShuffleBag();
+    this.deck = new BarkDeck();
+    /** Lines waiting for the current bubble to fade. @type {Array<[string, string]>} */
+    this.queue = [];
+    /** The set-piece teaser: where it plays, per-hero lines, and whether it has. */
+    this.teaserX = /** @type {number | null} */ (null);
+    /** @type {Record<string, string[]>} */
+    this.teaserLines = {};
+    this.teased = false;
+    /** Called when a queued line comes up (for its sound). @type {(who: string) => void} */
+    this.onLine = () => {};
   }
 
   /**
-   * Picks a line for a moment from its shuffle bag; each moment waits a while before repeating.
+   * A new stage, or a restart: fresh shuffle bags, the stage's own lines, its teaser.
+   * @param {{id: string, map: string[]}} level
+   */
+  stage(level) {
+    const own = STAGE_BARKS[level.id];
+    this.deck.stage(own?.lines);
+    this.teaserX = own?.teaser ? teaserCheckpoint(level.map, own.teaser.at) : null;
+    this.teaserLines = own?.teaser?.lines ?? {};
+    this.teased = false;
+    this.last = {};
+    this.clear();
+  }
+
+  /**
+   * Badging at the checkpoint before the set piece: two bubbles tease what comes next.
+   * @param {string} who The hero's CAST id. @param {number} x The checkpoint's centre.
+   * @returns {boolean} Whether the teaser plays (instead of the usual checkpoint line).
+   */
+  teaser(who, x) {
+    const lines = this.teaserLines[who];
+    if (this.teased || this.teaserX === null || Math.abs(x - this.teaserX) > 0.6 || !lines)
+      return false;
+    this.teased = true;
+    this.line(who, lines[0]);
+    this.queue = lines.slice(1).map((text) => [who, text]);
+    return true;
+  }
+
+  /**
+   * Picks a line for a moment, never repeating within a stage while fresh lines remain;
+   * each moment waits a while before speaking again.
    * @param {string} who CAST id @param {string} moment @param {boolean} [force]
    */
   say(who, moment, force = false) {
-    const lines = BARKS[who]?.[moment];
-    if (!lines) return;
+    if (!BARKS[who]?.[moment] && !this.deck.local[who]?.[moment]) return;
     const key = `${who}:${moment}`;
     const now = performance.now() / 1000;
-    if (!force && (now - (this.last[key] ?? -99) < 8 || this.time > 0.4)) return;
+    if (!force && (now - (this.last[key] ?? -99) < 8 || this.time > 0.4 || this.queue.length))
+      return;
     this.last[key] = now;
-    this.line(who, lines[this.bag.next(key, lines.length)]);
+    this.queue = [];
+    this.line(who, this.deck.next(who, moment) ?? '');
   }
 
-  /** @param {string} who @param {string} text */
+  /** Longer lines stay up longer. @param {string} who @param {string} text */
   line(who, text) {
-    Object.assign(this, { text, who, time: 2.6 });
+    Object.assign(this, { text, who, time: Math.max(2.6, 1.2 + text.length * 0.05) });
   }
 
   clear() {
     this.time = 0;
+    this.queue = [];
   }
 
   /**
@@ -164,6 +260,11 @@ export class Bubbles {
    * @param {boolean} visible
    */
   update(dt, vp, anchor, visible) {
+    if (this.time <= 0 && this.queue.length && visible) {
+      const [who, text] = /** @type {[string, string]} */ (this.queue.shift());
+      this.line(who, text);
+      this.onLine(who);
+    }
     const at = this.time > 0 && visible ? anchor(this.who) : null;
     if (!at) {
       this.el.classList.remove('show');
@@ -173,7 +274,14 @@ export class Bubbles {
     const [sx, sy] = toScreen(vp, at[0], at[1]);
     if (this.el.textContent !== this.text) this.el.textContent = this.text;
     this.el.dataset.who = this.who;
-    this.el.style.transform = `translate(${Math.round(sx)}px, ${Math.round(sy)}px) translate(-50%, -100%)`;
+    // Kept whole on screen: the bubble slides along the edge, its tail still points at the speaker.
+    const margin = 8;
+    const half = this.el.offsetWidth / 2;
+    const x = Math.max(half + margin, Math.min(innerWidth - half - margin, sx));
+    const y = Math.max(this.el.offsetHeight + margin, sy);
+    const tail = Math.max(14 - half, Math.min(half - 14, sx - x));
+    this.el.style.setProperty('--tail', `${Math.round(tail)}px`);
+    this.el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -100%)`;
     this.el.classList.toggle('show', this.time > 0.15);
   }
 }
