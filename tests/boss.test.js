@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'vitest';
+import { PRIMO_SLOW, PrimoCue, bossLighting, bossLights, fightFocus } from '../src/app/staging.js';
 import { ROOFTOP } from '../src/data/levels/rooftop.js';
 import { TS } from '../src/data/levels/ts.js';
-import { BOSS_DEBRIS, PATTERNS, arenaFloor } from '../src/game/boss.js';
+import {
+  BOSS_DEBRIS,
+  HARDCORE_CONSULT,
+  HEADROOM,
+  LEAP_HALF,
+  PATTERNS,
+  RISERS,
+  arenaFloor,
+  consultLength,
+} from '../src/game/boss.js';
 import { HERO, createSim, step } from '../src/game/sim.js';
-import { hurt, make } from '../src/game/world.js';
+import { DT, hurt, make, solid } from '../src/game/world.js';
 import { IDLE, has, input, room, run, runUntil, sim, throwCr } from './mechanics-kit.js';
 
 /**
@@ -141,7 +151,8 @@ describe('boss duel', () => {
 function referee(level) {
   const s = createSim(level, 'kevin');
   const [gate] = level.boss?.arena ?? [0];
-  Object.assign(s.hero, { x: gate + 3, y: 3, invuln: 1e9 });
+  // Clear of the risers, with a line of sight to every spot the director takes.
+  Object.assign(s.hero, { x: gate + 5, y: 3, invuln: 1e9 });
   const b = s.things.find((t) => t.kind === 'boss');
   if (!b) throw new Error('no boss');
   const [x0, x1] = arenaFloor(s, b);
@@ -152,6 +163,15 @@ function referee(level) {
   const born = new WeakMap();
   let phase = 1;
   let last = '';
+  /** Where the director stood at the start of each step. @type {Set<number>} */
+  const spots = new Set();
+  /** @param {number} x @param {number} rows Free tiles over a director standing at x. */
+  const room = (x, rows, half = 0.4) => {
+    const floor = b.y0 ?? b.y;
+    for (let c = Math.floor(x - half); c <= Math.floor(x + half); c++)
+      for (let r = floor; r < floor + rows; r++) if (solid(s, c, r)) return false;
+    return true;
+  };
   for (let frame = 0; frame < 60 * 240 && !s.bossDone; frame++) {
     s.ammo = 9;
     s.hero.invuln = 1e9;
@@ -169,8 +189,15 @@ function referee(level) {
     step(s, inp);
     const now = s.time;
     const name = b.variant ? `${b.state}:${b.variant}` : b.state;
-    if (name !== last) played.add(name);
+    if (name !== last) {
+      played.add(name);
+      spots.add(Math.round(b.x * 2) / 2);
+    }
     last = name;
+    // Room over his head wherever he stands, the whole height of a leap when he leaps.
+    if (!room(b.x, 3)) unfair.push(`no headroom at x=${b.x.toFixed(2)} during ${name}`);
+    if (b.state === 'leap' && !room(b.x, HEADROOM, LEAP_HALF))
+      unfair.push(`leap under a ceiling at x=${b.x.toFixed(2)}`);
     phase = Math.max(phase, b.phase ?? 1);
     const tag = `${name} (phase ${b.phase}, ${b.t.toFixed(2)} s)`;
     for (const t of s.things) {
@@ -199,7 +226,7 @@ function referee(level) {
       dark = !lit.some((z) => x + HERO.w / 2 > z.x && x - HERO.w / 2 < z.x + (z.w ?? 1));
     if (!dark) unfair.push(`no dark spot at ${tag}`);
   }
-  return { s, b, unfair, played, phase, x0, x1 };
+  return { s, b, unfair, played, phase, x0, x1, spots };
 }
 
 describe.each([TS, ROOFTOP])('$name duel', (level) => {
@@ -218,6 +245,160 @@ describe.each([TS, ROOFTOP])('$name duel', (level) => {
 
   it('telegraphs every attack 0.6 s ahead, keeps consults calm and a dark spot free', () => {
     expect(fight.unfair).toEqual([]);
+  });
+
+  it('moves around the arena', () => {
+    // Julien between his console and his racks, Rodolphe across the stage.
+    expect(fight.spots.size).toBeGreaterThanOrEqual(2);
+    if (id === 'techServicesDirector') {
+      const home = fight.b.home ?? 0;
+      expect([...fight.spots].some((x) => Math.abs(x - home) < 0.6)).toBe(true);
+      expect([...fight.spots].some((x) => Math.abs(x - home) > 3)).toBe(true);
+    }
+  });
+});
+
+/**
+ * A real stage's duel brought to the consult that ends phase 1, hero at `x`.
+ * @param {import('../src/data/levels/index.js').Level} level @param {number} x
+ */
+function toPhase2(level, x) {
+  const s = createSim(level, 'kevin');
+  const b = s.things.find((t) => t.kind === 'boss');
+  if (!b) throw new Error('no boss');
+  Object.assign(s.hero, { x, y: 3, invuln: 1e9 });
+  runUntil(s, IDLE, () => b.state === 'consult', 60 * 30);
+  const next = PATTERNS[s.boss?.id ?? 'techServicesDirector'].phases[0];
+  b.hp = next + 1;
+  while (b.state !== 'consult') step(s, IDLE);
+  while (b.hp > next) shootAt(s, b);
+  expect(b.state).toBe('phase');
+  return { s, b };
+}
+
+/** @param {Sim} s */
+const risers = (s) => s.things.filter((t) => t.kind === 'lift' && t.variant === 'riser');
+
+describe.each([TS, ROOFTOP])('$name arena', (level) => {
+  const id = level.boss?.id ?? 'techServicesDirector';
+  const plan = RISERS[id];
+
+  it('brings two risers in with the second phase, solid once in place', () => {
+    const { s, b } = toPhase2(level, (level.boss?.arena[0] ?? 0) + 5);
+    const floor = b.y0 ?? b.y;
+    expect(risers(s).length).toBe(plan.cols.length);
+    for (const r of risers(s)) expect(solid(s, r.x, floor)).toBe(false);
+    const set = runUntil(s, IDLE, () => risers(s).every((r) => r.state === 'set'), 200);
+    expect(set.ok).toBe(true);
+    // In place before the director moves on: the next attack plays on the new arena.
+    expect(b.state).toBe('phase');
+    for (const r of risers(s)) {
+      expect(r.y).toBeCloseTo(floor + 1);
+      for (let c = r.x; c < r.x + (r.w ?? 2); c++) {
+        expect(solid(s, c, floor)).toBe(true);
+        expect(solid(s, c, floor + 1)).toBe(false);
+      }
+    }
+  });
+
+  it(
+    plan.rise ? 'lifts a hero standing on a rising rack' : 'waits above a hero under a truss',
+    () => {
+      const [x0] = arenaFloor(
+        s0(level),
+        s0(level).things.find((t) => t.kind === 'boss') ?? make('boss', 0, 0),
+      );
+      const col = x0 + plan.cols[0];
+      const { s, b } = toPhase2(level, col + 0.6);
+      const floor = b.y0 ?? b.y;
+      const r = risers(s)[0];
+      run(s, IDLE, 90);
+      if (plan.rise) {
+        expect(s.hero.y).toBeCloseTo(floor + 1, 1);
+        expect(r.state).toBe('set');
+      } else {
+        // Held just over his head, and down in place once he steps away.
+        expect(r.state).toBe('moving');
+        expect(r.y - 1).toBeGreaterThan(s.hero.y + HERO.h);
+        run(s, input({ right: true }), 30);
+        run(s, IDLE, 30);
+        expect(r.state).toBe('set');
+      }
+      expect(s.hero.hearts).toBe(s.stats.hearts);
+    },
+  );
+
+  it('lights the risers’ tops with the floor', () => {
+    const { s, b } = toPhase2(level, (level.boss?.arena[0] ?? 0) + 5);
+    const floor = b.y0 ?? b.y;
+    runUntil(
+      s,
+      IDLE,
+      () => s.things.some((t) => t.kind === 'zone' && t.variant !== 'arrow'),
+      60 * 20,
+    );
+    const zones = s.things.filter((t) => t.kind === 'zone' && t.variant !== 'arrow');
+    for (const z of zones) {
+      const c = Math.floor(z.x + 0.01);
+      const raised = risers(s).some((r) => c >= r.x && c < r.x + (r.w ?? 2));
+      expect(z.y).toBe(raised ? floor + 1 : floor);
+    }
+  });
+
+  it('takes the risers away once he signs, and at once when the duel starts over', () => {
+    const { s, b } = toPhase2(level, (level.boss?.arena[0] ?? 0) + 5);
+    const floor = b.y0 ?? b.y;
+    runUntil(s, IDLE, () => risers(s).every((r) => r.state === 'set'), 200);
+    const cols = risers(s).map((r) => r.x);
+    hurt(s, s.hero, 'void');
+    runUntil(s, IDLE, (x) => has(x.events, 'respawn'), 200);
+    expect(risers(s)).toEqual([]);
+    for (const c of cols) expect(solid(s, c, floor)).toBe(false);
+
+    const again = toPhase2(level, (level.boss?.arena[0] ?? 0) + 5);
+    runUntil(again.s, IDLE, () => risers(again.s).every((r) => r.state === 'set'), 200);
+    while (!again.s.bossDone) hitDuringConsult(again.s, again.b);
+    const gone = runUntil(again.s, IDLE, () => risers(again.s).length === 0, 60 * 4);
+    expect(gone.ok).toBe(true);
+    for (const c of cols) expect(solid(again.s, c, floor)).toBe(false);
+  });
+});
+
+/** @param {import('../src/data/levels/index.js').Level} level */
+const s0 = (level) => createSim(level, 'kevin');
+
+describe('Rodolphe’s leaps', () => {
+  it('walks out from under a low ceiling before he leaps', () => {
+    const s = createSim(ROOFTOP, 'kevin');
+    const b = s.things.find((t) => t.kind === 'boss');
+    if (!b) throw new Error('no boss');
+    const floor = b.y0 ?? b.y;
+    Object.assign(s.hero, { x: 85, y: 3, invuln: 1e9 });
+    runUntil(s, IDLE, () => b.state === 'consult', 60 * 30);
+    // Right under the rooftop's HVAC block, about to leap.
+    const low = [...Array(ROOFTOP.map[0].length).keys()].find(
+      (c) => c > 84 && solid(s, c, floor + 2) && !solid(s, c, floor),
+    );
+    expect(low).toBeDefined();
+    Object.assign(b, { x: (low ?? 0) + 0.5, state: 'hit', t: 0.6, step: 0 });
+    const leap = runUntil(s, IDLE, () => b.state === 'leap', 60 * 3);
+    expect(leap.ok).toBe(true);
+    for (let c = Math.floor(b.x - LEAP_HALF); c <= Math.floor(b.x + LEAP_HALF); c++)
+      for (let r = floor; r < floor + HEADROOM; r++) expect(solid(s, c, r)).toBe(false);
+  });
+});
+
+describe('« Sans filet »', () => {
+  it('shortens every PRIMO consult by 0.4 s', () => {
+    const { s, boss } = fight();
+    const normal = consultLength(s, boss);
+    s.hardcore = true;
+    expect(consultLength(s, boss)).toBeCloseTo(normal - HARDCORE_CONSULT);
+    expect(HARDCORE_CONSULT).toBe(0.4);
+    runUntil(s, IDLE, () => boss.state === 'consult', 60 * 30);
+    const end = runUntil(s, IDLE, () => boss.state !== 'consult', 60 * 5);
+    expect(end.ok).toBe(true);
+    expect(boss.t).toBeLessThan(normal - HARDCORE_CONSULT + 0.6 + 2 * DT);
   });
 });
 
@@ -256,5 +437,85 @@ describe('Rodolphe’s grand finale', () => {
     expect(spot?.variant).toBe('spot');
     expect(hx).toBeGreaterThan(spot?.x ?? 0);
     expect(hx).toBeLessThan((spot?.x ?? 0) + (spot?.w ?? 0));
+  });
+});
+
+describe('fight staging', () => {
+  /** A duel in progress on a real stage, hero at `x`. @param {number} x */
+  const duel = (x) => {
+    const s = createSim(TS, 'kevin');
+    const b = s.things.find((t) => t.kind === 'boss');
+    if (!b) throw new Error('no boss');
+    Object.assign(s.hero, { x, y: 3, invuln: 1e9 });
+    runUntil(s, IDLE, () => b.state === 'volley', 60 * 5);
+    return { s, b };
+  };
+
+  it('pulls back as far as the level’s height + 2 on a phone held upright', () => {
+    const { s, b } = duel(84);
+    const f = fightFocus(s, 0, 412 / 915);
+    expect(f?.visH).toBeCloseTo(s.h + 2);
+    // Both fighters framed when they are close enough for that width.
+    s.hero.x = b.x - 4.2;
+    const g = fightFocus(s, 0, 412 / 915);
+    const half = ((g?.visH ?? 0) * 412) / 915 / 2;
+    for (const x of [s.hero.x + HERO.w / 2, b.x])
+      expect(Math.abs(x - (g?.x ?? 0))).toBeLessThanOrEqual(half);
+  });
+
+  it('pushes in on the director when an argument lands', () => {
+    for (const aspect of [16 / 9, 412 / 915]) {
+      const { s, b } = duel(86);
+      const before = fightFocus(s, 0, aspect)?.visH ?? 0;
+      Object.assign(b, { state: 'hit', t: 0.1 });
+      const hit = fightFocus(s, 0, aspect)?.visH ?? 0;
+      expect(hit).toBeLessThan(before * 0.9);
+      b.t = 0.6;
+      expect(fightFocus(s, 0, aspect)?.visH).toBeCloseTo(before);
+    }
+  });
+
+  it('slows the first PRIMO window of each director down for 0.8 s, once', () => {
+    const { s, b } = duel(86);
+    const cue = new PrimoCue();
+    expect(cue.update(s, 1 / 60)).toBe(1);
+    runUntil(s, IDLE, () => b.state === 'consult', 60 * 10);
+    expect(cue.update(s, 1 / 60)).toBeLessThan(0.5);
+    expect(cue.started).toBe(true);
+    expect(cue.ring).toBeGreaterThanOrEqual(0);
+    let real = 0;
+    while (cue.update(s, 1 / 60) < 1) real += 1 / 60;
+    expect(real).toBeCloseTo(PRIMO_SLOW - 1 / 60, 1);
+    expect(cue.ring).toBe(-1);
+    // Not again for the same director.
+    b.state = 'volley';
+    cue.update(s, 1 / 60);
+    b.state = 'consult';
+    expect(cue.update(s, 1 / 60)).toBe(1);
+    expect(new PrimoCue(['techServicesDirector']).update(s, 1 / 60)).toBe(1);
+  });
+
+  it('flashes white on a phase change only with « Flashs » on', () => {
+    const { s, b } = duel(86);
+    Object.assign(b, { state: 'phase', phase: 2, t: 0.05 });
+    const base = { ...TS.lighting, lights: [] };
+    const on = bossLighting(TS, s, 1, base, true).sunColor[0];
+    const off = bossLighting(TS, s, 1, base, false).sunColor[0];
+    expect(on).toBeGreaterThan(base.sunColor[0] * 1.2);
+    expect(off).toBeLessThanOrEqual(base.sunColor[0] * 1.15);
+    // No white light on the director either.
+    const white = (/** @type {{color: number[]}[]} */ l) =>
+      l.some((x) => x.color[0] > 2.5 && x.color[2] > 2.5);
+    expect(white(bossLights(TS, s, 1, true))).toBe(true);
+    expect(white(bossLights(TS, s, 1, false))).toBe(false);
+  });
+
+  it('follows the hero with a rim light in the dark stages only', () => {
+    const near = (/** @type {{pos: number[]}[]} */ list, /** @type {Sim} */ s) =>
+      list.some((l) => Math.abs(l.pos[0] - s.hero.x) < 1.5 && l.pos[1] > s.hero.y + 1.5);
+    const dark = createSim(TS, 'charline');
+    expect(near(bossLights(TS, dark, 0), dark)).toBe(true);
+    const lit = createSim(ROOFTOP, 'charline');
+    expect(near(bossLights(ROOFTOP, lit, 0), lit)).toBe(false);
   });
 });
