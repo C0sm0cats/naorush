@@ -38,7 +38,8 @@ export const HERO_STATS = {
     airJumps: 0,
     /** How far above the feet the hands reach when grabbing. */
     reach: 2.4,
-    climb: 0.42,
+    /** Seconds to pull up onto a ledge. */
+    climb: 0.34,
     hearts: 4,
     ammo: 6,
     shot: 13,
@@ -51,7 +52,7 @@ export const HERO_STATS = {
     jump: 11.0,
     airJumps: 1,
     reach: 2.1,
-    climb: 0.36,
+    climb: 0.3,
     hearts: 3,
     ammo: 5,
     shot: 15,
@@ -110,8 +111,9 @@ export const HERO_STATS = {
  * @property {boolean} jump
  * @property {boolean} [fire] Throw a meeting report (CR).
  *
- * @typedef {{type: string, x: number, y: number, cause?: string}} SimEvent
+ * @typedef {{type: string, x: number, y: number, cause?: string, fall?: number}} SimEvent
  *   `cause` tells apart events that share a type (a boss on guard vs. a crate).
+ *   `fall` is the drop in tiles from the top of the arc on `land` / `step` (squash, dust).
  *
  * @typedef {'techServicesDirector'|'regionalDirector'} BossId
  *

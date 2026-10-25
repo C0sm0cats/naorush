@@ -22,14 +22,37 @@ const BLUE = [0.45, 0.8, 1];
 const GOLD = [1, 0.82, 0.3];
 
 /**
- * @typedef {{n: number, colors: number[][], speed?: number, up?: number, size?: number, life?: number, gravity?: number}} Burst
+ * `ring`: spreads flat along the floor (x–z) in an even circle instead of a burst.
+ * `with`: another effect fired alongside (same place and power).
+ * @typedef {{n: number, colors: number[][], speed?: number, up?: number, size?: number, life?: number, gravity?: number, ring?: boolean, with?: string}} Burst
  * @type {Record<string, Burst>}
  */
 const EFFECTS = {
   jump: { n: 6, colors: [WHITE], speed: 1.5, up: 0.5, life: 0.35, gravity: 2 },
   airjump: { n: 10, colors: [PINK, WHITE], speed: 2.5, up: 0, life: 0.4, gravity: 0 },
-  land: { n: 10, colors: [WHITE], speed: 2.2, up: 0.4, life: 0.4, gravity: 3 },
-  hardland: { n: 16, colors: [WHITE], speed: 3, up: 0.6, life: 0.5, gravity: 3 },
+  land: { n: 10, colors: [WHITE], speed: 2.2, up: 0.4, life: 0.4, gravity: 3, with: 'landRing' },
+  hardland: { n: 16, colors: [WHITE], speed: 3, up: 0.6, life: 0.5, gravity: 3, with: 'hardRing' },
+  // Dust kicked out flat all round the feet on a real landing.
+  landRing: {
+    n: 14,
+    colors: [[0.86, 0.86, 0.9], WHITE],
+    speed: 2.6,
+    up: 0.25,
+    life: 0.32,
+    gravity: 1.5,
+    size: 0.08,
+    ring: true,
+  },
+  hardRing: {
+    n: 22,
+    colors: [[0.86, 0.86, 0.9], WHITE],
+    speed: 3.8,
+    up: 0.35,
+    life: 0.42,
+    gravity: 1.5,
+    size: 0.1,
+    ring: true,
+  },
   ticket: { n: 14, colors: [PINK, WHITE], speed: 3, up: 2, life: 0.6 },
   ammo: { n: 14, colors: [WHITE, BLUE], speed: 3, up: 2, life: 0.6 },
   checkpoint: { n: 18, colors: [[0.35, 1, 0.6], WHITE], speed: 3, up: 3, life: 0.8 },
@@ -179,6 +202,13 @@ const EFFECTS = {
   sign: { n: 120, colors: [PINK, LIME, BLUE, GOLD, WHITE], speed: 8, up: 7, life: 2 },
 };
 
+/**
+ * Particle power for a landing event: a 2-tile drop is 1, a long fall up to 1.6.
+ * @param {{fall?: number}} e
+ */
+export const landPower = (e) =>
+  e.fall === undefined ? 1 : Math.min(1.6, Math.max(0.6, 0.5 + e.fall / 4));
+
 export class Particles {
   constructor() {
     /** @type {Particle[]} */
@@ -187,20 +217,29 @@ export class Particles {
     this.free = [];
   }
 
-  /** @param {string} type @param {number} x @param {number} y */
-  emit(type, x, y) {
+  /**
+   * @param {string} type @param {number} x @param {number} y
+   * @param {number} [power] Scales count and speed (a landing passes its drop, see {@link landPower}).
+   */
+  emit(type, x, y, power = 1) {
     const o = EFFECTS[type];
     if (!o) return;
-    for (let i = 0; i < o.n; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const sp = (o.speed ?? 3) * (0.4 + Math.random() * 0.6);
+    const n = Math.max(1, Math.round(o.n * power));
+    for (let i = 0; i < n; i++) {
+      const ring = Boolean(o.ring);
+      // A ring is evenly spaced (with a little jitter) so it reads as a circle.
+      const a = ring ? ((i + Math.random() * 0.4) / n) * Math.PI * 2 : Math.random() * Math.PI * 2;
+      const sp = (o.speed ?? 3) * (ring ? 0.85 + Math.random() * 0.15 : 0.4 + Math.random() * 0.6);
+      const speed = sp * Math.sqrt(power);
       const life = (o.life ?? 0.6) * (0.6 + Math.random() * 0.4);
-      const z = (Math.random() - 0.5) * 0.6;
-      const vz = (Math.random() - 0.5) * sp;
+      const z = ring ? 0 : (Math.random() - 0.5) * 0.6;
+      const vz = ring ? Math.sin(a) * speed : (Math.random() - 0.5) * speed;
       const size = (o.size ?? 0.09) * (0.6 + Math.random() * 0.8);
       const p = this.free.pop();
-      const vx = Math.cos(a) * sp,
-        vy = Math.abs(Math.sin(a)) * sp + (o.up ?? 2);
+      const vx = Math.cos(a) * speed,
+        vy = ring
+          ? (o.up ?? 0) * (0.6 + Math.random() * 0.8)
+          : Math.abs(Math.sin(a)) * speed + (o.up ?? 2);
       const color = o.colors[i % o.colors.length],
         gravity = o.gravity ?? 14;
       if (p) {
@@ -218,6 +257,7 @@ export class Particles {
         this.list.push(p);
       } else this.list.push({ x, y, z, vx, vy, vz, life, max: life, size, color, gravity });
     }
+    if (o.with) this.emit(o.with, x, y + 0.04, power);
   }
 
   /** @param {number} dt */

@@ -63,6 +63,15 @@ const LIP = 0.25;
 /** Turning around on the ground bites harder than speeding up. */
 const SKID = 1.6;
 const HURT_FALL = 6.5;
+/** Apex hang: near the top of a held jump, gravity eases off for a beat of control. */
+const APEX_BAND = 1.6;
+const APEX_GRAVITY = 0.55;
+/** « Sans filet »: periodic traps and fuses run this much faster. */
+export const HARDCORE_TRAPS = 1.15;
+/** Traps whose own timers (fuses, wind-ups) speed up in « Sans filet ». */
+const FUSED = new Set(['loose', 'panel', 'chair']);
+/** Traps on a fixed cycle (see PERIOD). */
+const CYCLES = /** @type {Record<string, number>} */ (PERIOD);
 
 /** Map characters drawn as solid blocks (with their own look). */
 const SOLID_STYLES = '#MBVHQY';
@@ -209,6 +218,8 @@ export function createSim(def, heroId) {
     assist: false,
     /** Heart capacity (the daily challenge can lower it). */
     maxHearts: stats.hearts,
+    /** « Sans filet »: one heart, no coffee, faster traps (see {@link setHardcore}). */
+    hardcore: false,
     jumpHeld: false,
     /** @type {SimEvent[]} */
     events: [],
@@ -216,6 +227,18 @@ export function createSim(def, heroId) {
 }
 
 /** @typedef {ReturnType<typeof createSim>} Sim */
+
+/**
+ * « Sans filet »: one heart, the coffee cups are gone and traps run
+ * {@link HARDCORE_TRAPS}× faster (bosses shorten their PRIMO consults on `s.hardcore`).
+ * Call right after {@link createSim}; deterministic like the rest.
+ * @param {Sim} s
+ */
+export function setHardcore(s) {
+  s.hardcore = true;
+  s.hero.hearts = s.maxHearts = 1;
+  for (const t of s.things) if (t.kind === 'cup') t.alive = false;
+}
 
 /** Things that walk on the floor (and can fall when it goes). */
 const WALKERS = new Set(['colleague', 'intern', 'vacuum', 'visio']);
@@ -314,6 +337,22 @@ const ledgeCol = (hero) => (hero.facing > 0 ? hero.ledge.x : hero.ledge.x - 1);
 const ledgeHolds = (s, hero) => solid(s, ledgeCol(hero), hero.ledge.y - 1);
 
 /**
+ * Lands the hero at height `y`: a `land` (or a light `step`) event carrying the drop.
+ * @param {Sim} s @param {Hero} hero @param {number} y
+ * @returns {number} The drop in tiles from the top of the arc.
+ */
+function landed(s, hero, y) {
+  const fall = Math.max(0, hero.fallFrom - y);
+  s.events.push({
+    type: fall > 2 ? 'land' : 'step',
+    x: hero.x + HERO.w / 2,
+    y,
+    fall: Math.round(fall * 100) / 100,
+  });
+  return fall;
+}
+
+/**
  * @param {Sim} s
  * @param {Input} input
  */
@@ -363,6 +402,8 @@ export function step(s, input) {
   }
 
   if (hero.state === 'climb') {
+    // A jump pressed during the pull-up is kept and fires as the feet land.
+    if (hero.buffer > 0) hero.buffer = BUFFER;
     const k = Math.min(1, hero.stateTime / st.climb);
     if (k >= 1) {
       hero.x = hero.facing > 0 ? hero.ledge.x + 0.05 : hero.ledge.x - HERO.w - 0.05;
@@ -424,8 +465,9 @@ export function step(s, input) {
       emit(s, 'airjump', hero.x + HERO.w / 2, hero.y);
     }
   }
-  // Variable height: releasing early cuts the rise.
-  const g = hero.vy > 0 && !input.jump ? GRAVITY * 2.1 : GRAVITY;
+  // Variable height: releasing early cuts the rise; holding it floats the apex a little.
+  let g = hero.vy > 0 && !input.jump ? GRAVITY * 2.1 : GRAVITY;
+  if (input.jump && hero.state === 'air' && Math.abs(hero.vy) < APEX_BAND) g *= APEX_GRAVITY;
   hero.vy = Math.max(-MAX_FALL, hero.vy - g * DT);
 
   // Move X.
@@ -473,8 +515,7 @@ export function step(s, input) {
         hero.y >= l.y - Math.max(0, l.dy ?? 0) - 0.02 &&
         ny <= l.y
       ) {
-        if (hero.state !== 'ground')
-          emit(s, hero.fallFrom - l.y > 2 ? 'land' : 'step', hero.x + HERO.w / 2, l.y);
+        if (hero.state !== 'ground') landed(s, hero, l.y);
         s.onLift = l;
         hero.y = ny = l.y;
         hero.vy = 0;
@@ -494,11 +535,7 @@ export function step(s, input) {
     }
   } else if (hero.vy < 0) {
     hero.y = Math.floor(ny) + 1;
-    const fell = hero.fallFrom - hero.y;
-    if (hero.state !== 'ground') {
-      emit(s, fell > 2 ? 'land' : 'step', hero.x + HERO.w / 2, hero.y);
-      if (fell > HURT_FALL) hurt(s, hero, 'fall');
-    }
+    if (hero.state !== 'ground' && landed(s, hero, hero.y) > HURT_FALL) hurt(s, hero, 'fall');
     hero.vy = 0;
     if (/** @type {string} */ (hero.state) !== 'dead') hero.state = 'ground';
   } else {
@@ -565,7 +602,10 @@ function stepThings(s) {
   const alive = hero.state !== 'dead';
   for (const t of s.things) {
     if (!t.alive) continue;
-    t.t += DT;
+    t.t += s.hardcore && FUSED.has(t.kind) ? DT * HARDCORE_TRAPS : DT;
+    // « Sans filet »: cycles run ahead (phase kept within one period).
+    if (s.hardcore && t.kind in CYCLES)
+      t.phase = ((t.phase ?? 0) + DT * (HARDCORE_TRAPS - 1)) % CYCLES[t.kind];
     switch (t.kind) {
       case 'ticket':
         if (alive && touches(hero, t, 0.35, 0.4)) {

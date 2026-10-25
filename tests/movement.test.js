@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HERO_STATS } from '../src/game/sim.js';
+import { DT, HARDCORE_TRAPS, HERO_STATS, setHardcore, step } from '../src/game/sim.js';
 import { IDLE, fill, has, input, room, run, runUntil, sim } from './mechanics-kit.js';
 
 /** @typedef {import('./mechanics-kit.js').Sim} Sim */
@@ -118,6 +118,150 @@ describe('ledge grabs', () => {
     expect(r.ok).toBe(true);
     expect(s.hero.y).toBe(7);
     expect(has(r.events, 'climb')).toBe(true);
+  });
+});
+
+describe('apex hang', () => {
+  /** Peak height and frames spent near the apex (|vy| < 1.6) of a standing jump. @param {'kevin'|'charline'} hero @param {boolean} hold */
+  function arc(hero, hold) {
+    const s = sim(room(16, [['S', 7, 3]]), hero);
+    let top = 0;
+    let floating = 0;
+    for (let i = 0; i < 90; i++) {
+      // Holding: the whole arc. Not holding: a full-height rise, released only once past the apex band.
+      step(s, input({ jump: hold ? true : s.hero.vy > 1.6 || i === 0 }));
+      top = Math.max(top, s.hero.y - 3);
+      if (s.hero.state === 'air' && Math.abs(s.hero.vy) < 1.6) floating++;
+    }
+    return { top, floating };
+  }
+
+  it('floats the top of a held jump for a few extra frames', () => {
+    for (const hero of /** @type {const} */ (['kevin', 'charline'])) {
+      const held = arc(hero, true);
+      const let_go = arc(hero, false);
+      expect(held.floating - let_go.floating, hero).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('barely changes the jump height (grab reach stays the same)', () => {
+    for (const hero of /** @type {const} */ (['kevin', 'charline'])) {
+      const v = HERO_STATS[hero].jump;
+      const plain = (v * v) / 80;
+      const { top } = arc(hero, true);
+      expect(top, hero).toBeGreaterThan(plain - 0.15);
+      expect(top, hero).toBeLessThan(plain + 0.08);
+    }
+  });
+});
+
+describe('climbing', () => {
+  /** Kévin (or Charline) hanging from a four-tile wall. @param {'kevin'|'charline'} hero */
+  function hanging(hero) {
+    const s = sim(room(16, [['S', 5, 3], ...fill('#', 6, 14, 3, 6)]), hero);
+    s.hero.x = 6 - 0.63;
+    runUntil(s, input({ right: true, jump: true }), (x) => x.hero.state === 'hang', 120);
+    run(s, IDLE, 10);
+    return s;
+  }
+
+  it('pulls up in the hero’s own time (Kévin 0.34 s, Charline 0.30 s)', () => {
+    expect(HERO_STATS.kevin.climb).toBe(0.34);
+    expect(HERO_STATS.charline.climb).toBe(0.3);
+    for (const hero of /** @type {const} */ (['kevin', 'charline'])) {
+      const s = hanging(hero);
+      run(s, input({ up: true }), 1);
+      expect(s.hero.state, hero).toBe('climb');
+      const r = runUntil(s, IDLE, (x) => x.hero.state === 'ground', 60);
+      expect(r.frames * DT, hero).toBeCloseTo(HERO_STATS[hero].climb, 1);
+    }
+  });
+
+  it('keeps a jump pressed during the pull-up and fires it on the ledge', () => {
+    for (const hero of /** @type {const} */ (['kevin', 'charline'])) {
+      const s = hanging(hero);
+      run(s, input({ up: true }), 2);
+      // Tapped early in the climb, long before the buffer would normally forget it.
+      run(s, input({ jump: true }), 1);
+      const events = run(s, IDLE, 40);
+      const jump = events.findIndex((e) => e.type === 'jump');
+      expect(jump, hero).toBeGreaterThanOrEqual(0);
+      expect(s.hero.y, hero).toBeGreaterThanOrEqual(7);
+    }
+  });
+
+  it('does not jump after the climb without a press', () => {
+    const s = hanging('kevin');
+    run(s, input({ up: true }), 2);
+    expect(has(run(s, IDLE, 40), 'jump')).toBe(false);
+  });
+});
+
+describe('landings', () => {
+  it('report how far the hero fell (for squash and dust)', () => {
+    const s = sim(room(16, [['S', 8, 3]]), 'kevin');
+    Object.assign(s.hero, { y: 7.5, state: 'air', fallFrom: 7.5 });
+    const land = run(s, IDLE, 60).find((e) => e.type === 'land');
+    expect(land?.fall).toBeCloseTo(4.5, 1);
+    const hop = sim(room(16, [['S', 8, 3]]), 'kevin');
+    const events = run(hop, input({ jump: true }), 4).concat(run(hop, IDLE, 60));
+    const small = events.find((e) => e.type === 'step');
+    expect(small?.fall).toBeGreaterThan(0);
+    expect(small?.fall).toBeLessThanOrEqual(2);
+  });
+});
+
+describe('« Sans filet »', () => {
+  const def = room(24, [
+    ['S', 2, 3],
+    ['h', 5, 3],
+    ['d', 22, 4],
+    ['-', 12, 2],
+  ]);
+
+  it('is off by default', () => {
+    const s = sim(def, 'kevin');
+    expect(s.hardcore).toBe(false);
+    expect(s.maxHearts).toBe(HERO_STATS.kevin.hearts);
+  });
+
+  it('leaves one heart and takes the coffee away', () => {
+    const s = sim(def, 'charline');
+    setHardcore(s);
+    expect(s.hero.hearts).toBe(1);
+    expect(s.maxHearts).toBe(1);
+    expect(s.things.some((t) => t.kind === 'cup' && t.alive)).toBe(false);
+  });
+
+  it('runs traps 15 % faster, the same way every time', () => {
+    const a = sim(def, 'kevin');
+    const b = sim(def, 'kevin');
+    setHardcore(b);
+    const drawer = (/** @type {Sim} */ s) => s.things.find((t) => t.kind === 'drawer');
+    const p0 = drawer(b)?.phase ?? 0;
+    run(a, IDLE, 60);
+    run(b, IDLE, 60);
+    // A second of play moves the cycle on by 1.15 s instead of 1 s.
+    const extra = ((drawer(b)?.phase ?? 0) - p0 + 2.8) % 2.8;
+    expect(extra).toBeCloseTo(60 * DT * (HARDCORE_TRAPS - 1), 5);
+    expect(drawer(a)?.phase).toBeCloseTo(p0, 5);
+    // A loose slab gives way sooner.
+    const fuse = (/** @type {boolean} */ hard) => {
+      const s = sim(def, 'kevin');
+      if (hard) setHardcore(s);
+      Object.assign(s.hero, { x: 11.7 });
+      return runUntil(
+        s,
+        IDLE,
+        (x) => x.things.some((t) => t.kind === 'loose' && t.state === 'falling'),
+        120,
+      ).frames;
+    };
+    expect(fuse(true)).toBeLessThan(fuse(false));
+    const c = sim(def, 'kevin');
+    setHardcore(c);
+    run(c, IDLE, 60);
+    expect(drawer(c)?.phase).toBe(drawer(b)?.phase);
   });
 });
 
