@@ -20,6 +20,7 @@ import {
 import { findSpot, heroRegion, title } from './app/title.js';
 import { Trophies } from './app/trophies.js';
 import { LevelView, boardUrl } from './app/scene.js';
+import { drawPrefs, edgeCue, watchCamera } from './app/draw-things.js';
 import { CREDITS, EPILOGUE, PROLOGUE } from './data/barks.js';
 import { CAST } from './data/cast.js';
 import { CAMPAIGN, LEVELS, ROOM_W } from './data/levels/index.js';
@@ -1073,6 +1074,14 @@ function frame(now) {
         h: sim.h,
         sky: level.theme === 'rooftop' ? 4 : 0,
       });
+  if (!view.showcase)
+    watchCamera(camera.x, camera.y, camera.dist, renderer.width / renderer.height);
+  drawPrefs.cues = Boolean(prefs.cues);
+  // A projectile about to come in from off-screen: a short warning on its side.
+  if (edgeCue.fresh) {
+    edgeCue.fresh = false;
+    audio.sfx('telegraph', { pan: edgeCue.side });
+  }
   // Key, rim and fill lights on the heroes posing behind the title menu.
   const lit = view.showcase
     ? withLights(lighting, title.lights(t, heroId))
