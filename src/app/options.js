@@ -20,6 +20,9 @@ export const prefs = {
   shake: !reducedMotion,
   flash: !reducedMotion,
   contrast: matchMedia('(prefers-contrast: more)').matches,
+  // « Repères renforcés »: hatched outlines on live hazards, warnings told by shape
+  // as well as colour. Read by the trap and boss visuals as `prefs.cues`.
+  cues: false,
   vibrate: true,
   assist: false,
   pad: 'm',
@@ -33,10 +36,28 @@ if (![1, 0.8, 0.65].includes(prefs.speed)) prefs.speed = 1;
 /** Applies the preferences that live in the page (contrast, pad size). */
 export function applyPrefs() {
   document.body.classList.toggle('contrast', prefs.contrast);
+  document.body.classList.toggle('cues', prefs.cues);
   document.body.dataset.pad = prefs.pad;
 }
 
 const save = () => store(PREFS_KEY, prefs);
+
+/**
+ * Marks a scroll box with .more-below / .more-above while part of it is out of view,
+ * so the screen can show a scroll cue.
+ * @param {Element | null} el
+ */
+function scrollCue(el) {
+  if (!el) return;
+  const update = () => {
+    el.classList.toggle('more-below', el.scrollTop + el.clientHeight < el.scrollHeight - 4);
+    el.classList.toggle('more-above', el.scrollTop > 4);
+  };
+  el.addEventListener('scroll', update, { passive: true });
+  // Shown, resized or refilled (trophies, cast): measure again.
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(update).observe(el);
+  new MutationObserver(update).observe(el, { childList: true, subtree: true });
+}
 
 const ACTION_LABELS = {
   left: 'Gauche',
@@ -55,11 +76,14 @@ const ACTION_LABELS = {
  * @param {() => void} changed Called after any preference changes.
  */
 export function setupOptions(audio, input, changed) {
+  for (const sel of ['#options .options', '#trophyList', '#cast .card'])
+    scrollCue(document.querySelector(sel));
   const padSelect = /** @type {HTMLSelectElement} */ ($('optPad'));
   const SWITCHES = /** @type {const} */ ([
     ['optShake', 'shake'],
     ['optFlash', 'flash'],
     ['optContrast', 'contrast'],
+    ['optCues', 'cues'],
     ['optVibrate', 'vibrate'],
     ['optAssist', 'assist'],
   ]);
