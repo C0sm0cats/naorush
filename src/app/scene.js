@@ -288,8 +288,8 @@ export class LevelView {
           this.furniture.push({
             mesh: this.props[cars[carCount++ % cars.length]],
             // Wheels on the floor, roof on the tile top (the hero stands on it): the
-            // 1.35-tall model is squashed to the 1-tile run.
-            model: chain(translation(c + n / 2, y, -0.6), scaling(n / 3.6, 1 / 1.35, 1)),
+            // model is 4 long and 1 tall, drawn unscaled on a 4-tile run.
+            model: chain(translation(c + n / 2, y, -0.6), scaling(n / 4, 1, 1)),
           });
         }
       }
