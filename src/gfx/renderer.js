@@ -10,6 +10,11 @@ import { identity, lookAt, multiply, ortho } from './mat4.js';
  */
 const VIEW_MARGIN = 0.5;
 const SHADOW_MARGIN = 0.5;
+/**
+ * Items whose largest world-space size is under this (tickets, cups, small props)
+ * cast no shadow: their few shadow texels are lost in the filtering anyway.
+ */
+const SHADOW_MIN_SIZE = 0.35;
 const WHITE = new Float32Array([1, 1, 1]);
 const IDENTITY = identity();
 /** @type {{flash?: number}} */
@@ -66,6 +71,24 @@ function meshBox(geo) {
     (z1 - z0) / 2,
   ]);
   return box.every(Number.isFinite) ? box : null;
+}
+
+/**
+ * Whether an item is too small to cast a visible shadow: its bounding box, moved by
+ * the model matrix, is under {@link SHADOW_MIN_SIZE} along every axis.
+ * @param {Float32Array} m @param {Float32Array | null} box
+ */
+function tooSmall(m, box) {
+  if (!box) return false;
+  const ex = box[3],
+    ey = box[4],
+    ez = box[5];
+  const h = SHADOW_MIN_SIZE / 2;
+  return (
+    Math.abs(m[0]) * ex + Math.abs(m[4]) * ey + Math.abs(m[8]) * ez < h &&
+    Math.abs(m[1]) * ex + Math.abs(m[5]) * ey + Math.abs(m[9]) * ez < h &&
+    Math.abs(m[2]) * ex + Math.abs(m[6]) * ey + Math.abs(m[10]) * ez < h
+  );
 }
 
 /**
@@ -166,7 +189,7 @@ in vec4 vLight;
 in float vAO, vMat;
 uniform sampler2DShadow uShadow;
 uniform vec3 uSunDir, uSunColor, uSky, uGround, uFog, uEye;
-uniform float uFogNear, uFogFar, uRim, uFlash;
+uniform float uFogNear, uFogFar, uRim, uFlash, uAO;
 uniform int uLights;
 uniform vec4 uLightPos[8];
 uniform vec3 uLightColor[8];
@@ -193,7 +216,8 @@ void main() {
   if (mat == 2) {
     col = albedo * 2.2;
   } else {
-    float ao = 0.35 + 0.65 * vAO;
+    // Corner occlusion, dropped on struggling phones (see Renderer.lowQuality).
+    float ao = uAO > 0.5 ? 0.35 + 0.65 * vAO : 1.0;
     vec3 ambient = mix(uGround, uSky, n.y * 0.5 + 0.5) * ao;
     float ndl = max(dot(n, -uSunDir), 0.0);
     vec3 light = ambient;
@@ -433,6 +457,92 @@ export class Sprite {
  * @property {boolean} [noShadow]
  */
 
+/** Stage build timings, reported by the scene for the `?perf` overlay. */
+export const perfStats = {
+  /** Milliseconds from the start of a stage build until everything is ready. */
+  buildMs: 0,
+  /** Of which the main thread was busy (the rest ran in a worker or waited on files). */
+  mainMs: 0,
+};
+
+/**
+ * `?perf`: frame rate, frame and script time, draw calls, triangles and the
+ * renderer's quality settings, refreshed twice a second in a corner of the page.
+ */
+class PerfOverlay {
+  /** @param {Renderer} renderer */
+  constructor(renderer) {
+    this.renderer = renderer;
+    const el = document.createElement('pre');
+    el.setAttribute('aria-hidden', 'true');
+    Object.assign(el.style, {
+      position: 'fixed',
+      left: '50%',
+      top: '4px',
+      transform: 'translateX(-50%)',
+      zIndex: '99',
+      margin: '0',
+      padding: '4px 8px',
+      font: '12px/1.35 ui-monospace, monospace',
+      color: '#e8ffe0',
+      background: 'rgba(0, 0, 0, 0.65)',
+      borderRadius: '6px',
+      pointerEvents: 'none',
+    });
+    document.body.append(el);
+    this.el = el;
+    this.last = performance.now();
+    this.since = this.last;
+    this.frames = 0;
+    this.frameMs = 0;
+    this.worst = 0;
+    this.scriptMs = 0;
+    this.draws = 0;
+    this.shadowDraws = 0;
+    this.triangles = 0;
+  }
+
+  reset() {
+    this.frames = 0;
+    this.frameMs = 0;
+    this.worst = 0;
+    this.scriptMs = 0;
+    this.draws = 0;
+    this.shadowDraws = 0;
+    this.triangles = 0;
+  }
+
+  /**
+   * Called at the end of every rendered frame.
+   * @param {number} start When render() began (its CPU time is what is shown as JS).
+   */
+  frame(start) {
+    const now = performance.now();
+    const dt = now - this.last;
+    this.last = now;
+    const st = this.renderer.stats;
+    this.frames++;
+    this.frameMs += dt;
+    if (dt > this.worst) this.worst = dt;
+    this.scriptMs += Math.max(0, now - start);
+    this.draws += st.draws;
+    this.shadowDraws += st.shadowDraws;
+    this.triangles += st.triangles;
+    if (now - this.since < 500) return;
+    this.since = now;
+    const n = this.frames;
+    const r = this.renderer;
+    this.el.textContent =
+      `${((1000 * n) / this.frameMs).toFixed(0)} fps · ${(this.frameMs / n).toFixed(1)} ms ` +
+      `(max ${this.worst.toFixed(1)}) · render JS ${(this.scriptMs / n).toFixed(2)} ms\n` +
+      `draws ${(this.draws / n).toFixed(0)} · shadow ${(this.shadowDraws / n).toFixed(0)} · ` +
+      `${(this.triangles / n / 1000).toFixed(0)}k tris\n` +
+      `scale ${r.scale.toFixed(2)} · shadow map ${r.shadowSize} · AO ${r.low ? 'off' : 'on'}\n` +
+      `build ${perfStats.buildMs.toFixed(0)} ms (main thread ${perfStats.mainMs.toFixed(0)} ms)`;
+    this.reset();
+  }
+}
+
 /**
  * WebGL2 forward renderer: sky gradient, shadow-mapped sun, point lights,
  * per-vertex AO, ACES tonemapping. Draws at the full device pixel ratio.
@@ -456,24 +566,27 @@ export class Renderer {
     // Sampler units never change: the shadow map on unit 0, sprite art on unit 1.
     gl.useProgram(this.main.p);
     gl.uniform1i(this.main.u.uShadow, 0);
+    gl.uniform1f(this.main.u.uAO, 1);
     gl.useProgram(this.spriteProg.p);
     gl.uniform1i(this.spriteProg.u.uTex, 1);
     /** Render scale (dynamic resolution), 0.5–1. */
     this.scale = 1;
+    const params = new URLSearchParams(location.search);
+    /** Touch devices trade shadow detail and corner occlusion for frame rate. */
+    this.touch = matchMedia('(pointer: coarse)').matches;
+    /** Half-size shadow map and no corner occlusion (see lowQuality()). */
+    this.low = false;
     // Phones get a lighter shadow map.
-    this.shadowSize = matchMedia('(pointer: coarse)').matches ? 1024 : 2048;
-    this.shadowTex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, this.shadowTex);
-    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, this.shadowSize, this.shadowSize);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this.shadowSize = this.touch ? 1024 : 2048;
+    /** @type {WebGLTexture | null} */
+    this.shadowTex = null;
     this.shadowFbo = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFbo);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, this.shadowTex, 0);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.shadowMap(this.shadowSize);
+    /** Draw calls of the last frame, camera and shadow passes, and triangles drawn. */
+    this.stats = { draws: 0, shadowDraws: 0, triangles: 0 };
+    /** `?perf` shows frame timings and draw counts in a corner. */
+    this.perf = params.has('perf') ? new PerfOverlay(this) : null;
+    if (params.get('perf') === 'low') this.lowQuality();
     this.width = 1;
     this.height = 1;
     // Per-frame scratch storage: render() allocates nothing.
@@ -505,7 +618,45 @@ export class Renderer {
     this.resize();
   }
 
+  /**
+   * (Re)creates the sun's depth texture at `size` texels square.
+   * @param {number} size
+   */
+  shadowMap(size) {
+    const gl = this.gl;
+    if (this.shadowTex) gl.deleteTexture(this.shadowTex);
+    this.shadowSize = size;
+    this.shadowTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.shadowTex);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, size, size);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, this.shadowTex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  /**
+   * Lighter rendering for a struggling device, for the rest of the session: half the
+   * shadow map's texels and no corner occlusion. Switching back and forth would
+   * hitch, so it is one way.
+   */
+  lowQuality() {
+    if (this.low) return;
+    this.low = true;
+    this.shadowMap(this.shadowSize / 2);
+    const gl = this.gl;
+    gl.useProgram(this.main.p);
+    gl.uniform1f(this.main.u.uAO, 0);
+  }
+
   resize() {
+    // On a touch device, frames slow enough for the dynamic resolution to step down
+    // (see DynamicResolution) also lighten the shadows and occlusion.
+    if (this.touch && !this.low && this.scale < 1) this.lowQuality();
     const dpr = Math.min(window.devicePixelRatio || 1, 2) * this.scale;
     // Reading clientWidth forces a layout whenever the HUD changed the page, so it
     // is cached and refreshed by the resize observer (when there is one).
@@ -529,6 +680,7 @@ export class Renderer {
    * @param {{flash?: number}} [fx]
    */
   render(camera, lit, items, sprites, fx = NO_FX) {
+    const start = this.perf ? performance.now() : 0;
     const gl = this.gl;
     this.resize();
     // Sun shadow map centred on what the camera looks at.
@@ -566,16 +718,21 @@ export class Renderer {
     let vao = null;
     /** @type {Float32Array | null} */
     let model = null;
+    let draws = 0,
+      shadowDraws = 0,
+      indices = 0;
     for (let i = 0; i < items.length; i++) {
       const it = items[i];
       if (it.noShadow) continue;
       const mesh = it.mesh;
+      if (tooSmall(it.model, mesh.box)) continue;
       if (!visible(it.model, mesh.box, this.shadowPlanes, SHADOW_MARGIN)) continue;
       if (it.model !== model) gl.uniformMatrix4fv(uDepthModel, false, (model = it.model));
       if (mesh.vao !== vao) gl.bindVertexArray((vao = mesh.vao));
       const parts = mesh.parts;
       if (!parts) {
         mesh.draw(gl, 0, mesh.count);
+        shadowDraws++;
         continue;
       }
       const lean = sameSun(mesh.sun, sunDir);
@@ -584,6 +741,8 @@ export class Renderer {
         if (!visible(it.model, p.box, this.shadowPlanes, SHADOW_MARGIN)) continue;
         if (!lean) mesh.draw(gl, p.first, p.total);
         else if (p.shadowCount) mesh.draw(gl, p.shadowFirst, p.shadowCount);
+        else continue;
+        shadowDraws++;
       }
     }
     gl.disable(gl.POLYGON_OFFSET_FILL);
@@ -637,12 +796,17 @@ export class Renderer {
       const parts = mesh.parts;
       if (!parts) {
         mesh.draw(gl, 0, mesh.count);
+        draws++;
+        indices += mesh.count;
         continue;
       }
       for (let k = 0; k < parts.length; k++) {
         const p = parts[k];
-        if (p.count && visible(it.model, p.box, planes, VIEW_MARGIN))
+        if (p.count && visible(it.model, p.box, planes, VIEW_MARGIN)) {
           mesh.draw(gl, p.first, p.count);
+          draws++;
+          indices += p.count;
+        }
       }
     }
 
@@ -662,6 +826,8 @@ export class Renderer {
       gl.bindTexture(gl.TEXTURE_2D, s.texture);
       gl.bindVertexArray(s.vao);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
+      draws++;
+      indices += 6;
     }
 
     // The backdrop last, only where nothing was drawn (it sits behind everything).
@@ -678,6 +844,11 @@ export class Renderer {
     gl.depthMask(true);
 
     gl.bindVertexArray(null);
+    const st = this.stats;
+    st.draws = draws + 1;
+    st.shadowDraws = shadowDraws;
+    st.triangles = (indices + 3) / 3;
+    if (this.perf) this.perf.frame(start);
   }
 
   /**

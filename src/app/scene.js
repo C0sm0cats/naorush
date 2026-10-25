@@ -1,4 +1,5 @@
 import { CAST } from '../data/cast.js';
+import { LEVELS } from '../data/levels/index.js';
 import {
   DESKS,
   PLAQUES,
@@ -12,14 +13,14 @@ import { renderPoster } from '../gfx/posters.js';
 import { buildProps, propVariant } from '../gfx/props.js';
 import { DrawPool, buildCharacter, poseCharacter, poseOptions } from '../gfx/characters.js';
 import { chain, multiply, scaling, translation } from '../gfx/mat4.js';
-import { Mesh, Sprite } from '../gfx/renderer.js';
+import { Mesh, Sprite, perfStats } from '../gfx/renderer.js';
 import { buildThings } from '../gfx/things.js';
-import { MAT, Volume, meshVolume, partitionMesh } from '../gfx/voxels.js';
-import { buildOffice, buildSkyline } from '../gfx/world-builder.js';
+import { MAT, Volume, meshVolume } from '../gfx/voxels.js';
 import { HERO, TILE } from '../game/sim.js';
 import { assetUrl, crop, loadImage } from './assets.js';
+import { buildStage } from './build-worker.js';
 import { drawThing } from './draw-things.js';
-import { blinkAt, bossPose, heroPose, idlePose } from './poses.js';
+import { bossPose, dancePose, heroLayers, heroPose, idlePose } from './poses.js';
 import { title } from './title.js';
 
 const IDENTITY = translation(0, 0, 0);
@@ -42,23 +43,20 @@ const CROWD = [
   'visio',
   'mathis',
 ];
+/** Cast screen: spacing of the line-up and the depth it stands at. */
+const CAST_STEP = 0.8;
+const CAST_Z = 0.4;
+/** The game camera's vertical field of view and eye offset (see camera.js). */
+const CAMERA_FOV = (30 * Math.PI) / 180;
+const CAMERA_EYE_DX = 0.6;
+const CAMERA_TARGET_Z = -0.8;
+/** The cast screen's framing, rewritten by castFocus(). */
+const CAST_FOCUS = { x: 0, y: 1.6, facing: 0.001, visH: 5.4 };
 const SIDES = [-1, 1];
 const RACK_GLOW = [0.3, 1.6, 1.2];
 // Scratch factors for the per-frame matrices (results go into pooled items).
 const F1 = new Float32Array(16);
 const F2 = new Float32Array(16);
-/** Reused dance pose of the end party. @type {Pose} */
-const DANCE = {
-  legL: 0,
-  legR: 0,
-  armL: 0,
-  armR: 0,
-  armSpread: 0.5,
-  bob: 0,
-  head: 0,
-  mood: 'happy',
-  blink: 0,
-};
 
 /**
  * Whiteboard artwork: the heroes' boards are images, the bosses' are drawn in code.
@@ -84,14 +82,76 @@ export function boardUrl(id) {
 /** @type {Record<string, string>} */
 const BOARD_URLS = {};
 
-/** The city skyline depends only on the level width: built once per width. */
+/** The city skyline depends only on the level width: built once per width. @type {Map<number, Mesh>} */
 const SKYLINES = new Map();
-/** @param {WebGL2RenderingContext} gl @param {number} width @returns {Mesh} */
-function skylineMesh(gl, width) {
-  // Bands of 12 units: only the part seen through the windows is drawn. No shadow.
-  if (!SKYLINES.has(width))
-    SKYLINES.set(width, new Mesh(gl, partitionMesh(buildSkyline(width), 12)));
-  return SKYLINES.get(width);
+
+/** @typedef {ReturnType<typeof buildStage>} BuiltStage */
+/** The worker building stage dioramas; null: build on the main thread. @type {Worker | null | undefined} */
+let builder;
+/** Builds waiting for the worker, by request id. */
+const jobs = new Map();
+let nextJob = 1;
+
+/** Starts the build worker, if this browser can run one. @returns {Worker | null} */
+function startBuilder() {
+  if (typeof Worker === 'undefined') return null;
+  try {
+    const w = new Worker(new URL('./build-worker.js', import.meta.url), { type: 'module' });
+    w.onmessage = (e) => {
+      const job = jobs.get(e.data.id);
+      jobs.delete(e.data.id);
+      if (e.data.error) job?.reject(new Error(e.data.error));
+      else job?.resolve(e.data);
+    };
+    // A worker that cannot start (no module workers): every build falls back.
+    w.onerror = (e) => {
+      e.preventDefault();
+      builder = null;
+      w.terminate();
+      for (const job of jobs.values()) job.reject(new Error('build worker'));
+      jobs.clear();
+    };
+    return w;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A stage's diorama (and the skyline for `skyline` tiles of width, when > 0), built in
+ * the worker so the main thread prepares the artwork meanwhile; on the main thread
+ * when there is no worker. Both run the same code on the same data.
+ * @param {import('../data/levels/index.js').Level} level
+ * @param {import('../game/sim.js').HeroId} heroId
+ * @param {number} skyline
+ * @returns {Promise<BuiltStage>}
+ */
+function buildDiorama(level, heroId, skyline) {
+  const stage = LEVELS.indexOf(level);
+  const worker = builder;
+  if (worker === undefined) {
+    // A worker only gets going once the main thread is free, and at boot it is not:
+    // the first stage builds here and the worker starts right after, for the next ones.
+    builder = null;
+    setTimeout(() => (builder = startBuilder()));
+  }
+  if (!worker || stage < 0) return Promise.resolve(buildStage(level, heroId, skyline));
+  return /** @type {Promise<BuiltStage>} */ (
+    new Promise((resolve, reject) => {
+      const id = nextJob++;
+      jobs.set(id, { resolve, reject });
+      worker.postMessage({ id, stage, heroId, skyline });
+    })
+  ).catch(() => buildStage(level, heroId, skyline));
+}
+
+/**
+ * An image decoded off the main thread, so uploading it does not stall a frame.
+ * @template {HTMLImageElement | null} T @param {T} img @returns {Promise<T>}
+ */
+async function decoded(img) {
+  await img?.decode().catch(() => {});
+  return img;
 }
 
 /** The "SORTIE" sign: white running figure and arrow on emergency green. */
@@ -180,16 +240,29 @@ export class LevelView {
    * @param {import('../data/levels/index.js').Level} level
    */
   constructor(gl, sim, level) {
+    const start = performance.now();
     this.gl = gl;
     this.levelId = level.id;
     this.theme = level.theme;
     this.decor = level.decor;
-    const office = buildOffice(sim, level.decor, level.map, level.theme);
-    this.lights = office.lights;
-    // Bands of 8 tiles, culled one by one; faces no pass can see are dropped.
-    this.office = new Mesh(gl, partitionMesh(office.mesh, 8, level.lighting.sunDir));
-    this.skyline =
-      level.theme === 'datacenter' || level.theme === 'parking' ? null : skylineMesh(gl, sim.w);
+    // The diorama builds in the background (see buildDiorama) while the shared meshes,
+    // furniture and artwork are prepared here; `ready` waits for both.
+    const sky = level.theme !== 'datacenter' && level.theme !== 'parking';
+    const width = sim.w;
+    const built = buildDiorama(level, sim.heroId, sky && !SKYLINES.has(width) ? width : 0);
+    /** The stage's point lights (filled in once the diorama is built, same array). */
+    this.lights = /** @type {Array<{pos: number[], radius: number, color: number[]}>} */ ([]);
+    /** @type {Mesh | null} */
+    this.office = null;
+    /** @type {Mesh | null} */
+    this.skyline = null;
+    /** @type {DrawItem | null} */
+    this.officeItem = null;
+    /** @type {DrawItem | null} */
+    this.skylineItem = null;
+    this.disposed = false;
+    /** Street lamps' lights, after the diorama's own. @type {typeof this.lights} */
+    const lamps = [];
     const shared = sharedMeshes(gl);
     this.things = shared.things;
     this.props = shared.props;
@@ -228,7 +301,7 @@ export class LevelView {
         const mesh = /** @type {keyof typeof this.props} */ (d.type);
         this.furniture.push(this.prop(propVariant(mesh, d.x, d.y), d.x, d.y, d.z ?? -1.9));
         if (d.type === 'lampPost')
-          this.lights.push({ pos: [d.x, d.y + 2.5, -1.4], radius: 5, color: [0.7, 0.5, 0.3] });
+          lamps.push({ pos: [d.x, d.y + 2.5, -1.4], radius: 5, color: [0.7, 0.5, 0.3] });
       }
     }
     /** @type {Sprite[]} */
@@ -237,12 +310,6 @@ export class LevelView {
     this.pool = new DrawPool();
     /** The list items() returns, refilled every frame. @type {DrawItem[]} */
     this.frame = [];
-    /** @type {DrawItem} */
-    this.officeItem = { mesh: this.office, model: IDENTITY };
-    /** @type {DrawItem | null} */
-    this.skylineItem = this.skyline
-      ? { mesh: this.skyline, model: IDENTITY, noShadow: true }
-      : null;
     /** Door and arena gate tiles, found once per tile map. @type {{tiles: Sim['tiles'] | null, doors: number[], gates: number[]}} */
     this.gates = { tiles: null, doors: [], gates: [] };
     /** What the stage's key item looks like. */
@@ -250,7 +317,26 @@ export class LevelView {
     const exit = sim.things.find((t) => t.kind === 'exit');
     /** Where the stage ends, for the exit sign. */
     this.exitAt = exit ? { x: exit.x, y: exit.y } : null;
-    this.ready = this.loadArtwork();
+    /** Milliseconds the main thread spent on this build (the constructor's added below). */
+    let main = 0;
+    const diorama = built.then((b) => {
+      const t = performance.now();
+      if (this.disposed) return;
+      for (const l of b.lights) this.lights.push(l);
+      for (const l of lamps) this.lights.push(l);
+      this.office = new Mesh(gl, b.office);
+      this.officeItem = { mesh: this.office, model: IDENTITY };
+      if (b.skyline && !SKYLINES.has(width)) SKYLINES.set(width, new Mesh(gl, b.skyline));
+      this.skyline = (sky && SKYLINES.get(width)) || null;
+      this.skylineItem = this.skyline
+        ? { mesh: this.skyline, model: IDENTITY, noShadow: true }
+        : null;
+      main += performance.now() - t;
+    });
+    this.ready = Promise.all([diorama, this.loadArtwork()]).then(() => {
+      perfStats.buildMs = performance.now() - start;
+      perfStats.mainMs = main;
+    });
     this.doorT = 0;
     this.gallery = false;
     /** Where the gallery line-up starts. */
@@ -262,8 +348,15 @@ export class LevelView {
     this.landAt = -1;
     this.jumpAt = -1;
     this.throwAt = -1;
+    this.joyAt = -1;
+    /** Highest point of the current jump or fall, and how far the last landing dropped. */
+    this.peak = 0;
+    this.drop = 0;
+    /** Seconds since each of those beats, handed to heroLayers() (rewritten per frame). */
+    this.beats = { land: -1, jump: -1, throw: -1, joy: -1, drop: 0 };
     /** Seconds the hero has stood still. */
     this.still = 0;
+    main += performance.now() - start;
   }
 
   /**
@@ -276,13 +369,57 @@ export class LevelView {
   }
 
   /**
+   * Camera framing of the cast screen: the whole line-up (from `galleryX`) centred in
+   * the part of the screen the cast card leaves free, from `left` to `right` (shares
+   * of the canvas width), zooming out only when it would not fit. When the card
+   * leaves almost nothing (upright phones), the line-up is centred on the screen.
+   * Returns the same object every call.
+   * @param {number} aspect Canvas width / height.
+   * @param {number} [left] @param {number} [right]
+   */
+  castFocus(aspect, left = 0, right = 1) {
+    if (right - left < 0.35) {
+      left = 0;
+      right = 1;
+    }
+    // The line-up's extent, half a body beyond the first and last (directors are wider).
+    let a = Infinity,
+      b = -Infinity;
+    for (let i = 0; i < GALLERY.length; i++) {
+      const x = this.galleryX + i * CAST_STEP;
+      const half = 0.5 * CAST[GALLERY[i]].scale;
+      a = Math.min(a, x - half);
+      b = Math.max(b, x + half);
+    }
+    // At the line-up's depth (nearer than the wall plane the view height is set for)
+    // the visible width is aspect · (visH − 2·z·tan(fov/2)).
+    const tan = Math.tan(CAMERA_FOV / 2);
+    const visH = Math.max(5.4, ((b - a) * 1.1) / (right - left) / aspect + 2 * CAST_Z * tan);
+    const width = aspect * (visH - 2 * CAST_Z * tan);
+    const dist = visH / 2 / tan;
+    // The eye sits to the right of the point it looks at, which shifts the view's
+    // centre at the line-up's depth.
+    const shift = (CAMERA_EYE_DX * (CAST_Z - CAMERA_TARGET_Z)) / (dist - CAMERA_TARGET_Z);
+    const f = CAST_FOCUS;
+    f.x = (a + b) / 2 - ((left + right) / 2 - 0.5) * width - shift;
+    f.visH = visH;
+    return f;
+  }
+
+  /**
    * Remembers landings and take-offs for squash and stretch.
    * @param {import('../game/sim.js').SimEvent} e @param {number} time Simulation time.
    */
   event(e, time) {
-    if (e.type === 'land' || e.type === 'step' || e.type === 'hardland') this.landAt = time;
+    if (e.type === 'land' || e.type === 'step' || e.type === 'hardland') {
+      this.landAt = time;
+      this.drop = Math.max(0, this.peak - e.y);
+      this.peak = e.y;
+    }
     if (e.type === 'jump' || e.type === 'airjump') this.jumpAt = time;
     if (e.type === 'throw') this.throwAt = time;
+    if (e.type === 'ticket' || e.type === 'secret' || e.type === 'key' || e.type === 'checkpoint')
+      this.joyAt = time;
   }
 
   /**
@@ -298,7 +435,8 @@ export class LevelView {
 
   /** Frees the level's own GPU resources (shared meshes stay). */
   dispose() {
-    this.office.dispose(this.gl);
+    this.disposed = true;
+    this.office?.dispose(this.gl);
     for (const s of this.sprites) s.dispose(this.gl);
     this.sprites = [];
   }
@@ -317,14 +455,15 @@ export class LevelView {
         const z = d.front ? 1.43 : -2.6;
         this.sprites.push(new Sprite(gl, art, [d.x, d.y + 0.9, z, posterWidth(d.id), POSTER_H]));
       } else if (d.type === 'whiteboard' && d.id) {
-        const img = await boardArt(d.id);
+        const art = await boardArt(d.id);
+        const img = art instanceof HTMLImageElement ? await decoded(art) : art;
         if (img)
           this.sprites.push(
             new Sprite(gl, img, [d.x, d.y + 0.75, -2.6, WHITEBOARD_W, WHITEBOARD_W * 0.75]),
           );
       } else if (d.type === 'desk' && d.id) {
         const id = /** @type {keyof typeof DESKS} */ (d.id);
-        const img = await loadImage(DESKS[id].file);
+        const img = await decoded(await loadImage(DESKS[id].file));
         if (img) {
           const art = crop(img, DESKS[id].crop);
           const w = 4.2;
@@ -335,7 +474,7 @@ export class LevelView {
         const src = PLAQUES[id];
         const plaque =
           typeof src === 'string'
-            ? await loadImage(src)
+            ? await decoded(await loadImage(src))
             : /** @type {HTMLCanvasElement} */ (renderPlaque(src));
         if (plaque)
           this.sprites.push(
@@ -385,7 +524,7 @@ export class LevelView {
     // Static scenery last: what stands in front fills the depth buffer first, so the
     // walls and skyline behind it are rejected before shading.
     for (const f of this.furniture) items.push(f);
-    items.push(this.officeItem);
+    if (this.officeItem) items.push(this.officeItem);
     if (this.skylineItem) items.push(this.skylineItem);
     return items;
   }
@@ -408,15 +547,7 @@ export class LevelView {
       // The end: everybody celebrates the signed envelope at the Espace VIP.
       for (let i = 0; i < CROWD.length; i++) {
         const id = CROWD[i];
-        const ph = t * 6 + i * 1.3;
-        const d = DANCE;
-        d.legL = Math.max(0, Math.sin(ph)) * 0.7;
-        d.legR = Math.max(0, -Math.sin(ph)) * 0.7;
-        d.armL = 2.6 + Math.sin(ph) * 0.4;
-        d.armR = 2.6 - Math.sin(ph) * 0.4;
-        d.bob = Math.abs(Math.sin(ph)) * 2;
-        d.head = Math.sin(ph * 0.5) * 0.2;
-        d.blink = blinkAt(t + i);
+        const d = dancePose(t, i);
         const o = poseOptions(CAST[id].scale, 0.3, 0.4);
         poseCharacter(
           this.cast[id],
@@ -435,9 +566,9 @@ export class LevelView {
     if (this.gallery) {
       for (let i = 0; i < GALLERY.length; i++) {
         const id = GALLERY[i];
-        const x = this.galleryX + i * (this.galleryX > 2 ? 0.8 : 0.9);
+        const x = this.galleryX + i * (this.galleryX > 2 ? CAST_STEP : 0.9);
         const o = poseOptions(CAST[id].scale, 0.35, 0.4);
-        poseCharacter(this.cast[id], x, 3, 0.4, 1, idlePose(t + i), o, items, pool);
+        poseCharacter(this.cast[id], x, 3, CAST_Z, 1, idlePose(t + i), o, items, pool);
       }
       return items;
     }
@@ -523,63 +654,14 @@ export class LevelView {
     poseCharacter(this.cast[id], b.x, y, -0.1, facing, pose, o, items, this.pool);
   }
 
-  /**
-   * The hero's face: winces when hurt, beams on success, concentrates on a ledge.
-   * Updates `pose` in place (heroPose() returns a fresh object every frame).
-   * @param {Pose} pose @param {Sim} sim @param {number} t
-   * @returns {Pose}
-   */
-  face(pose, sim, t) {
-    const h = sim.hero;
-    /** @type {Pose['mood']} */
-    const mood =
-      h.state === 'dead' || h.invuln > 1.1
-        ? 'ouch'
-        : sim.won
-          ? 'happy'
-          : h.state === 'hang' || h.state === 'climb'
-            ? 'focus'
-            : pose.mood;
-    pose.blink = mood === 'ouch' ? 0 : (pose.blink ?? blinkAt(t));
-    pose.mood = mood;
-    return pose;
-  }
-
-  /**
-   * Throwing arm on top of whatever the body is doing (updates `pose` in place).
-   * @param {Pose} pose @param {Sim} sim
-   * @returns {Pose}
-   */
-  overlay(pose, sim) {
-    const k = sim.time - this.throwAt;
-    if (k < 0 || k > 0.28) return pose;
-    const swing = k < 0.08 ? -1.6 * (k / 0.08) : -1.6 + 4.2 * ((k - 0.08) / 0.2);
-    pose.armR = Math.min(swing, 2.6);
-    pose.lean = (pose.lean ?? 0) + 0.12;
-    return pose;
-  }
-
-  /**
-   * Squash on landing, stretch on take-off (updates `pose` in place).
-   * @param {Pose} pose @param {number} time
-   * @returns {Pose}
-   */
-  squashed(pose, time) {
-    const land = time - this.landAt,
-      jump = time - this.jumpAt;
-    let k = pose.squash ?? 0;
-    if (land >= 0 && land < 0.14) k += 0.16 * (1 - land / 0.14);
-    if (jump >= 0 && jump < 0.12) k -= 0.1 * (1 - jump / 0.12);
-    pose.squash = k;
-    return pose;
-  }
-
   /** @param {DrawItem[]} items @param {Sim} sim @param {number} t */
   drawHero(items, sim, t) {
     const h = sim.hero;
     const dt = t - (this.lastDraw ?? t);
     this.lastDraw = t;
     this.still = h.state === 'ground' && Math.abs(h.vx) < 0.05 && !sim.won ? this.still + dt : 0;
+    // The top of the arc, for a landing squash that grows with the drop.
+    this.peak = h.state === 'air' ? Math.max(this.peak, h.y) : h.y;
     let hx = h.x + HERO.w / 2;
     let hy = h.y;
     if (h.state === 'climb') {
@@ -594,11 +676,18 @@ export class LevelView {
       title.draw(this.cast, sim.heroId, t, items, this.pool);
       return;
     }
-    const pose = this.face(
-      this.squashed(this.overlay(heroPose(sim, t, this.still), sim), sim.time),
-      sim,
-      t,
-    );
+    const b = this.beats;
+    b.land = sim.time - this.landAt;
+    b.jump = sim.time - this.jumpAt;
+    b.throw = sim.time - this.throwAt;
+    b.joy = sim.time - this.joyAt;
+    b.drop = this.drop;
+    if (this.landAt < 0) b.land = -1;
+    if (this.jumpAt < 0) b.jump = -1;
+    if (this.throwAt < 0) b.throw = -1;
+    if (this.joyAt < 0) b.joy = -1;
+    // Body, face (neutral, effort, ouch, joy) and the throw/landing/take-off layers.
+    const pose = heroLayers(heroPose(sim, t, this.still), sim, b);
     const turn = h.state === 'hang' || h.state === 'climb' ? 1.45 : 1.0;
     const o = poseOptions(CAST[sim.heroId].scale, turn, 0.55);
     poseCharacter(this.cast[sim.heroId], hx, hy, 0, h.facing, pose, o, items, this.pool);
