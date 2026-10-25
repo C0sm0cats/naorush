@@ -147,7 +147,14 @@ export function bossPose(b, hx, t, id) {
   const grand = style === 'grand';
   const p = BOSS[style];
   const done = b.state === 'convinced' || b.state === 'sign';
-  const facing = b.state === 'dash' ? (b.dir ?? 1) : done ? 1 : Math.sign(hx - b.x) || -1;
+  const facing =
+    b.state === 'dash'
+      ? (b.dir ?? 1)
+      : b.state === 'walk'
+        ? Math.sign(b.vx ?? 0) || 1
+        : done
+          ? 1
+          : Math.sign(hx - b.x) || -1;
   const bt = b.t ?? 0;
   const breath = Math.sin(t * 2.2);
   // Keeps an eye on the hero: chin down when close, up when far.
@@ -330,6 +337,17 @@ export function bossPose(b, hx, t, id) {
         p.hem = -0.3 * settle(bt - 1.1) + 0.3 * (1 - k);
         p.mood = 'focus';
       }
+      break;
+    }
+    case 'walk': {
+      // A purposeful walk to the next station: Julien keeps his tablet to his chest.
+      const ph = t * 9;
+      const sw = Math.sin(ph);
+      base(p, bt1, sw * 0.65, -sw * 0.65, -sw * 0.35, grand ? sw * 0.35 : 0.75);
+      p.lean = 0.08;
+      p.bob = Math.abs(Math.cos(ph)) * 0.5;
+      p.head = glance * 0.5;
+      p.hem = Math.abs(sw) * 0.15;
       break;
     }
     case 'dash':

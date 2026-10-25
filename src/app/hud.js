@@ -2,7 +2,7 @@ import { CAST } from '../data/cast.js';
 import { load, store } from './storage.js';
 import { POSTER_HINTS, posterTitle } from '../data/inetum.js';
 import { HERO } from '../game/sim.js';
-import { PATTERNS } from '../game/boss.js';
+import { PATTERNS, consultLength } from '../game/boss.js';
 import { prefs } from './options.js';
 import { project } from '../gfx/mat4.js';
 
@@ -267,8 +267,9 @@ export class Hud {
   /**
    * Phase pips and the PRIMO consult countdown.
    * @param {import('../game/world.js').BossId} id @param {import('../game/world.js').Thing | undefined} boss
+   * @param {import('../game/sim.js').Sim} sim
    */
-  bossDetail(id, boss) {
+  bossDetail(id, boss, sim) {
     const p = PATTERNS[id];
     const total = p.phases.length + 1;
     const phase = Math.min(total, boss?.phase ?? 1);
@@ -292,7 +293,8 @@ export class Hud {
     this.bossConsult.classList.toggle('off', !consult);
     this.bossConsult.setAttribute('aria-hidden', String(!consult));
     if (consult && boss) {
-      const length = p.consult[phase - 1] ?? 1;
+      // Shorter in « Sans filet »: the bar follows the real window.
+      const length = consultLength(sim, boss);
       const left = Math.max(0, 1 - (boss.t ?? 0) / length);
       this.bossConsultBar.style.transform = `scaleX(${left.toFixed(3)})`;
     }
@@ -351,7 +353,7 @@ export class Hud {
       const boss = sim.things.find((t) => t.kind === 'boss');
       this.bossName.textContent = `${CAST[sim.boss.id].name} · ${CAST[sim.boss.id].title}`;
       this.bossHp.style.width = `${(100 * (boss?.hp ?? 0)) / sim.boss.hp}%`;
-      this.bossDetail(sim.boss.id, boss);
+      this.bossDetail(sim.boss.id, boss, sim);
     }
     // Without a tick() since the last update, the countdown happens here.
     if (!this.ticked) this.countdown(dt);
