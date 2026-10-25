@@ -228,6 +228,69 @@ function officeFloor(mood, trapCols) {
   }
 }
 
+/** Daylight through the façade per mood: patch colour and strength. */
+const SUN = /** @type {Partial<Record<Mood, [number, number]>>} */ ({
+  morning: [rgb('#fff1c4'), 0.22],
+  corporate: [rgb('#f6fbff'), 0.16],
+  idle: [rgb('#ffe9b8'), 0.24],
+});
+
+/** Slant of the sun patches: voxels of x shift per voxel of depth. */
+const SUN_SLANT = 0.6;
+
+/**
+ * Dresses an office floor: rugs under the steering committee tables, and in the
+ * daylit moods the patches the windows throw on it, pane by pane, slanting with
+ * the sun. No patch or rug comes near a hidden trapdoor, whose tile is drawn plain.
+ * @param {(x: number, y: number, z: number) => number} finish
+ * @param {Mood} mood
+ * @param {string[]} map
+ * @param {Set<number>} trapCols
+ * @param {(x: number) => boolean} onPanel
+ * @returns {(x: number, y: number, z: number) => number}
+ */
+function dressFloor(finish, mood, map, trapCols, onPanel) {
+  /** @param {number} z */
+  const zv = (z) => Math.round((z - Z_BACK) * V);
+  /** @type {number[][]} */
+  const rugs = [];
+  if (mood === 'corporate')
+    for (const row of map)
+      for (const m of row.matchAll(/Y+/g)) {
+        const c0 = /** @type {number} */ (m.index),
+          c1 = c0 + m[0].length;
+        rugs.push([
+          trapCols.has(c0 - 1) ? c0 * V : c0 * V - 6,
+          trapCols.has(c1) ? c1 * V : c1 * V + 6,
+        ]);
+      }
+  const sun = SUN[mood];
+  const z0 = zv(-2.6),
+    z1 = zv(0.8),
+    r0 = zv(-2.1),
+    r1 = zv(1.1);
+  /** @param {number} x */
+  const nearTrap = (x) => {
+    for (let k = -4; k <= 4; k++) if (trapCols.has((x >> 3) + k)) return true;
+    return false;
+  };
+  return (x, y, z) => {
+    for (const [a, b] of rugs)
+      if (x >= a && x < b && z >= r0 && z < r1) {
+        if (x === a || x === b - 1 || z === r0 || z === r1 - 1) return rgb('#c9a227');
+        if (x === a + 1 || x === b - 2 || z === r0 + 1 || z === r1 - 2) return rgb('#5a1d2a');
+        // Woven bands across the rug (along the depth, so the faces stay merged).
+        return (x - a) % 8 < 2 ? rgb('#8e3446') : rgb('#7a2637');
+      }
+    const c = finish(x, y, z);
+    if (!sun || z < z0 || z > z1) return c;
+    const u = x + 2 * Math.floor(((z - z0) * SUN_SLANT) / 2);
+    const m = u % 32;
+    if (m < 3 || m > 29 || onPanel(u) || nearTrap(u) || nearTrap(x)) return c;
+    return lerpColor(c, sun[0], sun[1]);
+  };
+}
+
 /**
  * @param {import('../game/sim.js').Sim} sim
  * @param {import('../data/levels/index.js').Decor[]} decor
@@ -292,7 +355,7 @@ export function buildOffice(sim, decor, map = [], theme = 'office', moodName) {
             : ((x >> 2) + (z >> 2)) % 2
               ? rgb('#a3acb7')
               : rgb('#8d96a2')
-      : officeFloor(mood, trapCols);
+      : dressFloor(officeFloor(mood, trapCols), mood, map, trapCols, (x) => onPanel(x));
   /** Visual style of a solid tile, from the level's ASCII map. */
   /** @param {number} c @param {number} r */
   const styleAt = (c, r) => map[sim.h - 1 - r]?.[c] ?? '#';
@@ -322,6 +385,9 @@ export function buildOffice(sim, decor, map = [], theme = 'office', moodName) {
     });
   /** @param {number} x */
   const onPanel = (x) => panels.some(([a, b]) => x >= a && x < b);
+  const plan = floorPlan(sim, map, decor, onPanel, lights);
+  const jokes = planJokes(plan, mood, panels, onPanel);
+  const doors = planDoors(plan, theme, panels);
   // Car park: the ramp up to the street near the entrance, glowing with dawn light.
   let dawnAt = -1;
   for (let c = 1; park && dawnAt < 0 && c + 5 < sim.w; c++) {
@@ -331,6 +397,28 @@ export function buildOffice(sim, decor, map = [], theme = 'office', moodName) {
   }
   if (dawnAt >= 0)
     lights.push({ pos: [dawnAt / V + 2.5, 6, -2], radius: 6.5, color: [0.75, 0.5, 0.36] });
+  /** Server hall: left voxel x of the T&S lettering, once per room, clear of the
+   * artwork tall enough to reach the band. @type {number[]} */
+  const bandAt = [];
+  const tall = decor
+    .filter(
+      (d) =>
+        !d.front &&
+        ((d.type === 'poster' && d.y + 0.9 + POSTER_H > BAND_Y / V) ||
+          (d.type === 'whiteboard' && d.y + 0.75 + WHITEBOARD_W * 0.75 > BAND_Y / V)),
+    )
+    .map((d) => {
+      const w = d.type === 'whiteboard' ? WHITEBOARD_W : posterWidth(/** @type {string} */ (d.id));
+      return [Math.floor((d.x - 0.35) * V), Math.ceil((d.x + w + 0.35) * V)];
+    });
+  for (let r0 = 0; dc && r0 < sim.w; r0 += 20)
+    for (let c = r0 + 2; c < r0 + 15; c++) {
+      const x0 = c * V - 2,
+        x1 = c * V + 38;
+      if (tall.some(([a, b]) => a < x1 && b > x0)) continue;
+      bandAt.push(c * V);
+      break;
+    }
   if (roof) buildRoofBack(vol, sx, sim, decor);
   else
     for (let x = 0; x < sx; x++) {
@@ -384,19 +472,31 @@ export function buildOffice(sim, decor, map = [], theme = 'office', moodName) {
           vol.box(x, y, 0, x + 1, y + 1, 3, c);
           continue;
         }
-        if (dc && y >= 78 && y < 84) {
-          // The T&S band: lime, with navy pixel lettering at the start of every room.
-          const lx = (x % (20 * V)) - 6 * V;
+        if (dc && y >= BAND_Y && y < BAND_TOP) {
+          // The T&S band filling the top of the glass, deep enough to stay in view under
+          // the HUD: lime, with big navy pixel lettering once per room clear of artwork.
+          const at = bandAt.find((b) => x >= b && x < b + 36);
+          const lx = at === undefined ? -1 : x - at;
           const glyph = BAND_TEXT[Math.floor(lx / 12)];
           const px = (lx % 12) >> 1;
+          const gy = (BAND_Y + 11 - y) >> 1;
           const letter =
             lx >= 0 &&
             glyph !== undefined &&
             px < 5 &&
-            y > 78 &&
-            y < 84 &&
-            glyph[83 - y][px] === '1';
-          vol.box(x, y, 0, x + 1, y + 1, 3, letter ? PALETTE.fascia : PALETTE.accent);
+            y >= BAND_Y + 2 &&
+            y <= BAND_Y + 11 &&
+            gy < 5 &&
+            glyph[gy][px] === '1';
+          vol.box(
+            x,
+            y,
+            0,
+            x + 1,
+            y + 1,
+            3,
+            letter ? PALETTE.fascia : y === BAND_Y ? PALETTE.mullion : PALETTE.accent,
+          );
           continue;
         }
         if (dc && inWindowBand && !panel) {
@@ -410,8 +510,10 @@ export function buildOffice(sim, decor, map = [], theme = 'office', moodName) {
           continue;
         }
         if (inWindowBand && !panel) {
-          const mullion = x % (V * 4) < 2 || Math.abs(ty - 6.9) < 0.12;
-          if (mullion) vol.box(x, y, 0, x + 1, y + 1, 3, PALETTE.mullion);
+          // Mullions, and a transom in the colour of the room.
+          if (y === 56) vol.box(x, y, 0, x + 1, y + 1, 3, roomAccent(x >> 3, mood));
+          else if (x % (V * 4) < 2 || Math.abs(ty - 6.9) < 0.12)
+            vol.box(x, y, 0, x + 1, y + 1, 3, PALETTE.mullion);
           continue;
         }
         const base = dc ? rgb('#4a5568') : paint.wall;
@@ -580,13 +682,8 @@ export function buildOffice(sim, decor, map = [], theme = 'office', moodName) {
             (x >> 1) % 2 ? rgb('#f2c230') : rgb('#1c1c1c'),
           );
         } else if (floats) {
-          // Free-standing run of filing cabinets: drawers with chrome handles.
-          vol.box(x0, y0, depthBack, x0 + V, y0 + V, sz - 1, rgb('#c9cfd6'));
-          vol.box(x0, y0, sz - 1, x0 + V, y0 + V, sz, (x, y) =>
-            y - y0 === 3 || x - x0 === 0 ? rgb('#9aa3ad') : rgb('#dfe4ea'),
-          );
-          vol.box(x0 + 3, y0 + 5, sz - 1, x0 + 5, y0 + 6, sz + 0, rgb('#7b8590'), MAT.GLOSSY);
-          vol.box(x0 + 3, y0 + 1, sz - 1, x0 + 5, y0 + 2, sz + 0, rgb('#7b8590'), MAT.GLOSSY);
+          // Free-standing platform: a module furnished for the room it stands in.
+          floatModule(vol, mood, x0, y0, depthBack, sz, c, r, floorTop);
           // Steel posts down to the floor below, so mezzanines read as built, not floating.
           if (c % 3 === 0) {
             let fr = r - 1;
@@ -620,7 +717,7 @@ export function buildOffice(sim, decor, map = [], theme = 'office', moodName) {
           } else if (above !== TILE.SOLID)
             vol.box(x0, y0 + V - 2, depthBack, x0 + V, y0 + V, sz, floorTop);
         }
-        if (above !== TILE.SOLID && !isCeiling && (isBase || floats)) {
+        if (above !== TILE.SOLID && !isCeiling && (isBase || (floats && park))) {
           // Carpet on top with a thin lime nosing on the front edge.
           vol.box(x0, y0 + V - 2, depthBack, x0 + V, y0 + V, sz, floorTop);
           vol.box(x0, y0 + V - 2, sz - 1, x0 + V, y0 + V - 1, sz, PALETTE.accent);
@@ -637,6 +734,11 @@ export function buildOffice(sim, decor, map = [], theme = 'office', moodName) {
             park ? rgb('#8a909a') : dc ? PALETTE.ceiling : tiles,
           );
           const lamp = park ? c % 6 === 3 && below !== TILE.SOLID : c % 5 === 2;
+          if (theme === 'office' && c % 5 === 0 && below !== TILE.SOLID)
+            // Air diffusers between the light fittings.
+            vol.box(x0 + 2, y0 - 1, zv(-1.4), x0 + 6, y0, zv(0), (x) =>
+              x % 2 ? rgb('#9aa1aa') : rgb('#e2ded4'),
+            );
           if (lamp && mood === 'lounge' && below !== TILE.SOLID) {
             // Break room: warm pendant shades on cords instead of ceiling panels.
             const cx = x0 + 3,
@@ -688,16 +790,36 @@ export function buildOffice(sim, decor, map = [], theme = 'office', moodName) {
       }
     }
 
-  furnish({ vol, sim, map, decor, theme, zv, onPanel, lights, mood, dawnAt });
+  const annex = jokes.some((j) => j.kind === 'foodtruck')
+    ? new Volume(sx, sy, 17, 1 / V, [0, 0, -4.75])
+    : null;
+  furnish({
+    vol,
+    annex,
+    sim,
+    map,
+    decor,
+    theme,
+    zv,
+    onPanel,
+    lights,
+    mood,
+    dawnAt,
+    plan,
+    jokes,
+    doors,
+  });
   for (const d of decor) placeDecor(vol, d, sz);
-  const back = buildBackdrop(sim.w, mood);
-  const mesh = back ? mergeMeshes(meshVolume(vol), meshVolume(back)) : meshVolume(vol);
+  let mesh = meshVolume(vol);
+  for (const extra of [annex, buildForeground(plan, mood, trapCols), buildBackdrop(sim.w, mood)])
+    if (extra) mesh = mergeMeshes(mesh, meshVolume(extra));
   return { vol, mesh, lights };
 }
 
 /**
  * @typedef {Object} FurnishContext
  * @property {Volume} vol
+ * @property {Volume | null} annex Deck behind the roof edge (rooftop food truck), or null.
  * @property {import('../game/sim.js').Sim} sim
  * @property {string[]} map
  * @property {import('../data/levels/index.js').Decor[]} decor
@@ -707,7 +829,251 @@ export function buildOffice(sim, decor, map = [], theme = 'office', moodName) {
  * @property {Array<{pos: number[], radius: number, color: number[]}>} lights Point lights to add to.
  * @property {Mood} mood Light mood of the stage.
  * @property {number} dawnAt Car park: left voxel x of the daylight ramp opening (-1: none).
+ * @property {FloorPlan} plan Ground floor survey (see {@link floorPlan}).
+ * @property {Joke[]} jokes Joke props to build (see {@link planJokes}).
+ * @property {number[]} doors Left columns of the doors in the back wall.
  */
+
+/**
+ * @typedef {Object} FloorPlan
+ * @property {(c: number, r: number) => number} tile Tile at a column and row (solid outside).
+ * @property {number[]} ground First empty row of every column.
+ * @property {number} base The most common ground row: the ground floor.
+ * @property {number} F Ground floor voxel y.
+ * @property {number[]} arena Boss arena columns ([w, w] without a boss).
+ * @property {Set<number>} busy Ground floor columns props and things keep for themselves.
+ * @property {Set<number>} posts Columns where a post holds up a platform overhead.
+ * @property {(c: number) => boolean} clear Whether column c is a plain, free stretch of ground floor.
+ * @property {(c: number) => boolean} roomy Like `clear`, but a colleague, the start or a badge in
+ *   front do not count.
+ * @property {(x: number, y: number, z: number, radius: number, color: number[]) => void} pool
+ *   Adds a light pool tied to a prop, at most two per 20-tile room.
+ */
+
+/**
+ * Surveys the ground floor of a level: where it is, which columns props and things
+ * already use, and which stretches are free for set dressing.
+ * @param {import('../game/sim.js').Sim} sim
+ * @param {string[]} map
+ * @param {import('../data/levels/index.js').Decor[]} decor
+ * @param {(x: number) => boolean} onPanel
+ * @param {Array<{pos: number[], radius: number, color: number[]}>} lights
+ * @returns {FloorPlan}
+ */
+export function floorPlan(sim, map, decor, onPanel, lights) {
+  const { w, h, tiles } = sim;
+  /** @param {number} c @param {number} r */
+  const tile = (c, r) => (c < 0 || c >= w || r < 0 || r >= h ? TILE.SOLID : tiles[c + r * w]);
+  /** First empty row from the bottom of a column (its ground level). @param {number} c */
+  const groundOf = (c) => {
+    let r = 0;
+    while (r < h && tile(c, r) === TILE.SOLID) r++;
+    return r;
+  };
+  const ground = Array.from({ length: w }, (_, c) => groundOf(c));
+  /** @type {Record<number, number>} */
+  const tally = {};
+  for (const g of ground) tally[g] = (tally[g] ?? 0) + 1;
+  const base = Number(Object.keys(tally).sort((a, b) => tally[+b] - tally[+a])[0]);
+  const arena = sim.boss ? sim.boss.arena : [w, w];
+  // Props and interactive things standing on the ground floor keep their space.
+  const busy = new Set();
+  for (const d of decor)
+    if (d.type !== 'poster' && d.type !== 'whiteboard' && Math.abs(d.y - base) < 1.5)
+      for (let c = Math.floor(d.x - 1.4); c <= Math.ceil(d.x + (d.type === 'desk' ? 6 : 1.4)); c++)
+        busy.add(c);
+  // Joke props only give way to the furniture-like things (a colleague, the start
+  // or a badge stand in front of them well enough).
+  const hard = new Set(busy);
+  /** @type {Set<number>} */
+  const posts = new Set();
+  map.forEach((row, i) => {
+    const r = h - 1 - i;
+    if (r !== base && r !== base + 1) return;
+    [...row].forEach((ch, c) => {
+      if (!'dpPDEkJCnSX'.includes(ch)) return;
+      for (let k = c - 1; k <= c + 1; k++) {
+        busy.add(k);
+        if (!'CnS'.includes(ch)) hard.add(k);
+      }
+    });
+  });
+  // Steel posts under the mezzanines (see floatModule) stand in the back too.
+  for (let c = 0; c < w; c += 3)
+    for (let r = base + 2; r < h - 1; r++)
+      if (tile(c, r) === TILE.SOLID && tile(c, r - 1) === TILE.EMPTY) {
+        busy.add(c);
+        hard.add(c);
+        posts.add(c);
+      }
+  /** @param {number} c */
+  const clear = (c) =>
+    ground[c] === base &&
+    tile(c, base) === TILE.EMPTY &&
+    tile(c, base + 1) === TILE.EMPTY &&
+    !busy.has(c) &&
+    (c < arena[0] - 1 || c > arena[1]) &&
+    !onPanel(c * V) &&
+    !onPanel(c * V + V - 1);
+  /** @param {number} c */
+  const roomy = (c) =>
+    ground[c] === base &&
+    tile(c, base) === TILE.EMPTY &&
+    tile(c, base + 1) === TILE.EMPTY &&
+    !hard.has(c) &&
+    (c < arena[0] - 1 || c > arena[1]) &&
+    !onPanel(c * V) &&
+    !onPanel(c * V + V - 1);
+  /** @type {Record<number, number>} */
+  const perRoom = {};
+  /** @type {FloorPlan['pool']} */
+  const pool = (x, y, z, radius, color) => {
+    const room = Math.floor(x / 20);
+    if ((perRoom[room] ?? 0) >= 2) return;
+    perRoom[room] = (perRoom[room] ?? 0) + 1;
+    lights.push({ pos: [x, y, z], radius, color });
+  };
+  return { tile, ground, base, F: base * V, arena, busy, posts, clear, roomy, pool };
+}
+
+/**
+ * Accent colour of the named room a column belongs to (rooms are 20 tiles wide):
+ * door leaves, sign pictograms and the window transom take it, so each room has
+ * its own colour on top of the house lime.
+ * @param {number} c
+ * @param {Mood} mood
+ */
+function roomAccent(c, mood) {
+  const k = Math.floor(c / 20) % ROOM_ACCENTS.length;
+  return mood === 'event' || mood === 'night'
+    ? lerpColor(ROOM_ACCENTS[k], rgb('#1d1830'), 0.25)
+    : ROOM_ACCENTS[k];
+}
+const ROOM_ACCENTS = [
+  rgb('#9fd12a'),
+  rgb('#e0408a'),
+  rgb('#3d8bfd'),
+  rgb('#f29a38'),
+  rgb('#2fb5a3'),
+];
+
+/**
+ * @typedef {Object} Joke
+ * @property {'coffee'|'roadmap'|'monitoring'|'photobooth'|'foodtruck'} kind
+ * @property {number} c Left column.
+ * @property {number} w Width in tiles.
+ */
+
+/** Width in tiles of each joke prop, and whether it hangs on the back wall too. */
+const JOKES = /** @type {const} */ ({
+  coffee: { w: 3, wall: false },
+  roadmap: { w: 5, wall: true },
+  monitoring: { w: 5, wall: true },
+  photobooth: { w: 2, wall: false },
+  foodtruck: { w: 6, wall: false },
+});
+
+/**
+ * One joke prop per stage mood, set in the longest free stretches of the ground
+ * floor (the empty rooms of the director's notes): the COPIL coffee station and its
+ * post-it roadmap, the PRIMO monitoring wall of the server hall, the seminar photo
+ * booth and the rooftop food truck. Wall pieces reserve their columns of the façade
+ * (pushed to `panels`), floor pieces their columns of the floor (`plan.busy`).
+ * @param {FloorPlan} plan
+ * @param {Mood} mood
+ * @param {Array<number[]>} panels
+ * @param {(x: number) => boolean} onPanel
+ * @returns {Joke[]}
+ */
+function planJokes(plan, mood, panels, onPanel) {
+  /** @type {Array<Joke['kind']>} */
+  const kinds =
+    mood === 'corporate'
+      ? ['roadmap', 'coffee']
+      : mood === 'night'
+        ? ['monitoring']
+        : mood === 'event'
+          ? ['photobooth']
+          : mood === 'dusk'
+            ? ['foodtruck']
+            : [];
+  /** @type {Joke[]} */
+  const out = [];
+  const taken = new Set();
+  const w = plan.ground.length;
+  for (const kind of kinds) {
+    const need = JOKES[kind].w;
+    // Free runs: floor pieces want the floor and the wall above them clear; wall
+    // pieces only the wall, and no platform in front hiding them; the food truck
+    // parks behind the roof edge, clear of the billboards.
+    const { wall } = JOKES[kind];
+    /** @param {number} c */
+    const open = (c) => {
+      if (taken.has(c) || (c >= plan.arena[0] - 2 && c <= plan.arena[1])) return false;
+      if (onPanel(c * V) || onPanel(c * V + V - 1)) return false;
+      if (kind === 'foodtruck') return plan.ground[c] === plan.base;
+      if (!wall)
+        return plan.roomy(c) && [2, 3].every((k) => plan.tile(c, plan.base + k) === TILE.EMPTY);
+      return (
+        !plan.posts.has(c) && [1, 2, 3, 4].every((k) => plan.tile(c, plan.base + k) === TILE.EMPTY)
+      );
+    };
+    let best = -1,
+      bestLen = 0;
+    for (let c = 1; c < w - 1;) {
+      if (!open(c)) {
+        c++;
+        continue;
+      }
+      let e = c;
+      while (e < w - 1 && open(e)) e++;
+      if (e - c > bestLen) {
+        bestLen = e - c;
+        best = c;
+      }
+      c = e;
+    }
+    if (bestLen < need) continue;
+    const c = best + Math.floor((bestLen - need) / 2);
+    out.push({ kind, c, w: need });
+    for (let k = c - 1; k <= c + need; k++) {
+      plan.busy.add(k);
+      taken.add(k);
+    }
+    if (JOKES[kind].wall) panels.push([c * V - 3, (c + need) * V + 3]);
+  }
+  return out;
+}
+
+/**
+ * A door in the back wall at every room boundary, where the floor in front is free.
+ * Their columns of the façade become solid wall (pushed to `panels`).
+ * @param {FloorPlan} plan
+ * @param {'office'|'datacenter'|'rooftop'|'parking'} theme
+ * @param {Array<number[]>} panels
+ * @returns {number[]} Left column of each door (two tiles wide).
+ */
+function planDoors(plan, theme, panels) {
+  if (theme !== 'office' && theme !== 'datacenter') return [];
+  /** @type {number[]} */
+  const out = [];
+  const w = plan.ground.length;
+  for (let b = 20; b < w - 4; b += 20)
+    for (const d of [0, 1, -1, 2, -2, 3, -3, 4, -4]) {
+      const c = b + d;
+      if (!plan.clear(c) || !plan.clear(c + 1)) continue;
+      out.push(c);
+      for (let k = c - 1; k <= c + 2; k++) plan.busy.add(k);
+      panels.push([c * V, c * V + 2 * V]);
+      break;
+    }
+  return out;
+}
+
+/** Bottom voxel row of the T&S band of the server hall (in the top pane of the glass). */
+const BAND_Y = 64;
+/** First voxel row above the T&S band: the top of the glass. */
+const BAND_TOP = Math.floor(9.6 * V) + 1;
 
 /** "T&S" in 5×5 pixel glyphs (rows top to bottom), for the server hall band. */
 const BAND_TEXT = [
@@ -735,50 +1101,25 @@ const DIGITS = [
  * cable trays, pipes, vents... Collision comes from the sim tiles, never from this.
  * @param {FurnishContext} ctx
  */
-function furnish({ vol, sim, map, decor, theme, zv, onPanel, lights, mood, dawnAt }) {
-  const { w, h, tiles } = sim;
-  /** @param {number} c @param {number} r */
-  const tile = (c, r) => (c < 0 || c >= w || r < 0 || r >= h ? TILE.SOLID : tiles[c + r * w]);
-  /** First empty row from the bottom of a column (its ground level). @param {number} c */
-  const groundOf = (c) => {
-    let r = 0;
-    while (r < h && tile(c, r) === TILE.SOLID) r++;
-    return r;
-  };
-  const ground = Array.from({ length: w }, (_, c) => groundOf(c));
-  /** @type {Record<number, number>} */
-  const tally = {};
-  for (const g of ground) tally[g] = (tally[g] ?? 0) + 1;
-  const base = Number(Object.keys(tally).sort((a, b) => tally[+b] - tally[+a])[0]);
-  const F = base * V;
-  const arena = sim.boss ? sim.boss.arena : [w, w];
-  // Props and interactive things standing on the ground floor keep their space.
-  const busy = new Set();
-  for (const d of decor)
-    if (d.type !== 'poster' && d.type !== 'whiteboard' && Math.abs(d.y - base) < 1.5)
-      for (let c = Math.floor(d.x - 1.4); c <= Math.ceil(d.x + (d.type === 'desk' ? 6 : 1.4)); c++)
-        busy.add(c);
-  map.forEach((row, i) => {
-    const r = h - 1 - i;
-    if (r !== base && r !== base + 1) return;
-    [...row].forEach((ch, c) => {
-      if ('dpPDEkJCnSX'.includes(ch)) for (let k = c - 1; k <= c + 1; k++) busy.add(k);
-    });
-  });
-  // Steel posts under the mezzanines (see the filing cabinets) stand in the back too.
-  for (let c = 0; c < w; c += 3)
-    for (let r = base + 2; r < h - 1; r++)
-      if (tile(c, r) === TILE.SOLID && tile(c, r - 1) === TILE.EMPTY) busy.add(c);
-  /** Whether column c has a clear, plain stretch of ground floor (two tiles of headroom). */
-  /** @param {number} c */
-  const clear = (c) =>
-    ground[c] === base &&
-    tile(c, base) === TILE.EMPTY &&
-    tile(c, base + 1) === TILE.EMPTY &&
-    !busy.has(c) &&
-    (c < arena[0] - 1 || c > arena[1]) &&
-    !onPanel(c * V) &&
-    !onPanel(c * V + V - 1);
+function furnish({
+  vol,
+  annex,
+  sim,
+  map,
+  theme,
+  zv,
+  onPanel,
+  lights,
+  mood,
+  dawnAt,
+  plan,
+  jokes,
+  doors,
+}) {
+  const { w, h } = sim;
+  const { tile, ground, base, F, arena, busy, clear, pool } = plan;
+  for (const j of jokes) jokeProp(j.kind === 'foodtruck' && annex ? annex : vol, j, F, pool);
+  for (const c of doors) door(vol, theme, mood, c * V + 2, F, roomAccent(c + 1, mood));
   /** Whether column c is open under the ceiling (rows ceilRow-2 .. ceilRow-1). */
   /** @param {number} c @param {number} ceil */
   const openBelow = (c, ceil) =>
@@ -794,19 +1135,25 @@ function furnish({ vol, sim, map, decor, theme, zv, onPanel, lights, mood, dawnA
         pod = 0;
         continue;
       }
-      backRow(vol, mood, c * V, F, noise(c, base, 41), pod);
+      backRow(vol, mood, c * V, F, noise(c, base, 41), pod, pool);
       c += 2;
       if (++pod === 3) {
         c++;
         pod = 0;
       }
     }
-    // Cable trunking along the skirting.
-    for (let c = 0; c < w; c++)
-      if (ground[c] === base && tile(c, base) === TILE.EMPTY)
-        vol.box(c * V, F - 2, 3, c * V + V, F + 1, 5, (x) =>
-          x % (2 * V) === 0 ? rgb('#c9c6be') : rgb('#e6e3dc'),
-        );
+    // A skirting board in the wall's darker paint, cable trunking over it with a
+    // double socket every other tile (the doors interrupt both).
+    const skirting = (WALLS[mood] ?? WALLS.morning)?.low ?? PALETTE.wallLow;
+    for (let c = 0; c < w; c++) {
+      if (ground[c] !== base || tile(c, base) !== TILE.EMPTY) continue;
+      if (doors.some((d) => c >= d && c < d + 2)) continue;
+      vol.box(c * V, F - 1, 3, c * V + V, F + 2, 4, skirting);
+      vol.box(c * V, F + 2, 3, c * V + V, F + 4, 5, (x) =>
+        x % (2 * V) === 0 ? rgb('#c9c6be') : rgb('#e6e3dc'),
+      );
+      if (c % 2 === 0) vol.box(c * V + 3, F + 2, 5, c * V + 6, F + 4, 6, rgb('#f7f5ef'));
+    }
     // Plant boxes on the window sills.
     for (let c = 2; c < w - 2; c += 7) {
       const x = c * V;
@@ -1079,6 +1426,111 @@ function furnish({ vol, sim, map, decor, theme, zv, onPanel, lights, mood, dawnA
 }
 
 /**
+ * A free-standing platform tile, built as the furniture of its room so mezzanines
+ * read as part of the place: a steel catwalk in the server hall and on the roof,
+ * lockers in the open space, a bookcase on the intercontrat plateau, binders in a
+ * walnut case at head office, open oak shelves in the break room, a carpeted riser
+ * at the seminar. Whatever the module, the top is a flat deck with the lime nosing
+ * every standable edge has. Collision is the tile's, never this.
+ * @param {Volume} vol
+ * @param {Mood} mood
+ * @param {number} x0 @param {number} y0 Voxel corner of the tile.
+ * @param {number} z0 Back voxel z. @param {number} sz Front voxel z.
+ * @param {number} c @param {number} r Tile column and row (variation seed).
+ * @param {(x: number, y: number, z: number) => number} floorTop Floor finish of the stage.
+ */
+function floatModule(vol, mood, x0, y0, z0, sz, c, r, floorTop) {
+  const f = sz - 1;
+  /** Front face pattern, in tile-local voxel coordinates. @param {(px: number, py: number) => number} paint */
+  const front = (paint) => vol.box(x0, y0, f, x0 + V, y0 + 6, sz, (x, y) => paint(x - x0, y - y0));
+  /** @param {number} body @param {number} deck */
+  const body = (body, deck) => {
+    vol.box(x0, y0, z0, x0 + V, y0 + 6, f, body);
+    vol.box(x0, y0 + 6, z0, x0 + V, y0 + V, sz, deck);
+  };
+  if (mood === 'night' || mood === 'dusk') {
+    // Steel catwalk: grating deck, yellow toe board, a braced girder in front of a dark web.
+    const steel = mood === 'night' ? rgb('#7d8796') : rgb('#a7aeb7');
+    body(rgb('#1e242e'), 0);
+    vol.box(x0, y0 + 6, z0, x0 + V, y0 + V, sz, (x) => (x % 2 ? rgb('#5f6876') : rgb('#8a94a3')));
+    const flip = c % 2;
+    front((px, py) => {
+      if (py === 0 || py === 5) return steel;
+      const d = 1 + ((flip ? px : 7 - px) * 4) / 7;
+      return Math.abs(py - d) < 0.7 ? steel : rgb('#232a35');
+    });
+    vol.box(x0, y0 + 6, f, x0 + V, y0 + 7, sz + 1, rgb('#e2b42a'));
+  } else if (mood === 'morning') {
+    // Steel lockers, two doors a tile, with vents, a handle and a number tag.
+    const paints = [rgb('#7fa7c9'), rgb('#9fc3a8'), rgb('#e8c26e'), rgb('#c9a4d6')];
+    const paint = paints[(c >> 1) % paints.length];
+    const seam = lerpColor(paint, 0x000000, 0.35);
+    body(lerpColor(paint, 0x000000, 0.2), rgb('#3a4252'));
+    front((px, py) => {
+      const dx = px % 4;
+      if (dx === 0) return seam;
+      if (py === 4 && dx !== 3) return rgb('#2b3446');
+      if (py === 2 && dx === 3) return PALETTE.metal;
+      if (py === 3 && dx === 1 && (c + px) % 3 === 0) return rgb('#f4f1ea');
+      return paint;
+    });
+  } else if (mood === 'idle' || mood === 'corporate' || mood === 'lounge') {
+    // Shelving: a frame with two shelves of books, binders or crockery.
+    const wood =
+      mood === 'corporate' ? rgb('#5a3c28') : mood === 'lounge' ? rgb('#c49466') : rgb('#8a5f3c');
+    const back = lerpColor(wood, 0x000000, 0.45);
+    body(back, wood);
+    const books = [rgb('#c2367f'), rgb('#3d8bfd'), rgb('#e0a83a'), rgb('#2f8f8a'), rgb('#e8735a')];
+    const binders = [
+      PALETTE.fascia,
+      rgb('#2b3a5e'),
+      PALETTE.accent,
+      rgb('#ff4f9a'),
+      rgb('#3d8bfd'),
+    ];
+    front((px, py) => {
+      if (px === 0 || py === 0 || py === 3) return wood;
+      const shelf = py < 3 ? 0 : 1,
+        hy = py - shelf * 3;
+      const n = noise(c * 8 + px, r * 2 + shelf, 13);
+      if (mood === 'corporate')
+        // Binders standing in a row, white spine labels.
+        return hy === 1 && px % 2 ? rgb('#f4f1ea') : binders[Math.floor(n * 5)];
+      if (mood === 'lounge') {
+        // Mugs, jars and a pot plant, with gaps between.
+        const k = Math.floor(noise(c, r * 2 + shelf, 17) * 3);
+        const item = (px + k) % 4;
+        if (item === 0) return back;
+        if (k === 0) return hy === 2 && item === 2 ? PALETTE.leafLight : rgb('#f4efe6');
+        if (k === 1) return hy === 2 ? rgb('#d8643c') : rgb('#9fd8ff');
+        return hy === 2 ? PALETTE.leaf : PALETTE.pot;
+      }
+      // Books of mixed heights, a gap now and then.
+      if (n < 0.12) return back;
+      return hy === 2 && n < 0.45 ? back : books[Math.floor(n * 97) % 5];
+    });
+  } else if (mood === 'event') {
+    // Stage riser: pleated black skirt under a carpeted deck.
+    body(rgb('#16141c'), 0);
+    vol.box(x0, y0 + 6, z0, x0 + V, y0 + V, sz, floorTop);
+    front((px) => (px % 2 ? rgb('#1a1822') : rgb('#262330')));
+  } else {
+    // Filing cabinets: drawers with chrome handles.
+    body(rgb('#c9cfd6'), 0);
+    vol.box(x0, y0 + 6, z0, x0 + V, y0 + V, sz, floorTop);
+    front((px, py) =>
+      py === 3 || px === 0
+        ? rgb('#9aa3ad')
+        : (py === 1 || py === 5) && px > 2 && px < 5
+          ? rgb('#7b8590')
+          : rgb('#dfe4ea'),
+    );
+  }
+  // Lime nosing on the front edge of the deck: this is a floor.
+  vol.box(x0, y0 + V - 2, f, x0 + V, y0 + V - 1, sz, PALETTE.accent);
+}
+
+/**
  * Reflections on the façade glass: a pair of short slanted streaks on some panes,
  * the cartoon shorthand for "there is a window here". Thin and sparse, so cheap.
  * @param {Volume} vol
@@ -1108,6 +1560,304 @@ function glassGlints(vol, sx, onPanel, color, lit) {
   }
 }
 
+/** 3×5 pixel letters (rows top to bottom; É has its accent row on top). */
+const FONT = {
+  A: ['111', '101', '111', '101', '101'],
+  C: ['111', '100', '100', '100', '111'],
+  D: ['110', '101', '101', '101', '110'],
+  E: ['111', '100', '110', '100', '111'],
+  É: ['010', '111', '100', '110', '100', '111'],
+  F: ['111', '100', '110', '100', '100'],
+  H: ['101', '101', '111', '101', '101'],
+  I: ['111', '010', '010', '010', '111'],
+  L: ['100', '100', '100', '100', '111'],
+  M: ['10001', '11011', '10101', '10001', '10001'],
+  O: ['111', '101', '101', '101', '111'],
+  P: ['111', '101', '111', '100', '100'],
+  R: ['110', '101', '111', '110', '101'],
+  S: ['111', '100', '111', '001', '111'],
+  T: ['111', '010', '010', '010', '010'],
+  W: ['10001', '10001', '10101', '11011', '10001'],
+  '%': ['101', '001', '010', '100', '101'],
+  ...Object.fromEntries(
+    DIGITS.map((g, k) => [String(k), [0, 3, 6, 9, 12].map((i) => g.slice(i, i + 3))]),
+  ),
+};
+
+/**
+ * Pixel text, one voxel per pixel, its baseline at `y`.
+ * @param {Volume} vol @param {string} str @param {number} x @param {number} y @param {number} z
+ * @param {number} color @param {number} [mat]
+ * @returns {number} Width in voxels.
+ */
+function text(vol, str, x, y, z, color, mat = MAT.MATTE) {
+  let cx = x;
+  for (const ch of str) {
+    const g = FONT[/** @type {keyof typeof FONT} */ (ch)];
+    if (!g) {
+      cx += 2;
+      continue;
+    }
+    g.forEach((row, i) => {
+      for (let k = 0; k < row.length; k++)
+        if (row[k] === '1')
+          vol.box(cx + k, y + g.length - 1 - i, z, cx + k + 1, y + g.length - i, z + 1, color, mat);
+    });
+    cx += g[0].length + 1;
+  }
+  return cx - x - 1;
+}
+
+/**
+ * A door in the back wall, two tiles wide slot: frame, leaf, vision panel, push
+ * plate and a plate over it in the room's colour; a steel door with a badge
+ * reader in the server hall.
+ * @param {Volume} vol
+ * @param {'office'|'datacenter'|'rooftop'|'parking'} theme
+ * @param {Mood} mood
+ * @param {number} a Left voxel x. @param {number} F Floor voxel y. @param {number} accent
+ */
+function door(vol, theme, mood, a, F, accent) {
+  const dc = theme === 'datacenter';
+  const frame = dc ? rgb('#3a4252') : mood === 'event' ? rgb('#2a2440') : rgb('#9aa3ad');
+  const leaf = dc
+    ? rgb('#5b6678')
+    : mood === 'corporate'
+      ? rgb('#eeece6')
+      : mood === 'event'
+        ? rgb('#3a3350')
+        : rgb('#c9a27a');
+  vol.box(a, F, 3, a + 12, F + 19, 4, (x) =>
+    (x - a) % 6 === 0 && x > a ? lerpColor(leaf, 0, 0.2) : leaf,
+  );
+  vol.box(a - 1, F, 3, a, F + 20, 5, frame);
+  vol.box(a + 12, F, 3, a + 13, F + 20, 5, frame);
+  vol.box(a - 1, F + 19, 3, a + 13, F + 20, 5, frame);
+  // Vision panels and push plates on both leaves.
+  for (const x of [a + 2, a + 8]) {
+    vol.box(x, F + 10, 4, x + 2, F + 16, 5, rgb('#9cc6e0'), MAT.GLOSSY);
+    vol.box(x, F + 8, 4, x + 2, F + 9, 5, PALETTE.metal, MAT.GLOSSY);
+  }
+  // The room plate over the door.
+  vol.box(a + 3, F + 21, 3, a + 9, F + 24, 4, accent);
+  vol.box(a + 4, F + 22, 4, a + 8, F + 23, 5, rgb('#f4f1ea'));
+  if (dc) {
+    vol.box(a, F + 1, 4, a + 12, F + 2, 5, (x) => ((x >> 1) % 2 ? PALETTE.hazard : rgb('#1b1b1b')));
+    vol.box(a + 14, F + 9, 3, a + 16, F + 12, 5, rgb('#22262e'));
+    vol.box(a + 14, F + 11, 5, a + 16, F + 12, 6, rgb('#ff3b3b'), MAT.EMISSIVE);
+  }
+}
+
+/**
+ * The joke prop of a stage (see {@link planJokes}).
+ * @param {Volume} vol @param {Joke} j @param {number} F Floor voxel y.
+ * @param {FloorPlan['pool']} pool
+ */
+function jokeProp(vol, j, F, pool) {
+  const a = j.c * V;
+  const base = F / V;
+  switch (j.kind) {
+    case 'coffee': {
+      // The COPIL coffee station: walnut counter, the machine, a tower of cups,
+      // thermos jugs, sugar and stirrers, and its name in lime neon.
+      vol.box(a + 1, F, 4, a + 23, F + 8, 11, (x) =>
+        (x - a) % 7 === 1 ? rgb('#3b2a1e') : rgb('#6e4b33'),
+      );
+      vol.box(a, F + 8, 3, a + 24, F + 9, 12, rgb('#e9e5dc'));
+      text(vol, 'CAFÉ', a + 5, F + 2, 11, PALETTE.accent, MAT.EMISSIVE);
+      vol.box(a + 2, F + 9, 4, a + 9, F + 18, 9, rgb('#2b2f36'));
+      vol.box(a + 2, F + 18, 4, a + 9, F + 19, 9, PALETTE.metal, MAT.GLOSSY);
+      vol.box(a + 3, F + 15, 9, a + 8, F + 16, 10, PALETTE.screen, MAT.EMISSIVE);
+      vol.box(a + 4, F + 12, 8, a + 7, F + 13, 10, rgb('#1b1d22'));
+      vol.box(a + 4, F + 9, 7, a + 6, F + 11, 9, rgb('#f4f1ea'));
+      vol.box(a + 11, F + 9, 6, a + 13, F + 16, 8, (_x, y) =>
+        (y - F) % 3 === 0 ? rgb('#ff4f9a') : rgb('#f4f1ea'),
+      );
+      for (const [x, col] of /** @type {Array<[number, number]>} */ ([
+        [a + 14, rgb('#c3cad3')],
+        [a + 17, PALETTE.fascia],
+      ])) {
+        vol.box(x, F + 9, 5, x + 2, F + 14, 8, col, MAT.GLOSSY);
+        vol.box(x, F + 14, 6, x + 1, F + 15, 7, rgb('#22262e'));
+      }
+      vol.box(a + 20, F + 9, 6, a + 23, F + 11, 9, rgb('#f4f1ea'));
+      vol.box(a + 21, F + 11, 7, a + 22, F + 14, 8, rgb('#c19a6b'));
+      pool(j.c + 1.2, base + 1.7, -1.8, 4.5, [0.6, 0.42, 0.22]);
+      break;
+    }
+    case 'roadmap': {
+      // The post-it roadmap: one note in Q1, two in Q2, four in Q3, and Q4 overflowing
+      // off the board, one already on the floor.
+      const y0 = F + 11,
+        y1 = F + 31,
+        x1 = a + 40;
+      vol.box(a, y0, 3, x1, y1, 4, rgb('#f4f2ec'));
+      for (const [bx0, by0, bx1, by1] of [
+        [a - 1, y0 - 1, x1 + 1, y0],
+        [a - 1, y1, x1 + 1, y1 + 1],
+        [a - 1, y0, a, y1],
+        [x1, y0, x1 + 1, y1],
+      ])
+        vol.box(bx0, by0, 3, bx1, by1, 5, rgb('#b8c0c8'));
+      vol.box(a, y0 - 2, 3, x1, y0 - 1, 6, PALETTE.metal);
+      text(vol, 'ROADMAP', a + 2, y1 - 7, 4, PALETTE.fascia);
+      vol.box(a + 2, y0 + 12, 4, x1 - 4, y0 + 13, 5, PALETTE.accent);
+      for (let k = 0; k < 3; k++)
+        vol.box(x1 - 4 + k, y0 + 10 + k, 4, x1 - 3 + k, y0 + 15 - k, 5, PALETTE.accent);
+      for (let q = 0; q < 4; q++) {
+        vol.box(a + 3 + q * 9, y0 + 11, 4, a + 4 + q * 9, y0 + 14, 5, PALETTE.fascia);
+        const n = [1, 2, 4, 9][q];
+        for (let i = 0; i < n; i++) {
+          const nx = a + 2 + q * 9 + (i % 2) * 4 + (q === 3 ? Math.floor(i / 4) : 0);
+          const ny = y0 + 7 - Math.floor(i / 2) * 3 + (q === 3 && i > 6 ? 9 : 0);
+          vol.box(nx, ny, 4, nx + 3, ny + 3, 5, STICKY[(q + i) % STICKY.length]);
+        }
+      }
+      vol.box(x1 - 1, y0 - 4, 4, x1 + 2, y0 - 1, 5, STICKY[1]);
+      vol.box(a + 31, F, 12, a + 34, F + 1, 15, STICKY[0]);
+      // The bin under it, full of crumpled versions.
+      vol.box(a + 24, F, 5, a + 28, F + 5, 9, rgb('#3a4252'));
+      vol.box(a + 24, F + 5, 5, a + 28, F + 6, 9, (x, _y, z) => STICKY[(x + z) % STICKY.length]);
+      break;
+    }
+    case 'monitoring': {
+      // The supervision wall: PRIMO on the big screen, KPIs below, a console in front.
+      vol.box(a, F + 10, 3, a + 40, F + 33, 4, rgb('#11161f'));
+      const bg = rgb('#0f2238');
+      vol.box(a + 1, F + 23, 4, a + 39, F + 32, 5, bg, MAT.GLOSSY);
+      text(vol, 'PRIMO', a + 10, F + 25, 5, PALETTE.accent, MAT.EMISSIVE);
+      for (let k = 0; k < 3; k++)
+        vol.box(
+          a + 33 + k * 2,
+          F + 27,
+          5,
+          a + 34 + k * 2,
+          F + 28,
+          6,
+          k === 2 ? rgb('#ffb347') : rgb('#46ff9b'),
+          MAT.EMISSIVE,
+        );
+      for (let s = 0; s < 3; s++) {
+        const x0 = a + 1 + s * 13;
+        vol.box(x0, F + 11, 4, x0 + 12, F + 22, 5, bg, MAT.GLOSSY);
+        if (s === 0)
+          for (let k = 0; k < 5; k++) {
+            const hgt = 2 + Math.floor(noise(j.c, k, 7) * 7);
+            vol.box(
+              x0 + 1 + k * 2,
+              F + 12,
+              5,
+              x0 + 2 + k * 2,
+              F + 12 + hgt,
+              6,
+              k % 2 ? PALETTE.screen : PALETTE.accent,
+              MAT.EMISSIVE,
+            );
+          }
+        else if (s === 1) text(vol, '99%', x0 + 1, F + 15, 5, rgb('#46ff9b'), MAT.EMISSIVE);
+        else
+          for (let px = 0; px < 10; px++) {
+            const py = F + 15 + Math.round(2.5 * Math.sin(px * 0.9 + j.c));
+            vol.box(x0 + 1 + px, py, 5, x0 + 2 + px, py + 1, 6, rgb('#ff4f9a'), MAT.EMISSIVE);
+          }
+      }
+      vol.box(a + 4, F + 6, 6, a + 36, F + 7, 14, rgb('#2b2f36'));
+      for (const x of [a + 5, a + 34]) vol.box(x, F, 7, x + 1, F + 6, 13, rgb('#22262e'));
+      for (const x of [a + 10, a + 24]) vol.box(x, F + 7, 10, x + 6, F + 8, 13, rgb('#4a505c'));
+      vol.box(a + 18, F + 7, 9, a + 20, F + 9, 11, rgb('#ff4f9a'));
+      pool(j.c + 2.5, base + 2.2, -2.2, 5.5, [0.12, 0.32, 0.62]);
+      break;
+    }
+    case 'photobooth': {
+      // Seminar photo booth: a pink cabinet under its lit sign, a curtain and the
+      // sample strip of four poses, so everyone knows what the evening looked like.
+      // Under three tiles tall, so a riser overhead never hides the sign.
+      vol.box(a, F, 4, a + 16, F + 15, 14, rgb('#c2367f'));
+      vol.box(a - 3, F + 15, 3, a + 19, F + 22, 15, rgb('#1d1830'));
+      vol.box(a - 3, F + 22, 3, a + 19, F + 23, 16, PALETTE.accent, MAT.EMISSIVE);
+      text(vol, 'PHOTO', a - 2, F + 16, 15, rgb('#ffcf8a'), MAT.EMISSIVE);
+      vol.box(a + 1, F + 1, 14, a + 9, F + 13, 15, (x) =>
+        (x - a) % 2 ? rgb('#5b3fa8') : rgb('#4a3290'),
+      );
+      vol.box(a + 1, F + 13, 14, a + 9, F + 14, 16, rgb('#2b2f36'));
+      vol.box(a + 11, F + 4, 14, a + 15, F + 14, 15, rgb('#f4f1ea'));
+      for (let k = 0; k < 4; k++)
+        vol.box(
+          a + 12,
+          F + 5 + k * 2 + (k > 1 ? 1 : 0),
+          15,
+          a + 14,
+          F + 6 + k * 2 + (k > 1 ? 1 : 0),
+          16,
+          STICKY[k],
+        );
+      vol.box(a + 11, F + 1, 14, a + 15, F + 3, 15, rgb('#22262e'));
+      pool(j.c + 1, base + 1.5, -1.2, 4.5, [0.72, 0.3, 0.55]);
+      break;
+    }
+    case 'foodtruck': {
+      // Rooftop food truck, parked on a deck behind the roof edge (this volume is the
+      // annex behind the play volume, z 0 at -4.75): cream body, lime stripe, striped
+      // awning over the hatch, and its sign on the roof, so nobody has to ask.
+      const cream = rgb('#f4efe6');
+      const f = 13;
+      vol.box(a - 8, F - V, 0, a + 56, F, vol.sz, (x) =>
+        noise(x >> 2, 0, 5) > 0.5 ? rgb('#8d877d') : rgb('#7d7a75'),
+      );
+      vol.box(a - 8, F, 0, a + 56, F + 2, 1, (x) =>
+        x % (2 * V) === 0 ? rgb('#aaa396') : rgb('#d8d2c6'),
+      );
+      vol.box(a + 2, F + 3, 3, a + 46, F + 5, f - 1, rgb('#2a2f38'));
+      vol.box(a + 1, F + 5, 2, a + 34, F + 22, f, cream);
+      vol.box(a + 34, F + 5, 2, a + 47, F + 16, f, cream);
+      vol.box(a + 34, F + 16, 3, a + 44, F + 17, f - 1, cream);
+      vol.box(a + 37, F + 10, f, a + 45, F + 15, f + 1, rgb('#3b4a63'), MAT.GLOSSY);
+      vol.box(a + 47, F + 10, 3, a + 48, F + 15, f - 1, rgb('#3b4a63'), MAT.GLOSSY);
+      vol.box(a + 1, F + 6, f, a + 47, F + 8, f + 1, PALETTE.accent);
+      vol.box(a + 6, F + 11, f, a + 28, F + 19, f + 1, rgb('#2a2f38'));
+      vol.box(a + 5, F + 10, f, a + 29, F + 11, f + 3, PALETTE.metal, MAT.GLOSSY);
+      /** @param {number} x */
+      const stripes = (x) => ((x >> 1) % 2 ? rgb('#ff4f9a') : rgb('#f4f1ea'));
+      vol.box(a + 4, F + 19, f, a + 30, F + 20, f + 4, stripes);
+      vol.box(a + 4, F + 20, f, a + 30, F + 21, f + 2, stripes);
+      for (const x of [a + 9, a + 13, a + 22])
+        vol.box(
+          x,
+          F + 11,
+          f + 1,
+          x + 2,
+          F + 13,
+          f + 2,
+          x === a + 13 ? rgb('#ffd166') : rgb('#f4f1ea'),
+        );
+      // Wheels with a round profile and a silver hub.
+      for (const xc of [a + 8, a + 38]) {
+        for (let dx = -3; dx < 3; dx++) {
+          const hh = Math.round(Math.sqrt(10 - (dx + 0.5) ** 2));
+          vol.box(
+            xc + dx,
+            F + 3 - Math.min(3, hh),
+            2,
+            xc + dx + 1,
+            F + 3 + hh,
+            f + 1,
+            rgb('#1b1d22'),
+          );
+        }
+        vol.box(xc - 1, F + 2, f + 1, xc + 1, F + 4, f + 2, rgb('#c3cad3'), MAT.GLOSSY);
+      }
+      // The roof sign.
+      for (const x of [a + 10, a + 34]) vol.box(x, F + 22, 5, x + 1, F + 23, 6, rgb('#4a505c'));
+      vol.box(a + 6, F + 23, 5, a + 39, F + 38, 6, PALETTE.fascia);
+      vol.box(a + 6, F + 37, 5, a + 39, F + 38, 7, PALETTE.accent, MAT.EMISSIVE);
+      text(vol, 'SWILE', a + 12, F + 31, 6, PALETTE.accent, MAT.EMISSIVE);
+      text(vol, 'ACCEPTÉ', a + 9, F + 24, 6, rgb('#fff1c9'), MAT.EMISSIVE);
+      pool(j.c + 2.5, base + 1.8, -2.4, 5, [0.75, 0.48, 0.22]);
+      break;
+    }
+  }
+}
+
 /**
  * One two-tile slot of the far back row, furnished for the mood.
  * @param {Volume} vol
@@ -1116,18 +1866,19 @@ function glassGlints(vol, sx, onPanel, color, lit) {
  * @param {number} F Floor voxel y.
  * @param {number} seed 0..1, picks the variant.
  * @param {number} pod Position in its group of three.
+ * @param {FloorPlan['pool']} pool
  */
-function backRow(vol, mood, a, F, seed, pod) {
+function backRow(vol, mood, a, F, seed, pod, pool) {
   if (mood === 'corporate') {
     if (pod === 2) tallPlant(vol, a, F, seed);
     else credenza(vol, a, F, seed);
   } else if (mood === 'lounge') {
-    if (pod === 1) sideTable(vol, a, F, seed);
+    if (pod === 1) sideTable(vol, a, F, seed, pool);
     else sofa(vol, a, F, seed);
   } else if (mood === 'event') {
     if (pod === 2) cocktailTable(vol, a, F);
     else buffet(vol, a, F, seed, pod === 0);
-  } else backDesk(vol, a, F, seed, pod === 0, mood === 'idle');
+  } else backDesk(vol, a, F, seed, pod === 0, mood === 'idle', pool);
 }
 
 /**
@@ -1137,16 +1888,33 @@ function backRow(vol, mood, a, F, seed, pod) {
  * away, a moving box waiting for the next mission), the rest follow e-learning.
  * @param {Volume} vol
  * @param {number} a Left voxel x.
- * @param {number} F Floor voxel y.
+ * @param {number} floor Floor voxel y.
  * @param {number} seed 0..1
  * @param {boolean} first First desk of its pod (no divider on its left).
  * @param {boolean} idle
+ * @param {FloorPlan['pool']} pool
  */
-function backDesk(vol, a, F, seed, first, idle) {
+function backDesk(vol, a, floor, seed, first, idle, pool) {
   const legs = rgb('#3a4560');
-  vol.box(a + 1, F + 5, 3, a + 15, F + 6, 10, seed > 0.72 ? rgb('#d6bf98') : rgb('#ebe8e1'));
-  vol.box(a + 1, F, 4, a + 2, F + 5, 9, legs);
-  vol.box(a + 14, F, 4, a + 15, F + 5, 9, legs);
+  // Three desks by position: the classic, a standing desk raised on its columns
+  // (no chair, an anti-fatigue mat), a corner desk with its return.
+  const shape = Math.floor(seed * 211) % 3;
+  let F = floor + (shape === 1 ? 3 : 0);
+  const top = seed > 0.72 ? rgb('#d6bf98') : rgb('#ebe8e1');
+  vol.box(a + 1, F + 5, 3, a + 15, F + 6, 10, top);
+  if (shape === 1)
+    for (const x of [a + 2, a + 13]) {
+      vol.box(x, floor, 4, x + 1, F + 5, 8, legs);
+      vol.box(x - 1, floor, 4, x + 2, floor + 1, 9, legs);
+    }
+  else {
+    vol.box(a + 1, F, 4, a + 2, F + 5, 9, legs);
+    vol.box(a + 14, F, 4, a + 15, F + 5, 9, legs);
+  }
+  if (shape === 2) {
+    vol.box(a + 11, F + 5, 10, a + 15, F + 6, 15, top);
+    vol.box(a + 14, F, 14, a + 15, F + 5, 15, legs);
+  }
   if (!first) {
     vol.box(a, F + 5, 3, a + 1, F + 8, 10, rgb('#8a93a6'));
     vol.box(a, F + 8, 3, a + 1, F + 9, 10, PALETTE.accent);
@@ -1183,6 +1951,8 @@ function backDesk(vol, a, F, seed, first, idle) {
     vol.box(a + 12, F + 6, 5, a + 14, F + 7, 7, rgb('#22262e'));
     vol.box(a + 13, F + 7, 5, a + 14, F + 11, 6, rgb('#22262e'));
     vol.box(a + 11, F + 11, 5, a + 14, F + 12, 7, PALETTE.accent);
+    vol.box(a + 12, F + 10, 6, a + 13, F + 11, 7, rgb('#fff1c9'), MAT.EMISSIVE);
+    pool(a / V + 1.6, F / V + 1.2, -2.1, 3.5, [0.5, 0.42, 0.22]);
   } else if (seed > 0.5) {
     // A small succulent in a terracotta pot.
     vol.box(a + 12, F + 6, 4, a + 14, F + 8, 6, PALETTE.pot);
@@ -1200,7 +1970,12 @@ function backDesk(vol, a, F, seed, first, idle) {
     vol.box(a + 2, F + 6, 8, a + 3, F + 8, 9, seed > 0.5 ? PALETTE.fascia : rgb('#f4f1ea'));
   else vol.box(a + 2, F + 6, 4, a + 5, F + 7, 7, rgb('#fbfbf6'));
   // Chair in front, a little off-centre; on the intercontrat floor some have rolled away.
+  if (shape === 1) {
+    vol.box(a + 4, floor, 10, a + 12, floor + 1, 15, rgb('#2b2f36'));
+    return;
+  }
   if (empty && seed < 0.2) return;
+  F = floor;
   const dx = empty ? (seed > 0.3 ? 4 : -3) : (Math.floor(seed * 13) % 5) - 2;
   const dz = empty ? 2 : 0;
   const chair = [rgb('#34406a'), rgb('#3a3f4a'), rgb('#2f6d6a')][Math.floor(seed * 53) % 3];
@@ -1281,8 +2056,9 @@ function sofa(vol, a, F, seed) {
 /**
  * Low side table with a cup and a magazine; sometimes a reading lamp beside it.
  * @param {Volume} vol @param {number} a @param {number} F @param {number} seed
+ * @param {FloorPlan['pool']} pool
  */
-function sideTable(vol, a, F, seed) {
+function sideTable(vol, a, F, seed, pool) {
   vol.box(a + 4, F + 4, 6, a + 12, F + 5, 12, PALETTE.wood);
   vol.box(a + 7, F, 8, a + 9, F + 4, 10, PALETTE.woodDark);
   vol.box(a + 5, F + 5, 7, a + 8, F + 6, 10, rgb('#ff4f9a'));
@@ -1292,6 +2068,7 @@ function sideTable(vol, a, F, seed) {
   vol.box(a + 13, F + 1, 5, a + 14, F + 14, 6, rgb('#22262e'));
   vol.box(a + 11, F + 14, 4, a + 16, F + 18, 8, rgb('#f6ead2'));
   vol.box(a + 12, F + 13, 5, a + 15, F + 14, 7, rgb('#ffe2a8'), MAT.EMISSIVE);
+  pool(a / V + 1.7, F / V + 1.4, -2.1, 4, [0.62, 0.44, 0.22]);
 }
 
 /**
@@ -1352,13 +2129,19 @@ function cocktailTable(vol, a, F) {
  */
 function buildRoofBack(vol, sx, sim, decor) {
   const arena = sim.boss ? sim.boss.arena.map((x) => x * V) : [sx, sx];
-  // Stage wall: navy panels with a lime trim and truss lights.
+  // Stage wall: navy panels under a dark cornice (its top is out of frame during the
+  // fight, so nothing bright sits up there), warm footlights along its base.
   vol.box(arena[0] - 4, 3 * V, 0, arena[1], 10 * V, 2, (x, y) =>
     (x >> 3) % 4 === 0 ? rgb('#18213a') : y % (V * 2) === 0 ? rgb('#27325a') : rgb('#1f2a44'),
   );
-  vol.box(arena[0] - 4, 10 * V, 0, arena[1], 10 * V + 2, 4, PALETTE.accent, MAT.EMISSIVE);
-  for (let x = arena[0]; x < arena[1]; x += 2 * V)
-    vol.box(x + 6, 10 * V - 3, 2, x + 10, 10 * V - 1, 5, rgb('#fff1c9'), MAT.EMISSIVE);
+  vol.box(arena[0] - 4, 10 * V, 0, arena[1], 10 * V + 2, 3, rgb('#141a2c'));
+  for (let x = arena[0]; x < arena[1]; x += 2 * V) {
+    let g = 1;
+    while (g < sim.h && sim.tiles[(x >> 3) + g * sim.w] !== TILE.EMPTY) g++;
+    if (g > 4) continue;
+    vol.box(x + 5, g * V, 2, x + 11, g * V + 2, 4, rgb('#2a2f38'));
+    vol.box(x + 6, g * V + 1, 4, x + 10, g * V + 2, 5, rgb('#ffcf8a'), MAT.EMISSIVE);
+  }
   for (const d of decor) {
     if (d.front || (d.type !== 'poster' && d.type !== 'whiteboard')) continue;
     const w = d.type === 'whiteboard' ? WHITEBOARD_W : posterWidth(/** @type {string} */ (d.id));
@@ -1814,6 +2597,125 @@ export function buildBackdrop(width, mood) {
       return null;
   }
   return vol;
+}
+
+/**
+ * Dark foreground silhouettes between the camera and the play plane, about every
+ * 12 tiles: a plant, a chair back, a desk lamp, heads in the audience, a railing.
+ * They stand on the ground floor in front of the slab and stop a quarter tile above
+ * the floor line, so in perspective they stay below it (camera at least 4.7 up):
+ * they never cover the hero, a pickup or a hazard, and skip pits and trapdoors.
+ * @param {FloorPlan} plan
+ * @param {Mood} mood
+ * @param {Set<number>} trapCols
+ * @returns {Volume | null}
+ */
+export function buildForeground(plan, mood, trapCols) {
+  const { ground, base, F, arena } = plan;
+  const w = ground.length;
+  if (base < 1) return null;
+  const vol = new Volume(w * V, F + 3, 12, 1 / V, [0, 0, 1.6]);
+  /** @param {number} q */
+  const solidFloor = (q) =>
+    ground[q] === base && !trapCols.has(q) && (q < arena[0] - 2 || q > arena[1] + 1);
+  let any = false;
+  for (let c0 = 5; c0 < w - 5; c0 += 12)
+    for (let c = c0; c < c0 + 6; c++) {
+      let ok = true;
+      for (let q = c - 1; q <= c + 3; q++) if (!solidFloor(q)) ok = false;
+      if (!ok) continue;
+      silhouette(vol, mood, c * V, F, noise(c, base, 101));
+      any = true;
+      break;
+    }
+  return any ? vol : null;
+}
+
+/**
+ * One foreground silhouette, three tiles wide, top at most at F + 2.
+ * @param {Volume} vol Foreground volume (z 0 at 1.6).
+ * @param {Mood} mood @param {number} a Left voxel x. @param {number} F Floor voxel y.
+ * @param {number} seed 0..1
+ */
+function silhouette(vol, mood, a, F, seed) {
+  const ink = mood === 'event' ? rgb('#1a1424') : mood === 'dusk' ? rgb('#1e1620') : rgb('#131a28'),
+    ink2 = lerpColor(ink, rgb('#2a3448'), 0.35);
+  /**
+   * Foliage: one column per voxel, its height wavering with noise, so the outline
+   * reads as leaves and not as a box.
+   * @param {number} x0 @param {number} x1 @param {number} top Highest voxel row (exclusive).
+   */
+  const crown = (x0, x1, top) => {
+    const mid = (x0 + x1) / 2,
+      half = (x1 - x0) / 2;
+    for (let x = x0; x < x1; x++) {
+      const k = 1 - ((x - mid) / half) ** 2;
+      const t = Math.min(F + 2, Math.round(top - 6 + k * 6 + (noise(x, a, 7) - 0.5) * 4));
+      vol.box(x, F - 9, 3, x + 1, t, 8, (x >> 2) % 3 ? ink : ink2);
+    }
+  };
+  /** Round head on shoulders, rows widening then narrowing. @param {number} x Left. */
+  const person = (x) => {
+    vol.box(x, F - 14, 3, x + 8, F - 6, 10, ink2);
+    vol.box(x + 1, F - 6, 3, x + 7, F - 5, 10, ink2);
+    for (const [y, dx] of [
+      [F - 5, 2],
+      [F - 4, 1],
+      [F - 3, 1],
+      [F - 2, 1],
+      [F - 1, 1],
+      [F, 2],
+      [F + 1, 3],
+    ])
+      vol.box(x + dx, y, 4, x + 8 - dx, y + 1, 9, ink);
+  };
+  if (mood === 'event') {
+    // The audience at the plenary, one phone up to film it.
+    for (let k = 0; k < 3; k++) person(a + k * 8);
+    if (seed > 0.4) vol.box(a + 14, F - 3, 10, a + 16, F, 11, rgb('#9fd8ff'), MAT.EMISSIVE);
+  } else if (mood === 'night') {
+    // A bundle of cables arching over a cable tray, a status LED blinking on its tie.
+    vol.box(a, F - 10, 3, a + 24, F - 8, 10, ink2);
+    for (let x = a; x < a + 24; x++) {
+      const t = Math.round(
+        F - 6 + 6 * Math.sin(((x - a) / 24) * Math.PI) + (noise(x, a, 3) - 0.5) * 2,
+      );
+      vol.box(x, F - 8, 4, x + 1, Math.min(F + 2, t), 9, x % 4 ? ink : ink2);
+    }
+    vol.box(a + 11, F - 2, 9, a + 13, F - 1, 10, rgb('#46ff9b'), MAT.EMISSIVE);
+  } else if (mood === 'dawn') {
+    // A bollard and the bonnet of the car parked on the near side.
+    vol.box(a + 2, F - 14, 3, a + 6, F + 1, 7, ink);
+    vol.box(a + 3, F + 1, 4, a + 5, F + 2, 6, ink);
+    vol.box(a + 2, F - 6, 3, a + 6, F - 4, 7, rgb('#3a3218'));
+    for (let x = a + 9; x < a + 24; x++)
+      vol.box(
+        x,
+        F - 12,
+        1,
+        x + 1,
+        F - 4 + Math.round(2 * Math.sin(((x - a - 9) / 15) * Math.PI)),
+        11,
+        ink2,
+      );
+  } else if (mood === 'dusk') {
+    // The terrace railing and a potted olive tree.
+    for (let x = a; x < a + 24; x += 4) vol.box(x, F - 12, 6, x + 1, F + 1, 7, ink);
+    vol.box(a, F + 1, 5, a + 24, F + 2, 8, ink2);
+    vol.box(a + 7, F - 14, 2, a + 15, F - 8, 6, ink2);
+    crown(a + 4, a + 18, F + 2);
+  } else if (seed < 0.75 || mood === 'lounge') {
+    // A potted plant, its leaves breaking the outline.
+    vol.box(a + 7, F - 14, 2, a + 16, F - 8, 8, ink2);
+    crown(a + 2 + Math.floor(seed * 4), a + 21, F + 2);
+  } else {
+    // The back of an office chair, rounded at the top.
+    vol.box(a + 6, F - 14, 3, a + 18, F - 2, 6, ink);
+    vol.box(a + 7, F - 2, 3, a + 17, F, 6, ink);
+    vol.box(a + 9, F, 3, a + 15, F + 2, 6, ink2);
+    vol.box(a + 4, F - 10, 4, a + 6, F - 8, 9, ink2);
+    vol.box(a + 18, F - 10, 4, a + 20, F - 8, 9, ink2);
+  }
 }
 
 /**

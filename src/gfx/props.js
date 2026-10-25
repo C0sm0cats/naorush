@@ -371,117 +371,157 @@ function halfDisc(b, c, r, side, color) {
 }
 
 /**
- * Compact city car facing +x; its flat roof is a platform at y = 1.35.
+ * Flat quad from four corners (u along p00→p10, v along p00→p01), facing `n`.
+ * @param {MeshBuilder} b @param {number[][]} c Corners p00, p10, p01, p11.
+ * @param {number[]} n @param {string} color @param {number} [mat]
+ */
+function quad(b, [p00, p10, p01, p11], n, color, mat = MATTE) {
+  b.grid(
+    1,
+    1,
+    (u, v) => ({
+      p: [0, 1, 2].map(
+        (k) => (1 - v) * ((1 - u) * p00[k] + u * p10[k]) + v * ((1 - u) * p01[k] + u * p11[k]),
+      ),
+      n,
+    }),
+    rgb(color),
+    mat,
+  );
+}
+
+/**
+ * Estate car facing +x, 4 long and exactly 1 tall: its long flat roof is the
+ * platform the hero stands on (the top of its tile run), the wheels are round and
+ * sit on the floor, so a run of four 'Q' tiles draws it unscaled.
  * @param {MeshBuilder} b @param {string} paint
  */
 function car(b, paint) {
   const GLASS = '#1a2533';
   const TRIM = '#2a2f37';
+  const R = 0.25;
   const dark = tone(paint, 0.72);
-  // Lower body: sloping bonnet and boot, slight tumblehome.
+  // Lower body: sloping bonnet, a short rear overhang, slight tumblehome.
   let s = mark(b);
-  b.roundedBox([0, 0.6, 0], [1.8, 0.28, 0.8], 0.2, paint, { mat: GLOSSY, seg: 7 });
+  b.roundedBox([0, 0.46, 0], [1.96, 0.2, 0.76], 0.15, paint, { mat: GLOSSY, seg: 7 });
   for (const z of [-1, 1]) {
     // Door seams, handles, a darker sill and a shoulder crease, all bent with the body.
-    for (const x of [-0.16, 0.66])
-      flatBox(b, [x, 0.6, z * 0.802], [0.006, 0.2, 0.002], tone(paint, 0.6));
-    flatBox(b, [-0.84, 0.6, z * 0.802], [0.006, 0.17, 0.002], tone(paint, 0.6));
-    for (const x of [-0.42, 0.42])
-      b.roundedBox([x, 0.74, z * 0.803], [0.07, 0.014, 0.008], 0.007, CHROME, {
+    for (const x of [-0.62, 0.26, 1.02])
+      flatBox(b, [x, 0.46, z * 0.762], [0.006, 0.17, 0.002], tone(paint, 0.6));
+    for (const x of [-0.25, 0.62])
+      b.roundedBox([x, 0.57, z * 0.763], [0.07, 0.014, 0.008], 0.007, CHROME, {
         mat: GLOSSY,
         seg: 2,
       });
-    flatBox(b, [0, 0.37, z * 0.792], [1.5, 0.045, 0.014], TRIM);
-    flatBox(b, [0.05, 0.8, z * 0.8], [1.45, 0.005, 0.004], tone(paint, 1.12, '#ffffff', 0.15));
+    flatBox(b, [0, 0.3, z * 0.752], [1.6, 0.04, 0.014], TRIM);
+    flatBox(b, [0.05, 0.62, z * 0.76], [1.75, 0.005, 0.004], tone(paint, 1.12, '#ffffff', 0.15));
   }
   deform(b, s, ([x, y, z]) => {
-    const t = sm(0.32, 0.88, y);
-    const drop = 0.14 * sm(0.75, 1.8, x) + 0.07 * sm(-1.25, -1.8, x);
-    return [x, y - t * drop, z * (1 - 0.06 * t)];
+    const t = sm(0.3, 0.66, y);
+    const drop = 0.07 * sm(1.1, 1.96, x) + 0.02 * sm(-1.6, -1.96, x);
+    return [x, y - t * drop, z * (1 - 0.05 * t)];
   });
   // Wheel arches: dark half discs behind the tyres.
-  for (const x of [-1.15, 1.15])
-    for (const z of [-1, 1]) halfDisc(b, [x, 0.3, z * 0.806], 0.36, z, '#14161a');
-  // Cabin with its glass, tapered into a windscreen and rear screen.
+  for (const x of [-1.36, 1.36])
+    for (const z of [-1, 1]) halfDisc(b, [x, R, z * 0.766], R + 0.06, z, '#14161a');
+  // Cabin, from the raked windscreen right back to an upright tailgate.
   s = mark(b);
-  b.roundedBox([-0.15, 1.07, 0], [1.1, 0.22, 0.72], 0.12, paint, { mat: GLOSSY, seg: 6 });
-  flatBox(b, [0.952, 1.1, 0], [0.006, 0.15, 0.6], GLASS, GLOSSY);
-  flatBox(b, [-1.252, 1.1, 0], [0.006, 0.14, 0.56], GLASS, GLOSSY);
-  for (const z of [-1, 1]) {
-    flatBox(b, [0.42, 1.1, z * 0.722], [0.42, 0.14, 0.004], GLASS, GLOSSY);
-    flatBox(b, [-0.62, 1.1, z * 0.722], [0.46, 0.14, 0.004], GLASS, GLOSSY);
-    // Sky reflection streak on the side glass.
-    flatBox(b, [0.3, 1.17, z * 0.727], [0.2, 0.012, 0.002], '#4a6078', GLOSSY);
-    flatBox(b, [-0.75, 1.17, z * 0.727], [0.22, 0.012, 0.002], '#4a6078', GLOSSY);
-  }
+  b.roundedBox([-0.46, 0.8, 0], [1.46, 0.17, 0.68], 0.09, paint, { mat: GLOSSY, seg: 6 });
   deform(b, s, ([x, y, z]) => {
-    const t = Math.max(0, Math.min(1, (y - 0.85) / 0.44));
-    return [-0.15 + (x + 0.15) * (1 - 0.24 * t) - 0.05 * t, y, z * (1 - 0.09 * t)];
+    const t = Math.max(0, Math.min(1, (y - 0.63) / 0.34));
+    // The front edge leans back for the windscreen; the tailgate barely tilts.
+    const front = x > -0.46 ? 0.3 * t : 0.05 * t;
+    return [x - (front * Math.abs(x + 0.46)) / 1.46, y, z * (1 - 0.08 * t)];
   });
-  // Flat roof (the platform), with a darker gutter line.
-  b.roundedBox([-0.2, 1.31, 0], [0.82, 0.04, 0.66], 0.035, paint, { mat: GLOSSY, seg: 3 });
-  for (const z of [-0.6, 0.6]) flatBox(b, [-0.2, 1.352 - 0.004, z], [0.78, 0.002, 0.012], dark);
+  // Glass: windscreen, rear screen and the side windows, split by dark pillars.
+  quad(
+    b,
+    [
+      [1.0, 0.67, -0.6],
+      [1.0, 0.67, 0.6],
+      [0.71, 0.95, -0.55],
+      [0.71, 0.95, 0.55],
+    ],
+    [0.69, 0.72, 0],
+    GLASS,
+    GLOSSY,
+  );
+  flatBox(b, [-1.915, 0.81, 0], [0.006, 0.12, 0.54], GLASS, GLOSSY);
+  for (const z of [-1, 1]) {
+    for (const [x, hw] of [
+      [0.42, 0.3],
+      [-0.33, 0.38],
+      [-1.32, 0.48],
+    ])
+      flatBox(b, [x, 0.81, z * 0.69], [hw, 0.11, 0.004], GLASS, GLOSSY);
+    // Sky reflection streaks on the side glass.
+    for (const x of [0.36, -0.42, -1.4])
+      flatBox(b, [x, 0.87, z * 0.695], [0.16, 0.01, 0.002], '#4a6078', GLOSSY);
+  }
+  // Flat roof (the platform) with roof bars.
+  b.roundedBox([-0.55, 0.975, 0], [1.28, 0.025, 0.6], 0.02, paint, { mat: GLOSSY, seg: 3 });
+  for (const z of [-0.5, 0.5]) flatBox(b, [-0.55, 0.996, z], [1.2, 0.004, 0.02], dark);
   // Mirrors.
   for (const z of [-1, 1]) {
-    b.roundedBox([0.78, 0.96, z * 0.81], [0.07, 0.05, 0.07], 0.035, paint, { mat: GLOSSY, seg: 3 });
-    flatBox(b, [0.72, 0.96, z * 0.84], [0.004, 0.035, 0.035], GLASS, GLOSSY);
+    b.roundedBox([0.9, 0.72, z * 0.77], [0.06, 0.045, 0.06], 0.03, paint, { mat: GLOSSY, seg: 3 });
+    flatBox(b, [0.85, 0.72, z * 0.8], [0.004, 0.03, 0.03], GLASS, GLOSSY);
   }
   // Bumpers, grille, number plates.
   for (const x of [-1, 1])
-    b.roundedBox([x * 1.73, 0.4, 0], [0.08, 0.085, 0.78], 0.06, TRIM, { mat: GLOSSY, seg: 4 });
-  b.roundedBox([1.765, 0.58, 0], [0.03, 0.06, 0.34], 0.03, '#1c1f25', { mat: GLOSSY, seg: 3 });
-  for (const y of [0.56, 0.6]) flatBox(b, [1.795, y, 0], [0.004, 0.006, 0.3], '#3d434d');
-  b.ellipsoid([1.8, 0.58, 0], [0.008, 0.026, 0.026], LIME, { mat: GLOSSY, seg: 6 });
+    b.roundedBox([x * 1.93, 0.32, 0], [0.07, 0.075, 0.74], 0.05, TRIM, { mat: GLOSSY, seg: 4 });
+  b.roundedBox([1.955, 0.47, 0], [0.025, 0.05, 0.32], 0.025, '#1c1f25', { mat: GLOSSY, seg: 3 });
+  for (const y of [0.45, 0.49]) flatBox(b, [1.982, y, 0], [0.004, 0.006, 0.28], '#3d434d');
+  b.ellipsoid([1.985, 0.47, 0], [0.008, 0.024, 0.024], LIME, { mat: GLOSSY, seg: 6 });
   for (const x of [-1, 1]) {
-    flatBox(b, [x * 1.806, 0.42, 0], [0.004, 0.045, 0.2], WHITE);
-    flatBox(b, [x * 1.809, 0.42, x * 0.17], [0.002, 0.04, 0.025], '#2c4fb8');
+    flatBox(b, [x * 2.002, 0.33, 0], [0.004, 0.04, 0.19], WHITE);
+    flatBox(b, [x * 2.005, 0.33, x * 0.16], [0.002, 0.036, 0.024], '#2c4fb8');
     for (let i = 0; i < 4; i++)
-      flatBox(b, [x * 1.809, 0.42, -x * (0.08 - i * 0.06)], [0.002, 0.022, 0.018], GRAPHITE);
+      flatBox(b, [x * 2.005, 0.33, -x * (0.08 - i * 0.055)], [0.002, 0.02, 0.016], GRAPHITE);
   }
   // Lights.
-  for (const z of [-0.56, 0.56]) {
-    b.roundedBox([1.71, 0.66, z], [0.07, 0.05, 0.15], 0.045, '#fff6cf', { mat: EMISSIVE, seg: 3 });
-    b.roundedBox([-1.73, 0.7, z], [0.06, 0.045, 0.16], 0.04, '#ff3040', { mat: EMISSIVE, seg: 3 });
-    flatBox(b, [1.75, 0.5, z * 1.22], [0.03, 0.018, 0.06], '#ffb347', EMISSIVE);
+  for (const z of [-0.54, 0.54]) {
+    b.roundedBox([1.9, 0.53, z], [0.06, 0.045, 0.14], 0.04, '#fff6cf', { mat: EMISSIVE, seg: 3 });
+    b.roundedBox([-1.93, 0.6, z], [0.05, 0.06, 0.13], 0.035, '#ff3040', { mat: EMISSIVE, seg: 3 });
+    flatBox(b, [1.93, 0.4, z * 1.2], [0.03, 0.016, 0.06], '#ffb347', EMISSIVE);
   }
-  // Wheels: chunky tyre, five-spoke rim, hub, rolled to face the sides.
-  for (const x of [-1.15, 1.15])
+  // Wheels: round tyre, five-spoke rim, hub, rolled to face the sides.
+  for (const x of [-1.36, 1.36])
     for (const side of [-1, 1]) {
       const w = mark(b);
       b.lathe(
         [0, 0, 0],
         [
           [0, 0],
-          [0.2, 0],
-          [0.255, 0.012],
-          [0.28, 0.06],
-          [0.28, 0.15],
-          [0.255, 0.196],
-          [0.2, 0.208],
-          [0.17, 0.2],
+          [0.18, 0],
+          [0.228, 0.011],
+          [R, 0.054],
+          [R, 0.136],
+          [0.228, 0.178],
+          [0.18, 0.19],
+          [0.152, 0.182],
         ],
         BLACK,
         { seg: 20 },
       );
       b.lathe(
-        [0, 0.2, 0],
+        [0, 0.182, 0],
         [
-          [0.17, 0],
-          [0.165, 0.012],
-          [0.06, 0.012],
-          [0.045, 0.03],
-          [0, 0.034],
+          [0.152, 0],
+          [0.148, 0.011],
+          [0.054, 0.011],
+          [0.04, 0.027],
+          [0, 0.031],
         ],
         ALU,
         { mat: GLOSSY, seg: 15 },
       );
       for (let k = 0; k < 5; k++) {
         const sp = mark(b);
-        flatBox(b, [0, 0.216, 0.105], [0.022, 0.006, 0.06], CHROME, GLOSSY);
+        flatBox(b, [0, 0.197, 0.094], [0.02, 0.005, 0.054], CHROME, GLOSSY);
         place(b, sp, rotY((k / 5) * TAU));
       }
-      b.ellipsoid([0, 0.232, 0], [0.025, 0.006, 0.025], LIME, { mat: GLOSSY, seg: 4 });
-      place(b, w, side > 0 ? rotX(Math.PI / 2) : rotX(-Math.PI / 2), [x, 0.28, side * 0.63]);
+      b.ellipsoid([0, 0.211, 0], [0.022, 0.005, 0.022], LIME, { mat: GLOSSY, seg: 4 });
+      place(b, w, side > 0 ? rotX(Math.PI / 2) : rotX(-Math.PI / 2), [x, R, side * 0.58]);
     }
 }
 
@@ -626,7 +666,7 @@ function officeChair(b, fabric, cushion, seam, accent) {
 }
 
 /**
- * @typedef {'plant'|'plantSnake'|'plantSmall'|'cactus'|'cooler'|'printer'|'coffee'|'chair'|'chairTeal'|'chairGrey'|'rack'|'hvac'|'antenna'|'parasol'|'bistro'|'speaker'|'lampPost'|'monitor'|'monitorCode'|'monitorCall'|'kpi'|'wave'|'lift'|'gate'|'carBlue'|'carRed'|'carWhite'|'barrier'|'pillarSign'|'drawer'|'sprinkler'|'spray'|'paper'|'binders'|'vacuum'|'laptopStand'|'invite'|'cup'|'archive'|'copilTable'|'projector'|'truss'|'spotlight'|'curtain'|'shadow'|'puddle'|'warn'|'arrow'|'rackFall'|'confetti'} PropId
+ * @typedef {'plant'|'plantSnake'|'plantMonstera'|'plantSmall'|'cactus'|'cooler'|'printer'|'coffee'|'chair'|'chairTeal'|'chairGrey'|'rack'|'hvac'|'antenna'|'parasol'|'bistro'|'speaker'|'lampPost'|'monitor'|'monitorCode'|'monitorCall'|'kpi'|'wave'|'lift'|'gate'|'carBlue'|'carRed'|'carWhite'|'barrier'|'pillarSign'|'drawer'|'sprinkler'|'spray'|'paper'|'binders'|'vacuum'|'laptopStand'|'invite'|'cup'|'archive'|'copilTable'|'projector'|'truss'|'spotlight'|'curtain'|'shadow'|'puddle'|'warn'|'arrow'|'rackFall'|'confetti'} PropId
  */
 
 /** @type {Record<PropId, (b: MeshBuilder) => void>} */
@@ -808,6 +848,75 @@ const BUILDERS = {
       const L = 0.42 + r() * 0.4;
       const col = tone(greens[i % 3], 0.9 + r() * 0.2, '#d9e8a0', i % 4 === 0 ? 0.12 : 0);
       leaf(b, L, 0.075 + r() * 0.025, 0.03, col, mul(rotY(ang), rotX(-1.12 - r() * 0.32)), base);
+    }
+  },
+
+  plantMonstera(b) {
+    // Monstera in a woven basket: big split leaves on long, arching stems.
+    b.lathe(
+      [0, 0, 0],
+      [
+        [0, 0],
+        [0.15, 0],
+        [0.17, 0.03],
+        [0.19, 0.28],
+        [0.2, 0.3],
+        [0.185, 0.3],
+      ],
+      '#c9a77a',
+      { seg: 28 },
+    );
+    for (const y of [0.09, 0.19])
+      b.lathe(
+        [0, 0, 0],
+        [
+          [0.177 + y * 0.07, y],
+          [0.18 + y * 0.07, y + 0.022],
+        ],
+        y < 0.1 ? LIME : '#a8875c',
+        { seg: 28 },
+      );
+    b.lathe(
+      [0, 0, 0],
+      [
+        [0.185, 0.285],
+        [0, 0.285],
+      ],
+      '#4a3324',
+      { seg: 20 },
+    );
+    const r = rng(23);
+    const greens = ['#2f7f3f', '#3b9a4c', '#277038'];
+    for (let i = 0; i < 9; i++) {
+      const ang = i * 2.39996 + (r() - 0.5) * 0.3;
+      const t = i / 8;
+      const reach = 0.12 + r() * 0.12;
+      const tip = [Math.sin(ang) * reach, 0.5 + t * 0.4 + r() * 0.08, Math.cos(ang) * reach];
+      rod(b, [0, 0.29, 0], tip, 0.012, '#4f7d39', { seg: 6 });
+      const col = tone(greens[i % 3], 0.9 + r() * 0.2);
+      leaf(
+        b,
+        0.24 + r() * 0.06,
+        0.15 + r() * 0.03,
+        0.06,
+        col,
+        mul(rotY(ang), rotX(-0.25 - r() * 0.35)),
+        tip,
+      );
+      // The splits: darker notches across the blade.
+      for (const k of [0.35, 0.6]) {
+        const m = mul(rotY(ang), rotX(-0.3));
+        const d = [m[2] * k * 0.24, m[5] * k * 0.24 - 0.01, m[8] * k * 0.24];
+        const side = [m[0] * 0.07, m[3] * 0.07, m[6] * 0.07];
+        rod(
+          b,
+          [tip[0] + d[0], tip[1] + d[1], tip[2] + d[2]],
+          [tip[0] + d[0] + side[0], tip[1] + d[1] + side[1] + 0.004, tip[2] + d[2] + side[2]],
+          0.006,
+          tone(col, 0.55),
+          { seg: 4 },
+        );
+      }
     }
   },
 
@@ -2290,6 +2399,7 @@ const BUILDERS = {
 export const PROP_IDS = [
   'plant',
   'plantSnake',
+  'plantMonstera',
   'plantSmall',
   'cactus',
   'cooler',
@@ -2347,7 +2457,7 @@ export const PROP_IDS = [
  */
 export const PROP_VARIANTS = {
   chair: ['chair', 'chairTeal', 'chairGrey'],
-  plant: ['plant', 'plantSnake'],
+  plant: ['plant', 'plantSnake', 'plantMonstera'],
   plantSmall: ['plantSmall', 'cactus'],
   monitor: ['monitor', 'monitorCode', 'monitorCall'],
 };

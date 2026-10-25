@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { LEVELS } from '../src/data/levels/index.js';
+import { TILE, createSim } from '../src/game/sim.js';
 import { MeshBuilder } from '../src/gfx/geometry.js';
+import { propGeometry } from '../src/gfx/props.js';
 import {
   MAT,
   STRIDE,
@@ -8,6 +11,7 @@ import {
   meshVolume,
   partitionMesh,
 } from '../src/gfx/voxels.js';
+import { PALETTE, V, buildForeground, buildOffice, floorPlan } from '../src/gfx/world-builder.js';
 
 /** A small room-like volume: floor, back wall, a desk and scattered blocks. */
 function sampleVolume() {
@@ -107,5 +111,70 @@ describe('voxel meshing', () => {
           expect(Math.abs(pos[k] - p.box[k])).toBeLessThanOrEqual(p.box[k + 3] + 1e-5);
       }
     }
+  });
+});
+
+describe('set dressing', () => {
+  /** @param {import('../src/data/levels/index.js').Level} l */
+  const build = (l) => buildOffice(createSim(l, 'kevin'), l.decor, l.map, l.theme);
+
+  it('gives every free-standing platform a deck with the lime nosing of a floor', () => {
+    for (const l of LEVELS) {
+      const sim = createSim(l, 'kevin');
+      const { vol } = build(l);
+      const at = (/** @type {number} */ c, /** @type {number} */ r) =>
+        c < 0 || c >= sim.w || r < 0 || r >= sim.h ? TILE.SOLID : sim.tiles[c + r * sim.w];
+      for (let r = 2; r < sim.h - 1; r++)
+        for (let c = 0; c < sim.w; c++) {
+          if (at(c, r) !== TILE.SOLID || l.map[sim.h - 1 - r][c] !== '#') continue;
+          if (
+            at(c, r + 1) === TILE.SOLID ||
+            at(c, r - 1) === TILE.SOLID ||
+            at(c, r - 1) === TILE.HAZARD
+          )
+            continue;
+          if (l.theme === 'rooftop') continue;
+          const v = vol.get(c * V + 4, r * V + V - 2, vol.sz - 1);
+          expect((v & 0xffffff).toString(16), `${l.id} ${c},${r}`).toBe(
+            PALETTE.accent.toString(16),
+          );
+        }
+    }
+  });
+
+  it('keeps foreground silhouettes below the floor line, on solid floor', () => {
+    for (const l of LEVELS) {
+      const sim = createSim(l, 'kevin');
+      const plan = floorPlan(sim, l.map, l.decor, () => false, []);
+      const traps = new Set();
+      l.map.forEach((row) => [...row].forEach((ch, c) => ch === 'L' && traps.add(c)));
+      const fg = buildForeground(plan, l.mood ?? 'morning', traps);
+      if (!fg) continue;
+      for (let x = 0; x < fg.sx; x++)
+        for (let y = 0; y < fg.sy; y++)
+          for (let z = 0; z < fg.sz; z++) {
+            if (!fg.get(x, y, z)) continue;
+            expect(y, l.id).toBeLessThan(plan.F + 2);
+            expect(plan.ground[x >> 3], `${l.id} column ${x >> 3}`).toBe(plan.base);
+            expect(traps.has(x >> 3)).toBe(false);
+          }
+    }
+  });
+
+  it('draws the parked car one tile tall and four long, wheels on the floor', () => {
+    const g = propGeometry('carBlue');
+    const d = new DataView(g.data);
+    const lo = [Infinity, Infinity],
+      hi = [-Infinity, -Infinity];
+    for (let i = 0; i < g.data.byteLength / STRIDE; i++)
+      for (let k = 0; k < 2; k++) {
+        const v = d.getFloat32(i * STRIDE + k * 4, true);
+        lo[k] = Math.min(lo[k], v);
+        hi[k] = Math.max(hi[k], v);
+      }
+    expect(lo[1]).toBeCloseTo(0, 3);
+    expect(hi[1]).toBeCloseTo(1, 3);
+    expect(hi[0] - lo[0]).toBeGreaterThan(3.9);
+    expect(hi[0] - lo[0]).toBeLessThanOrEqual(4.02);
   });
 });
