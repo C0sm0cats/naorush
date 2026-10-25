@@ -1,4 +1,4 @@
-import { Audio, eventSfx } from './app/audio.js';
+import { Audio, eventSfx, screenPan } from './app/audio.js';
 import { Camera } from './app/camera.js';
 import { applyTwist, dailyChallenge } from './app/daily.js';
 import { Bubbles, Dialogue } from './app/dialogue.js';
@@ -46,6 +46,9 @@ const renderer = new Renderer(canvas);
 const input = new Input();
 const hud = new Hud();
 const camera = new Camera();
+/** Stereo position of a world x on screen (camera centre, visible half-width). @param {number} x */
+const panAt = (x) =>
+  screenPan(x, camera.x, camera.dist * Math.tan(Math.PI / 12) * (renderer.width / renderer.height));
 const particles = new Particles();
 const audio = new Audio();
 const resolution = new DynamicResolution();
@@ -680,7 +683,7 @@ function onEvent(e) {
   particles.emit(e.type, e.x, e.y, landPower(e));
   // Rodolphe's third phase is his grand finale: it gets its own sting.
   const finale = e.type === 'bossPhase' && sim.things.find((t) => t.kind === 'boss')?.phase === 3;
-  audio.sfx(finale ? 'finale' : eventSfx(e));
+  audio.sfx(finale ? 'finale' : eventSfx(e), { pan: panAt(e.x) });
   // A few frames of freeze sell the impact.
   hitstop = Math.max(hitstop, HITSTOP[e.type] ?? 0);
   const boss = level.boss?.id ?? '';
@@ -989,7 +992,10 @@ function frame(now) {
     // Soft footsteps while running.
     if (h.state === 'ground' && Math.abs(h.vx) > 2.5 && (stepTimer -= dt) <= 0) {
       stepTimer = 0.27 * (sim.stats.run / Math.max(2.5, Math.abs(h.vx)));
-      audio.sfx('step', sim.onLift ? { floor: 'metal' } : undefined);
+      audio.sfx('step', {
+        pan: panAt(h.x + HERO.w / 2),
+        ...(sim.onLift ? { floor: 'metal' } : {}),
+      });
     }
     if (h.state === 'ground' && Math.abs(h.vx) > 4 && (dustTimer -= dt) <= 0) {
       dustTimer = 0.09;
