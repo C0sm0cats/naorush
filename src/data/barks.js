@@ -730,12 +730,12 @@ export const STAGE_BARKS = {
       at: 55,
       lines: {
         kevin: [
-          'Terrasse haute en vue. Accès par la nacelle.',
-          'On embarque, on attend l’arrêt, on descend. Méthode.',
+          'Trois nacelles au-dessus du vide. Je planifie.',
+          'On saute de l’une à l’autre quand elles se croisent. Méthode.',
         ],
         charline: [
-          'La nacelle vers la terrasse haute, en vue !',
-          'On monte à bord et on profite du panorama !',
+          'Trois nacelles qui se croisent au-dessus du vide !',
+          'On passe de l’une à l’autre au bon moment. Facile !',
         ],
       },
     },
