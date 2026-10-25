@@ -2,7 +2,7 @@ import { Audio, eventSfx } from './app/audio.js';
 import { Camera } from './app/camera.js';
 import { applyTwist, dailyChallenge } from './app/daily.js';
 import { Bubbles, Dialogue } from './app/dialogue.js';
-import { Particles } from './app/fx.js';
+import { Particles, landPower } from './app/fx.js';
 import { Hud } from './app/hud.js';
 import { Input } from './app/input.js';
 import { clearFloor, renderBonus, renderCast, renderTrophies } from './app/menus.js';
@@ -677,7 +677,7 @@ function onEvent(e) {
   hud.event(e);
   trophies.event(e, sim, level.id);
   view.event(e, sim.time);
-  particles.emit(e.type, e.x, e.y);
+  particles.emit(e.type, e.x, e.y, landPower(e));
   // Rodolphe's third phase is his grand finale: it gets its own sting.
   const finale = e.type === 'bossPhase' && sim.things.find((t) => t.kind === 'boss')?.phase === 3;
   audio.sfx(finale ? 'finale' : eventSfx(e));
