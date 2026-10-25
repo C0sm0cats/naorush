@@ -26,6 +26,7 @@ export const SONGS = {
   bossJulien: BOSS_SONGS.bossJulien,
   bossRodolphe: BOSS_SONGS.bossRodolphe,
   win: MENU_SONGS.win,
+  winSigned: MENU_SONGS.winSigned,
   gameover: MENU_SONGS.gameover,
   credits: MENU_SONGS.credits,
 };

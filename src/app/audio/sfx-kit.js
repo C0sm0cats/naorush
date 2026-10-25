@@ -125,8 +125,20 @@ export const louder = (/** @type {Voice} */ v, /** @type {number} */ g) =>
 const FLOOR_GAIN = { carpet: 1, concrete: 1.06, metal: 1, gravel: 1.3, tile: 1.45, wood: 0.84 };
 
 /**
+ * Takes of a footfall: pitch, body length, and the extra touch that tells them apart
+ * (toe roll, scuff, flat foot).
+ */
+const FOOT_TAKES = [
+  { k: 1, d: 1, extra: '' },
+  { k: 0.95, d: 0.9, extra: 'toe' },
+  { k: 1.05, d: 1, extra: 'scuff' },
+  { k: 0.98, d: 1.25, extra: 'flat' },
+];
+
+/**
  * One footfall on a floor material: heel body, then the surface's own texture.
- * `w` scales the weight (body level and length), `k` the pitch.
+ * `w` scales the weight (body level and length), `k` the pitch, `take` picks one of four
+ * takes (so a run never repeats the same step).
  */
 export const foot = (
   /** @type {Voice} */ v,
@@ -134,10 +146,26 @@ export const foot = (
   /** @type {Floor} */ floor,
   /** @type {number} */ w,
   /** @type {number} */ k,
+  take = 0,
 ) => {
-  const d = 0.05 * Math.sqrt(w);
+  const tk = FOOT_TAKES[take & 3];
+  k *= tk.k;
+  const d = 0.05 * Math.sqrt(w) * tk.d;
   // Level per material, so every floor sits at about the same loudness.
   v = louder(v, FLOOR_GAIN[floor] ?? 1);
+  if (tk.extra === 'toe') click(v, t + 0.032, rnd(2600, 3200) * k, 0.03, 2.5, 0.01);
+  else if (tk.extra === 'scuff')
+    v.noise({
+      t,
+      d: 0.06,
+      type: 'bandpass',
+      f: 1500 * k,
+      to: 650 * k,
+      q: 1.2,
+      v: 0.04 * w,
+      a: 0.01,
+    });
+  else if (tk.extra === 'flat') thump(v, t + 0.012, 70 * k, 45 * k, d, 0.05 * w);
   switch (floor) {
     // Car park concrete: hard heel tap, grit, and a slap back off the low ceiling.
     case 'concrete': {

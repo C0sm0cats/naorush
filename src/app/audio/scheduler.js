@@ -54,6 +54,53 @@ export function startClock(ctx, run, total, silent, targets) {
 }
 
 /**
+ * Schedules a run's steps up to `until` right away (a beat-synced hand-over lets the old
+ * track play to the beat before it stops).
+ * @param {Run} run @param {number} total @param {number} until
+ * @param {number[]} targets drive, lead and finale layer gain targets
+ */
+export function playUntil(run, total, until, targets) {
+  const s16 = 60 / run.def.bpm / 4;
+  while (run.next < until) {
+    if (run.def.once && run.step >= total) return;
+    step(run, total, targets);
+    run.next += s16;
+    run.step++;
+  }
+}
+
+/**
+ * Transposition in force at a step: a boss's key lift lands on its downbeat.
+ * @param {Run} run @param {number} at step index
+ */
+export const liftAt = (run, at) =>
+  run.lift && at >= run.lift.at ? run.lift.to : (run.lift?.from ?? 0);
+
+/**
+ * The harmony under a moment of the song: the first sixteenth at or after `when` that is
+ * not scheduled yet, its time, and the chord there (stingers play on it, in key).
+ * @param {Run} run @param {number} total @param {number} when
+ */
+export function harmonyAt(run, total, when) {
+  const s16 = 60 / run.def.bpm / 4;
+  const ahead = Math.max(0, Math.ceil((when - run.next) / s16));
+  const probe = /** @type {Run} */ ({ ...run, step: run.step + ahead });
+  const s = position(probe, total);
+  const bar = run.bars[Math.floor(s / 16)];
+  const ch = bar.chords[bar.chords.length > 1 && s % 16 >= 8 ? 1 : 0];
+  const root = run.def.root + bar.key + liftAt(run, probe.step);
+  return {
+    now: when,
+    t: run.next + ahead * s16,
+    s16,
+    root,
+    base: root + ch.root,
+    tones: ch.tones,
+    scale: bar.def.scale,
+  };
+}
+
+/**
  * Sixteenth of the song form at a run's step: the intro plays once, then the rest loops.
  * @param {Run} run @param {number} total
  */
@@ -85,7 +132,8 @@ export function step(run, total, [driveT = 0, leadT = 0, finaleT = 0]) {
   // Swing: off-beat eighths land a little late.
   const t = run.next + (song.swing && i % 4 === 2 ? song.swing * s16 : 0);
   const ch = bar.chords[bar.chords.length > 1 && i >= 8 ? 1 : 0];
-  const root = song.root + bar.key;
+  const lift = liftAt(run, run.step);
+  const root = song.root + bar.key + lift;
   const base = root + ch.root;
   const [, third, fifth] = ch.tones;
   // Seventh: flat on minor chords and on the dominant, major elsewhere.
@@ -155,7 +203,7 @@ export function step(run, total, [driveT = 0, leadT = 0, finaleT = 0]) {
     const dur = unit(d.bass) * (holds ? holds + 0.9 : 0.9);
     /** @type {Record<string, number>} */
     const shifts = { 0: -12, 1: 0, 2: 12, 3: third, 4: 5, 5: fifth, 6: 9, 7: seventh, b: 10 };
-    const next = song.root + bar.next;
+    const next = song.root + bar.next + lift;
     const midi = c === 'w' ? next - 1 : c === 'u' ? next + 1 : base + (shifts[c] ?? 0);
     const f = mtof(midi);
     if (c === 'x') {

@@ -150,6 +150,70 @@ export const MENU_SONGS = {
       },
     ],
   },
+  // Victory after a signature (a director signed the NAO): the stage-clear lap a tone
+  // higher, opened by a fanfare bar on the motif, horns doubling the tune, timpani and
+  // brass stabs, a string counter-line in the second pass.
+  winSigned: {
+    bpm: 126,
+    root: 38,
+    lead: 24,
+    scale: MAJOR,
+    patch: 'brass',
+    double: 'horns',
+    chords: chords('I IV V I vi IV ii|V I'),
+    melody: bars(
+      '4---2---4---7--- 7-----------5--- 6---8---6---4--- 7-----------.... ' +
+        '9---8---7---5--- 7---5---3---5--- 4---5---6---8--- 7-----------....',
+    ),
+    bass: '1.51.5.5',
+    bassWave: 'slap',
+    kit: 'big',
+    kick: '1.1.1.1.',
+    snare: '..1...1.',
+    hat: '11111111',
+    stab: '1..1..1.',
+    stabPatch: 'brass',
+    pad: 'strings',
+    reverb: 0.35,
+    chorus: 0.3,
+    form: [
+      // Fanfare: the motif alone in the brass, a timpani roll into the lap.
+      {
+        intro: true,
+        chords: chords('I'),
+        melody: bars('4-2-4-7---------'),
+        bass: '1-------',
+        kick: '1.......',
+        snare: '........',
+        hat: '........',
+        stab: '1.......',
+      },
+      {
+        charline: {
+          melody: bars(
+            '4--24-7-9--79-b- c-----a-7------- b--9b-8-6------- 7-9-b-e--------- ' +
+              '9---8---7---5--- 7---5---3---5--- 4---5---6---8--- 7-----------....',
+          ),
+          patch: 'chip',
+          double: 'bells',
+        },
+      },
+      {
+        counter: bars('9---7--- 7---5--- 8---6--- 9---7--- 7---5--- 5---3--- 4---6--- 7-------'),
+        counterPatch: 'strings',
+        counterOct: 0,
+        clap: '..1...1.',
+        charline: {
+          melody: bars(
+            '4--24-7-9--79-b- c-----a-7------- b--9b-8-6------- 7-9-b-e--------- ' +
+              '9---8---7---5--- 7---5---3---5--- 4---5---6---8--- 7-----------....',
+          ),
+          patch: 'chip',
+          double: 'bells',
+        },
+      },
+    ],
+  },
   // Game over: a music box plays the motif on the minor iv, then smiles on the major third.
   gameover: {
     bpm: 80,

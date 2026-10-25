@@ -6,3 +6,4 @@ export { EVENT_SFX, eventSfx } from './events.js';
 export { SFX_TYPES, VOICE_IDS } from './sfx.js';
 export { FLOORS, STAGES, stageBed, stageFloor, stageTrack } from './stages.js';
 export { TRACKS, trackInfo } from './tracks/index.js';
+export { screenPan } from './util.js';

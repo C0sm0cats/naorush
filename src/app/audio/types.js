@@ -61,6 +61,7 @@
  * @property {Floor} floor
  * @property {string} who speaker (CAST id or dialogue role), '' when none
  * @property {number} foot 0 / 1, alternates on each call (left / right foot)
+ * @property {number} variant 0..3, which take of a varied effect (never the same twice in a row)
  */
 /**
  * Optional per-call settings of `Audio.sfx`.
@@ -69,6 +70,8 @@
  * @property {number} [pitch] frequency multiplier
  * @property {Floor} [floor] overrides the stage floor (e.g. a metal lift)
  * @property {string} [who] speaker, for voiced effects ('talk', 'bubble')
+ * @property {number} [pan] stereo position -1 (left edge) .. 1 (right edge), e.g. from
+ *   `screenPan` (the event's x against the camera)
  */
 /**
  * A chord: root in semitones above the track's tonic, and its intervals (root first).
@@ -170,7 +173,7 @@
  * @property {number} next root of the following bar's first chord, key included (wraps)
  */
 /**
- * @typedef {'title'|'parking'|'office'|'datacenter'|'copil'|'rooftop'|'intercontrat'|'cafe'|'seminar'|'bossJulien'|'bossRodolphe'|'win'|'gameover'|'credits'} TrackName
+ * @typedef {'title'|'parking'|'office'|'datacenter'|'copil'|'rooftop'|'intercontrat'|'cafe'|'seminar'|'bossJulien'|'bossRodolphe'|'win'|'winSigned'|'gameover'|'credits'} TrackName
  */
 /**
  * @typedef {object} Run
@@ -186,6 +189,10 @@
  * @property {GainNode} wet melody send (to base, echo and reverb)
  * @property {GainNode} pad chord pads (to base, chorus and reverb; ducked by `pump`)
  * @property {GainNode | null} verb reverb send of this run
+ * @property {GainNode} sting stingers in key (key, door, checkpoint, boss entrance), not ducked
+ * @property {Voice} stingVoice
+ * @property {number} total song length in sixteenths
+ * @property {{ from: number, to: number, at: number } | null} lift key lift (semitones) from step `at`
  * @property {{ base: Voice, wet: Voice, pad: Voice, drive: Voice, lead: Voice, finale: Voice }} voices one per layer, reused
  * @property {AudioNode[]} nodes everything to disconnect on stop
  * @property {AudioScheduledSourceNode[]} lfos running modulators to stop

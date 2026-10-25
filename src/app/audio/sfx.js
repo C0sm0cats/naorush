@@ -57,18 +57,45 @@ const syllable = (
   v.tone({ f: f * pick([2, 2.5, 3]), t, d: d * 0.8, v: g * 0.33 });
 };
 
+/** Effects with four takes (Foley.variant): the engine never plays the same take twice in a row. */
+export const VARIED = new Set(['step', 'jump', 'land', 'touchdown', 'ticket']);
+
+// Takes of the jump: the hop's sweep (from, to, length), the whoosh band, a cloth flick.
+const JUMP_TAKES = [
+  { a: 250, b: 600, d: 0.15, w: [700, 2200], flick: false },
+  { a: 280, b: 720, d: 0.12, w: [900, 2600], flick: false },
+  { a: 225, b: 520, d: 0.17, w: [600, 1900], flick: true },
+  { a: 265, b: 640, d: 0.14, w: [800, 2400], flick: true },
+];
+// Takes of the landing: body pitch range, noise colour, slap pitch, settling grit.
+const LAND_TAKES = [
+  { b: [140, 170], n: [750, 950], c: [1200, 1600], grit: false },
+  { b: [125, 150], n: [600, 800], c: [1000, 1300], grit: true },
+  { b: [155, 185], n: [850, 1100], c: [1500, 1900], grit: false },
+  { b: [135, 160], n: [700, 900], c: [1100, 1500], grit: true },
+];
+// Takes of the ticket: the coin's notes (fourths, fifths, a quick triad).
+const TICKET_TAKES = [
+  [988, 1319],
+  [1047, 1397],
+  [1175, 1568],
+  [988, 1245, 1480],
+];
+
 /** @type {Record<string, (v: Voice, f: Foley) => void>} */
 export const SFX = {
   // Springy push-off: scuff, rising triangle "hop", whoosh of air.
   jump: (v, f) => {
     const t = v.now;
     const g = GAIT[f.hero] ?? GAIT.kevin;
-    const k = rnd(0.94, 1.07) * (0.55 + g.k * 0.5);
-    foot(v, t, f.floor, g.w * 0.45, g.k);
+    const tk = JUMP_TAKES[f.variant & 3];
+    const k = rnd(0.96, 1.05) * (0.55 + g.k * 0.5);
+    foot(v, t, f.floor, g.w * 0.45, g.k, f.variant);
     click(v, t, 1800, 0.1, 1.2);
-    v.tone({ f: 250 * k, to: 600 * k, t, d: 0.15, type: 'triangle', v: 0.34 });
-    v.tone({ f: 500 * k, to: 1200 * k, t: t + 0.01, d: 0.09, v: 0.07 });
-    v.noise({ t, d: 0.13, type: 'bandpass', f: 700, to: 2200, q: 0.8, v: 0.07, a: 0.03 });
+    v.tone({ f: tk.a * k, to: tk.b * k, t, d: tk.d, type: 'triangle', v: 0.34 });
+    v.tone({ f: tk.a * 2 * k, to: tk.b * 2 * k, t: t + 0.01, d: tk.d * 0.6, v: 0.07 });
+    v.noise({ t, d: 0.13, type: 'bandpass', f: tk.w[0], to: tk.w[1], q: 0.8, v: 0.07, a: 0.03 });
+    if (tk.flick) v.noise({ t: t + 0.05, d: 0.05, type: 'highpass', f: 3500, v: 0.035, a: 0.01 });
   },
   // Double jump: airy flutter sweep and two sparkles, no ground contact.
   airjump: (v) => {
@@ -83,13 +110,17 @@ export const SFX = {
   land: (v, f) => {
     const t = v.now;
     const { w, k } = gait(f);
+    const tk = LAND_TAKES[f.variant & 3];
     // Body weight, kept audible for the lighter hero too.
     const b = 0.55 + 0.45 * w;
-    foot(v, t, f.floor, w * 1.5, k * 0.95);
-    foot(v, t + 0.022, f.floor, w * 1.1, k);
-    thump(v, t, rnd(140, 170) * k, 55 * k, 0.07 + 0.04 * w, 0.26 * b);
-    v.noise({ t, d: 0.08, f: rnd(750, 950), to: 250, v: 0.17 * b });
-    click(v, t, rnd(1200, 1600), 0.06, 1.5, 0.015);
+    foot(v, t, f.floor, w * 1.5, k * 0.95, f.variant);
+    foot(v, t + 0.022, f.floor, w * 1.1, k, (f.variant + 1) & 3);
+    thump(v, t, rnd(tk.b[0], tk.b[1]) * k, 55 * k, 0.07 + 0.04 * w, 0.26 * b);
+    v.noise({ t, d: 0.08, f: rnd(tk.n[0], tk.n[1]), to: 250, v: 0.17 * b });
+    click(v, t, rnd(tk.c[0], tk.c[1]), 0.06, 1.5, 0.015);
+    if (tk.grit) {
+      for (const dt of [0.05, 0.08]) click(v, t + dt, rnd(1800, 3200), 0.025, 3, 0.012);
+    }
     // Kévin's weight: a sub thump you feel more than hear.
     if (w > 1) thump(v, t + 0.01, 70, 40, 0.12, 0.18 * (w - 0.6));
   },
@@ -97,8 +128,10 @@ export const SFX = {
   touchdown: (v, f) => {
     const t = v.now;
     const { w, k } = gait(f);
-    foot(v, t, f.floor, w * 1.2, k);
-    foot(v, t + 0.028, f.floor, w * 0.9, k * 1.03);
+    // Takes: the gap between the two feet, and which foot leads.
+    const gap = [0.028, 0.018, 0.038, 0.024][f.variant & 3];
+    foot(v, t, f.floor, w * 1.2, k, f.variant);
+    foot(v, t + gap, f.floor, w * 0.9, k * (f.variant & 1 ? 0.97 : 1.03), (f.variant + 2) & 3);
     thump(v, t, 120 * k, 60 * k, 0.06, 0.08 * w);
   },
   // Heavy landing: deep boom, crunch, then a little debris settling.
@@ -115,12 +148,16 @@ export const SFX = {
     }
   },
   // Ticket: two-note chip coin plus a paper flick and a shimmer.
-  ticket: (v) => {
+  ticket: (v, f) => {
     const t = v.now;
+    const fs = TICKET_TAKES[f.variant & 3];
+    const gap = fs.length > 2 ? 0.05 : 0.07;
     v.noise({ t, d: 0.025, type: 'highpass', f: 5500, v: 0.05 });
-    note(v, t, 988, 0.08, 0.12);
-    note(v, t + 0.07, 1319, 0.26, 0.12);
-    chime(v, t + 0.07, 2637, 0.3, 0.035);
+    fs.forEach((hz, i) => {
+      const last = i === fs.length - 1;
+      note(v, t + i * gap, hz, last ? 0.26 : 0.08, last ? 0.12 : 0.11);
+    });
+    chime(v, t + (fs.length - 1) * gap, fs[fs.length - 1] * 2, 0.3, 0.035);
   },
   // Ammo: paper rustle, a stapler clack, two pings.
   ammo: (v) => {
@@ -404,7 +441,7 @@ export const SFX = {
   // Footstep: the floor's own material, weighted by the hero, alternating feet.
   step: (v, f) => {
     const { w, k } = gait(f);
-    foot(v, v.now, f.floor, w, k);
+    foot(v, v.now, f.floor, w, k, f.variant);
   },
   // Grab a ledge: palm slap and a small knock.
   grab: (v) => {
@@ -787,6 +824,36 @@ export const SFX = {
     click(v, t, 3500, 0.15, 1, 0.02);
     for (const f of [523, 1187, 1693, 2311])
       v.tone({ f: f * rnd(0.98, 1.02), t, d: 0.6, v: 0.042 });
+  },
+  // Boss arena, second phase: a server rack locks in place at the top of its rise
+  // (hydraulic sigh, latch clunk, a hollow cabinet ring).
+  riserUp: (v) => {
+    const t = v.now;
+    v.noise({ t, d: 0.3, type: 'bandpass', f: 2400, to: 900, q: 1.2, v: 0.12, a: 0.02 });
+    thump(v, t + 0.12, 110, 60, 0.14, 0.4);
+    click(v, t + 0.12, 2200, 0.16, 3, 0.02);
+    ring(v, t + 0.12, 310, 0.35, 0.05, [1, 2.3, 3.9]);
+  },
+  // A lighting truss drops from the rig and clangs to a stop on its chains.
+  riserDown: (v) => {
+    const t = v.now;
+    thump(v, t, 95, 45, 0.3, 0.5);
+    click(v, t, 3000, 0.18, 1.2, 0.02);
+    ring(v, t, 440, 0.6, 0.06, [1, 2.76, 5.4]);
+    for (let i = 0; i < 3; i++) click(v, t + 0.08 + i * 0.05, rnd(4000, 6000), 0.05, 4, 0.01);
+  },
+  // A stunned intern drops his stack of files: a paper slap with a little slide.
+  pile: (v) => {
+    const t = v.now;
+    thump(v, t, 140, 70, 0.1, 0.35);
+    v.noise({ t, d: 0.08, f: 900, v: 0.2 });
+    v.noise({ t: t + 0.03, d: 0.18, type: 'bandpass', f: 2600, to: 1500, q: 1, v: 0.08, a: 0.02 });
+  },
+  // The stack is picked back up: a quick riffle of pages.
+  pileGone: (v) => {
+    const t = v.now;
+    for (let i = 0; i < 5; i++)
+      v.noise({ t: t + i * 0.035, d: 0.04, type: 'bandpass', f: rnd(2500, 4000), q: 2, v: 0.3 });
   },
   teleport: (v) => {
     const t = v.now;

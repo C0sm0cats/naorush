@@ -5,10 +5,10 @@
 /* AUDIT-TRIM-START */
 /** Loudness trim per effect (dB), measured so all effects sit at a similar RMS. @type {Record<string, number>} */
 export const SFX_TRIM_DB = {
-  jump: 7,
-  airjump: 10,
-  land: 4,
-  touchdown: 8,
+  jump: 3.5,
+  airjump: 7,
+  land: 0.5,
+  touchdown: 5,
   hardland: 1,
   ticket: 10,
   ammo: 12,
@@ -23,7 +23,7 @@ export const SFX_TRIM_DB = {
   bump: 5,
   meeting: 10,
   empty: 17,
-  fire: 18,
+  fire: 14.5,
   parry: 6,
   block: 2,
   bossStart: 4,
@@ -59,6 +59,10 @@ export const SFX_TRIM_DB = {
   telegraph: 9,
   rackDrop: 11,
   rackLand: 4,
+  riserUp: 5,
+  riserDown: 1,
+  pile: 8,
+  pileGone: 14,
   teleport: 15,
   cableWarn: 17,
   cableZap: 14,
@@ -101,10 +105,11 @@ export const TRACK_TRIM_DB = {
   intercontrat: 6,
   cafe: 5.5,
   seminar: -0.5,
-  bossJulien: -0.5,
+  bossJulien: -1,
   bossRodolphe: 1,
   win: 2,
-  gameover: 7,
+  winSigned: -0.5,
+  gameover: 5,
   credits: 3.5,
 };
 /* AUDIT-TRIM-END */

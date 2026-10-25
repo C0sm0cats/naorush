@@ -9,12 +9,14 @@ import {
   TRACKS,
   VOICE_IDS,
   eventSfx,
+  screenPan,
   stageBed,
   stageFloor,
   stageTrack,
   trackInfo,
 } from '../src/app/audio.js';
-import { position } from '../src/app/audio/scheduler.js';
+import { ceilingCurve } from '../src/app/audio/engine.js';
+import { position, step } from '../src/app/audio/scheduler.js';
 import { BARS, SONGS, barsFor } from '../src/app/audio/tracks/index.js';
 import { chord, degreeOf } from '../src/app/audio/tracks/theory.js';
 
@@ -462,5 +464,165 @@ describe('audio engine', () => {
     run.finale.gain.value = 1;
     advance(3);
     expect(stats.oscillators.length).toBeGreaterThan(10);
+  });
+  it('pans an effect by where it happens on screen', () => {
+    expect(screenPan(10, 10, 8)).toBe(0);
+    expect(screenPan(14, 10, 8)).toBeCloseTo(0.425);
+    expect(screenPan(2, 10, 8)).toBeCloseTo(-0.85);
+    // Off screen: hard on its side, never past it.
+    expect(screenPan(60, 10, 8)).toBeCloseTo(0.85);
+    expect(screenPan(NaN, 10, 8)).toBe(0);
+    const a = engine();
+    const made = vi.spyOn(stats.ctx, 'createStereoPanner');
+    a.sfx('ticket', { pan: 0.5 });
+    expect(made.mock.results.map((r) => r.value.pan.value)).toContain(0.5);
+    made.mockClear();
+    a.sfx('ticket', { pan: 7 });
+    expect(made.mock.results.map((r) => r.value.pan.value)).toContain(1);
+    made.mockClear();
+    // Centred (or no pan given): no panner at all.
+    a.sfx('ticket');
+    a.sfx('ticket', { pan: 0 });
+    expect(made).not.toHaveBeenCalled();
+  });
+
+  it('never plays the same take of a varied effect twice in a row', () => {
+    const a = engine();
+    /** The triad take of the ticket starts more oscillators than the two-note ones. */
+    const counts = [];
+    for (let k = 0; k < 60; k++) {
+      stats.oscillators = [];
+      a.sfx('ticket');
+      counts.push(stats.oscillators.length);
+    }
+    const most = Math.max(...counts);
+    expect(new Set(counts).size).toBeGreaterThan(1);
+    for (let k = 1; k < counts.length; k++)
+      expect(counts[k] === most && counts[k - 1] === most, `take ${k}`).toBe(false);
+  });
+
+  it('ducks the music under hurts, boss hits and keys, then lets it swell back', () => {
+    const a = engine();
+    a.music('office');
+    advance(1);
+    const duck = /** @type {any} */ (a.duckNode).gain;
+    a.sfx('jump');
+    expect(duck.last).toBeUndefined();
+    const now = stats.ctx.currentTime;
+    a.sfx('hurt');
+    expect(duck.last.v).toBe(1);
+    expect(duck.last.t).toBeGreaterThan(now + 0.1);
+    a.sfx('key', { delay: 1 });
+    expect(duck.last.t).toBeGreaterThan(now + 1.5);
+  });
+
+  it('plays stingers in time with the music on key, door and checkpoint', () => {
+    const a = engine();
+    a.sfx('key');
+    a.music('copil');
+    advance(1.37);
+    const run = /** @type {NonNullable<typeof a.run>} */ (a.run);
+    const s16 = 60 / run.def.bpm / 4;
+    for (const type of ['key', 'door', 'checkpoint']) {
+      /** @type {number[]} */
+      const starts = [];
+      const tone = run.stingVoice.tone;
+      run.stingVoice.tone = (o) => {
+        starts.push(o.t);
+        return tone(o);
+      };
+      a.sfx(type);
+      run.stingVoice.tone = tone;
+      expect(starts.length, type).toBeGreaterThan(1);
+      // On the track's sixteenth grid (which started at 0.08 s), never in the past.
+      for (const t of starts) {
+        expect(t, type).toBeGreaterThanOrEqual(stats.ctx.currentTime);
+        const k = (t - 0.08) / s16;
+        expect(Math.abs(k - Math.round(k)), type).toBeLessThan(1e-6);
+      }
+    }
+  });
+
+  it('lifts a boss track a tone at each phase, on a half bar, up to two tones', () => {
+    const a = engine();
+    a.music('bossRodolphe');
+    advance(1);
+    const run = /** @type {NonNullable<typeof a.run>} */ (a.run);
+    expect(run.lift).toBeNull();
+    a.sfx('bossPhase');
+    expect(run.lift).toMatchObject({ from: 0, to: 2 });
+    expect(/** @type {any} */ (run.lift).at % 8).toBe(0);
+    expect(/** @type {any} */ (run.lift).at).toBeGreaterThanOrEqual(run.step);
+    advance(2);
+    a.sfx('finale');
+    expect(run.lift).toMatchObject({ from: 2, to: 4 });
+    advance(2);
+    a.sfx('bossPhase');
+    expect(/** @type {any} */ (run.lift).to).toBe(4);
+    // Every pitched note moves up a tone (the drums stay put).
+    const notesAt = (/** @type {typeof run.lift} */ lift) => {
+      run.lift = lift;
+      run.step = 64;
+      stats.oscillators = [];
+      step(run, run.total, [1, 1, 1]);
+      return [...stats.oscillators];
+    };
+    const plain = notesAt(null);
+    const lifted = notesAt({ from: 0, to: 2, at: 0 });
+    const tone = 2 ** (2 / 12);
+    const near = (/** @type {number[]} */ list, /** @type {number} */ f) =>
+      list.some((x) => Math.abs(x / f - 1) < 1e-9);
+    for (const f of plain) expect(near(lifted, f * tone) || near(lifted, f), String(f)).toBe(true);
+    expect(plain.filter((f) => near(lifted, f * tone)).length).toBeGreaterThan(3);
+    // Stage tracks never change key on a phase sound.
+    a.music('office');
+    advance(1);
+    a.sfx('bossPhase');
+    expect(a.run?.lift).toBeNull();
+  });
+
+  it('hands one track over to the next on the beat', () => {
+    const a = engine();
+    a.music('office');
+    advance(1.31);
+    const beat = 60 / trackInfo('office').bpm;
+    const now = stats.ctx.currentTime;
+    a.music('copil');
+    const next = /** @type {NonNullable<typeof a.run>} */ (a.run).next;
+    const k = (next - 0.08) / beat;
+    expect(Math.abs(k - Math.round(k))).toBeLessThan(1e-6);
+    expect(next).toBeGreaterThan(now);
+    expect(next - now).toBeLessThanOrEqual(beat + 0.05);
+    // From silence, a track starts right away.
+    a.music(null);
+    a.music('title');
+    expect(/** @type {NonNullable<typeof a.run>} */ (a.run).next).toBeCloseTo(
+      stats.ctx.currentTime + 0.08,
+    );
+  });
+
+  it('plays the victory variation after a signature, once', () => {
+    const a = engine();
+    a.music('datacenter');
+    advance(0.5);
+    a.sfx('sign');
+    a.music('win');
+    expect(a.run?.name).toBe('winSigned');
+    a.music('win');
+    expect(a.run?.name).toBe('winSigned');
+    a.music('parking');
+    a.music('win');
+    expect(a.run?.name).toBe('win');
+  });
+
+  it('keeps every sample under the -1 dBFS ceiling', () => {
+    const curve = ceilingCurve();
+    const ceiling = 10 ** (-1 / 20);
+    expect(Math.max(...curve.map(Math.abs))).toBeLessThan(ceiling);
+    for (let k = 1; k < curve.length; k++) expect(curve[k]).toBeGreaterThanOrEqual(curve[k - 1]);
+    // Transparent below -7 dBFS: the shaper's input is halved, its output is not.
+    const mid = (curve.length - 1) / 2;
+    const at = (/** @type {number} */ x) => curve[Math.round(mid + (x / 2) * mid)];
+    expect(at(0.3)).toBeCloseTo(0.3, 2);
   });
 });

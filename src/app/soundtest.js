@@ -205,6 +205,51 @@ export function mountSoundTest(audio) {
     }),
   );
 
+  // Music that reacts to the game: start a track above first (a boss track for the lift).
+  const react = section('Music reactions (start a track first)');
+  react.append(
+    button('▶ stingers: key · door · checkpoint', () => {
+      audio.sfx('key');
+      audio.sfx('door', { delay: 2.2 });
+      audio.sfx('checkpoint', { delay: 4.2 });
+    }),
+    button('▶ duck: hurt · boss hit', () => {
+      audio.sfx('hurt');
+      audio.sfx('bossHit', { delay: 1.6 });
+    }),
+    button('▶ boss phase (key up a tone, boss tracks)', () => audio.sfx('bossPhase')),
+    button('▶ boss finale (another tone)', () => audio.sfx('finale')),
+    button('▶ boss entrance', () => {
+      audio.music(null);
+      audio.music(audio.wanted === 'bossRodolphe' ? 'bossJulien' : 'bossRodolphe');
+      tracks.pick(audio.wanted);
+    }),
+    button('▶ signature, then stage clear (victory variation)', () => {
+      audio.sfx('sign');
+      audio.music('win');
+      tracks.pick(audio.wanted);
+    }),
+    button('▶ beat-synced switch (stage ↔ boss)', () => {
+      audio.music(audio.wanted === 'bossJulien' ? 'datacenter' : 'bossJulien');
+      tracks.pick(audio.wanted);
+    }),
+  );
+  const space = section('Stereo and takes');
+  space.append(
+    button('▶ pan sweep (tickets left → right)', () => {
+      for (let i = 0; i < 9; i++) audio.sfx('ticket', { delay: i * 0.3, pan: -1 + i * 0.25 });
+    }),
+    button('▶ 8 tickets (takes)', () => {
+      for (let i = 0; i < 8; i++) audio.sfx('ticket', { delay: i * 0.35 });
+    }),
+    button('▶ 6 jumps + landings (takes)', () => {
+      for (let i = 0; i < 6; i++) {
+        audio.sfx('jump', { delay: i * 0.8 });
+        audio.sfx('land', { delay: i * 0.8 + 0.5 });
+      }
+    }),
+  );
+
   const voices = section('Voices (dialogue blips, then a speech bubble)');
   for (const who of VOICE_IDS) {
     voices.append(

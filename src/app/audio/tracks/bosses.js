@@ -5,7 +5,9 @@ import { DORIAN, HARMONIC, MINOR, bars, chords } from './theory.js';
 /** @typedef {import('../types.js').Track} Track */
 
 // Julien, technology director: a precise toccata (pedal-point sixteenths) over a pulsing
-// sequencer. In the B section the heroes answer with their motif on each chord.
+// sequencer, a string line holding the harmony under it. In the B section the heroes
+// answer with their motif on each chord, claps and octave-doubled lead. The lead layer
+// (his second phase) adds a bell descant; each phase lifts the whole track a tone.
 const JULIEN_A = bars(
   '7.e.d.e.b.e.c.b. c.b.a.b.9.b.7... c.e.d.e.a.e.9.a. c-------a-9-7--- ' +
     'a.e.d.e.c.e.a.9. a---c---e---a--- b.d.b.8.6.8.b.d. e-------d-------',
@@ -14,6 +16,14 @@ const JULIEN_B = bars(
   'b-9-b-e--------- a-8-a-d--------- 9-7-9-c--------- b---8---^---b--- ' +
     'b-9-b-e--------- a-8-a-d--------- 9-7-9-c---a-c--- e-------D-------',
 );
+/** Held string line under the toccata (an octave under the melody). */
+const JULIEN_STRINGS = bars(
+  '4------- 2------- 5------- 7------- 5------- 3------- 4------- 6-------',
+);
+/** Bell descant of the second phase, over the A section. */
+const JULIEN_DESCANT = bars(
+  '7---4--- 2---4--- 5---7--- 9---7--- 5---3--- 7---5--- 4---6--- 8---6---',
+);
 /** The heroes' motif in long notes, two bars per chord (finale layer over the A section). */
 const JULIEN_FINALE = bars(
   'b-------9------- b-------e------- 9-------7------- 9-------c------- ' +
@@ -21,7 +31,9 @@ const JULIEN_FINALE = bars(
 );
 
 // Rodolphe, regional director: a reel on the pipes over drones — it opens on the heroes'
-// motif — then a broad anthem of the Région Ouest for brass and choir.
+// motif — then a broad anthem of the Région Ouest for brass and choir. A tambourine drives
+// the reel, a ride and a flute descant lift the anthem in his second phase; each phase
+// lifts the whole track a tone.
 const RODOLPHE_A = bars(
   '4-2-4-7-8-9-8-7- 3-1-3-6-7-8-7-6- 4-2-4-7-8-9-a-b- b---a-9-8---4--- ' +
     '4-2-4-7-8-9-8-7- 3-1-3-6-7-8-9-a- b-a-9-8-9-8-7-4- 7-------........',
@@ -29,6 +41,10 @@ const RODOLPHE_A = bars(
 const RODOLPHE_B = bars(
   '7-------9------- a-------8------- 9-------7---9--- b--------------- ' +
     'c-------a---9--- a-------8---7--- 9---8---7---9--- ^---------------',
+);
+/** Flute descant of the second phase, over the anthem. */
+const RODOLPHE_DESCANT = bars(
+  '5---7--- 8---6--- 7---9--- 9------- 7---5--- 8---6--- 7---5--- 4-------',
 );
 /** The heroes' motif on each chord of the anthem, for the brass of the grand finale. */
 const RODOLPHE_FINALE = bars(
@@ -58,25 +74,29 @@ export const BOSS_SONGS = {
     snare: '..1...1.',
     hat: '.1.1.1.1',
     pad: 'strings',
+    counterPatch: 'strings',
     echo: 0.18,
     reverb: 0.25,
     chorus: 0.2,
     form: [
-      {},
+      { counter: JULIEN_STRINGS, descant: JULIEN_DESCANT },
       {
         scale: MINOR,
         chords: chords('i bVII bVI V i bVII bVI|iv V'),
         melody: JULIEN_B,
         patch: 'chip',
+        double: 'octave',
         finale: bars('7------- 6------- 5------- 4------- 7------- 6------- 5---3--- 4-------'),
         bass: '1.1.5.12',
         kick: '1.1.1.11',
+        clap: '..1...1.',
         hat: '11111111',
       },
       {
         counter: bars('4---2--- 0---2--- 2---0--- 5---2--- 3---5--- 7---5--- 6---4--- 4---1---'),
         counterPatch: 'thin',
         counterOct: 0,
+        descant: JULIEN_DESCANT,
         bass: '1.1.1.1w',
       },
       // Breakdown: the sequencer alone, sweeping, then the toccata climbs back in.
@@ -88,6 +108,7 @@ export const BOSS_SONGS = {
         bass: '1.......',
         snare: '........',
         hat: '11111111',
+        pad: 'choir',
         thin: true,
       },
     ],
@@ -112,6 +133,7 @@ export const BOSS_SONGS = {
     hat: '1.1.1.1.',
     drone: true,
     pad: 'choir',
+    tamb: '.1.1.1.1',
     echo: 0.2,
     reverb: 0.4,
     chorus: 0.25,
@@ -132,6 +154,9 @@ export const BOSS_SONGS = {
         bass: '1.1.5.12',
         kick: '1...1...',
         snare: '..1...1.',
+        ride: '1.1.1.1.',
+        descant: RODOLPHE_DESCANT,
+        descantPatch: 'flute',
       },
       {
         counter: bars('2---4--- 1---3--- 2---4--- 4---1--- 2---4--- 3---1--- 3---4--- 2-------'),
