@@ -7,6 +7,7 @@ import { Hud } from './app/hud.js';
 import { Input } from './app/input.js';
 import { clearFloor, renderBonus, renderCast, renderTrophies } from './app/menus.js';
 import { applyPrefs, prefs, reducedMotion, setupOptions } from './app/options.js';
+import { renderResults } from './app/results.js';
 import { load, store } from './app/storage.js';
 import { DynamicResolution, bossLighting, fightFocus, withLights } from './app/staging.js';
 import { findSpot, heroRegion, title } from './app/title.js';
@@ -49,11 +50,10 @@ const particles = new Particles();
 const audio = new Audio();
 const resolution = new DynamicResolution();
 const trophies = new Trophies((t) => {
-  hud.toast(`Trophée débloqué : ${t.name}`);
+  hud.trophy(t.name);
   audio.sfx('trophy');
 });
 const SAVE_KEY = 'naorush.stage';
-const BEST_KEY = 'naorush.best';
 
 applyPrefs();
 
@@ -218,6 +218,7 @@ bubbles.onLine = (/** @type {string} */ who) => audio.sfx('bubble', { who });
 
 /** @param {Line[]} lines @param {() => void} done */
 function talk(lines, done) {
+  hud.dialogue();
   if (dialogue.start(lines, done)) show('talk');
   else done();
 }
@@ -516,41 +517,21 @@ function stageWon() {
       : `Étape ${stage + 1} sur ${CAMPAIGN} terminée`;
   $('wonTitle').textContent = STAGE_END[stage].title;
   $('wonText').textContent = STAGE_END[stage].text;
-  // Best time per stage and hero.
-  const bests = /** @type {Record<string, number>} */ (load(BEST_KEY, {}));
-  const key = challenge ? `daily:${challenge.key}` : `${level.id}:${heroId}`;
-  const record = !(bests[key] <= sim.time);
-  if (record) {
-    bests[key] = sim.time;
-    store(BEST_KEY, bests);
-  }
-  const allSecrets = sim.secretTotal > 0 && sim.secrets >= sim.secretTotal;
-  // Highlights (gold) for the achievements worth a second look.
-  /** @type {Array<[string, string | number, boolean?]>} */
-  const rows = [
-    ['Tickets Swile', sim.tickets],
-    ['Secrets', `${sim.secrets} / ${sim.secretTotal}${allSecrets ? ' ✓' : ''}`, allSecrets],
-    ['Temps', clock(sim.time)],
-    ['Record', record ? 'Nouveau record !' : clock(bests[key]), record],
-    ['Retours au badge', sim.deaths || 'Aucun, sans faute !', !sim.deaths],
-  ];
-  $('wonStats').replaceChildren(
-    ...rows.flatMap(([k, v, best]) => {
-      const dt = document.createElement('dt');
-      const dd = document.createElement('dd');
-      dt.textContent = k;
-      dd.textContent = String(v);
-      if (best) dd.className = 'best';
-      return [dt, dd];
-    }),
-  );
+  // Medal, gap to the record, secrets per hero (the card saves the record itself).
+  const { record, allSecrets, flawless } = renderResults($('wonStats'), {
+    sim,
+    levelId: level.id,
+    hero: heroId,
+    daily: challenge?.key,
+    // medal: challenge ? null : medalFor(level.id, heroId, sim.time, sim.deaths),
+  });
   $('share').textContent = 'Partager mon score';
   setIntensity(0.2);
   audio.music('win');
   audio.sfx('win');
   // The gold lines get their own flourish once the jingle has played.
   if (record) audio.sfx('record', { delay: 1.3 });
-  else if (allSecrets || !sim.deaths) audio.sfx('gold', { delay: 1.3 });
+  else if (allSecrets || flawless) audio.sfx('gold', { delay: 1.3 });
   show('won');
 }
 
@@ -1063,6 +1044,8 @@ function frame(now) {
     ? withLights(lighting, title.lights(t, heroId))
     : bossLighting(level, sim, t, lighting);
   renderer.render(cam, lit, view.items(sim, t, particles.list), view.sprites, { flash });
+  // Messages count down on every screen; first-time tips check this frame's camera.
+  hud.tick(dt, cam.viewProj);
   if (titleWarmup > 0 && --titleWarmup === 0) {
     audio.music('title');
     show('title');
