@@ -153,7 +153,7 @@ await page.waitForFunction(
   { timeout: 90000 },
 );
 await page.waitForTimeout(5000);
-await goto(21.5, 3.2);
+await goto(19.5, 8.2);
 await shot('stage-ts');
 
 /** Starts the boss fight and lets it run into a given attack. @param {string} attack */
@@ -192,7 +192,7 @@ await shot('stage-copil');
 
 await start(4);
 await skipTalk();
-await goto(56, 3.2);
+await goto(54.5, 3.2);
 await shot('stage-rooftop');
 await fight('fan');
 await closeUp('boss-rodolphe');

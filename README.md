@@ -10,13 +10,13 @@ Les NAO commencent jeudi et l’enveloppe des augmentations a disparu. Avec Kév
 
 ## Les cinq étapes
 
-|                                               |                                                                                                                                                                                        |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ![Parking B2](docs/stage-parking.jpg)         | **1. Parking B2.** Le tutoriel : toits des voitures, premier rebord, collègue en call et badge visiteur à retrouver.                                                                   |
-| ![Open space LCP7](docs/stage-lcp7.jpg)       | **2. Open space LCP7.** Fauteuils qui roulent tout seuls, tiroirs qui claquent, dalles piégées, stagiaire pressé et bonbonne d’eau en roue libre. Objectif : le bon de commande signé. |
-| ![Technologies & Services](docs/stage-ts.jpg) | **3. Technologies & Services.** Nacelles au-dessus d’une fosse à câbles, baies serveurs, sprinklers, robot aspirateur et chef de projet en visio. Au bout : Julien.                    |
-| ![Comité de pilotage](docs/stage-copil.jpg)   | **4. Comité de pilotage.** Tables de réunion à arpenter, invitations qui volent bas, imprimantes en rafale. Il faut faire valider le compte rendu.                                     |
-| ![Power UP Tour](docs/stage-rooftop.jpg)      | **5. Power UP Tour.** Le toit au coucher du soleil, des trous dans la toiture et la nacelle du laveur de vitres. Rodolphe attend à l’Espace VIP.                                       |
+|                                               |                                                                                                                                                                                                        |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ![Parking B2](docs/stage-parking.jpg)         | **1. Parking B2.** Le tutoriel : toits des voitures, premier rebord, collègue en call et badge visiteur à retrouver.                                                                                   |
+| ![Open space LCP7](docs/stage-lcp7.jpg)       | **2. Open space LCP7.** Fauteuils qui roulent tout seuls, tiroirs qui claquent, dalles piégées, stagiaire pressé, feu croisé d’imprimantes et salle des archives. Objectif : le bon de commande signé. |
+| ![Technologies & Services](docs/stage-ts.jpg) | **3. Technologies & Services.** Poursuite en nacelle au-dessus d’une fosse à câbles, mur de baies serveurs, sprinklers et chef de projet en visio. Au bout : Julien.                                   |
+| ![Comité de pilotage](docs/stage-copil.jpg)   | **4. Comité de pilotage.** Mezzanine, enfilade de vidéoprojecteurs, régie et rideau de sprinklers. Il faut faire valider le compte rendu.                                                              |
+| ![Power UP Tour](docs/stage-rooftop.jpg)      | **5. Power UP Tour.** Le toit au coucher du soleil, la terrasse haute et trois nacelles qui se croisent au-dessus du vide. Rodolphe attend à l’Espace VIP.                                             |
 
 ## Les boss
 
@@ -29,11 +29,11 @@ Chaque attaque est annoncée au sol. Quand un directeur consulte PRIMO, sa garde
 
 ## Les étapes bonus
 
-|                                               |                                                                                                                          |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| ![Intercontrat](docs/stage-intercontrat.jpg)  | **Intercontrat.** Un jeudi matin calme sur le plateau, des nacelles et des fosses à câbles, un ordre de mission au bout. |
-| ![Salle de pause](docs/stage-pause.jpg)       | **Salle de pause.** Parquet, canapés et une course-poursuite avec les bonbonnes d’eau.                                   |
-| ![Séminaire annuel](docs/stage-seminaire.jpg) | **Séminaire annuel.** Gradins, buffet et vidéoprojecteur en rafale, en soirée.                                           |
+|                                               |                                                                                                                                                   |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ![Intercontrat](docs/stage-intercontrat.jpg)  | **Intercontrat.** Un jeudi matin calme sur le plateau, un mur de bibliothèques, des nacelles et des fosses à câbles, un ordre de mission au bout. |
+| ![Salle de pause](docs/stage-pause.jpg)       | **Salle de pause.** Parquet, canapés, distributeurs et une course-poursuite avec les bonbonnes d’eau.                                             |
+| ![Séminaire annuel](docs/stage-seminaire.jpg) | **Séminaire annuel.** Gradins, bar à cocktails, vidéoprojecteur en rafale et la photo de groupe, en soirée.                                       |
 
 ## Deux héros, deux façons de jouer
 
@@ -62,10 +62,13 @@ Badge aux bornes Chronotime : en cas de pépin, tu repars de là. Les ramettes d
 
 ## Pour rejouer
 
-- **Défi du jour** : la même étape, le même héros et la même contrainte pour tout le monde (un seul cœur, pas de CR au départ, contre la montre). De quoi comparer ses temps entre collègues.
+- **Défi du jour** : la même étape, le même héros et la même contrainte pour tout le monde (contre la montre, un seul cœur, sans CR au départ, sans badge Chronotime, mode Sans filet ou un secret à dénicher), étapes bonus comprises. De quoi comparer ses temps entre collègues.
+- **Chapitres** : rejoue n’importe quelle étape déjà terminée, avec ton record, tes secrets par héros et ta médaille.
+- **Médailles** : or, argent ou bronze par étape et par héros selon ton temps, et une étoile sans retour au badge.
+- **Mode Sans filet**, débloqué après le générique : un seul cœur, pas de café, des pièges plus vifs et des directeurs plus pressés. Records à part.
 - **Étapes bonus**, débloquées une fois l’enveloppe signée : l’Intercontrat, un parcours d’escalade semé de tickets, la Salle de pause, une course-poursuite avec les bonbonnes d’eau, et le Séminaire annuel, sous le feu du vidéoprojecteur.
 - **Secrets** : deux par étape, un pour chaque héros.
-- **Trophées** : seize objectifs (étapes sans faute, boss convaincus sans être touché, tous les secrets…).
+- **Trophées** : vingt objectifs (étapes sans faute, boss convaincus sans être touché, tous les secrets de chaque héros, l’or partout…).
 - **Records** : meilleur temps par étape et par héros.
 - **Distribution** : tous les personnages en 3D, avec leur portrait en quelques mots. Et la galerie des 32 affiches Inetum du jeu, en plein écran.
 - **Partager mon score** : partage natif sur mobile, texte prêt à coller dans Teams sur PC.
@@ -75,7 +78,9 @@ Badge aux bornes Chronotime : en cas de pépin, tu repars de là. Les ramettes d
 - **Mode détente** : aucun cœur perdu, jamais de fin de partie ; une chute ramène simplement au dernier badge.
 - **Vitesse du jeu** : normale, réduite (80 %) ou très réduite (65 %), hors défi du jour.
 - **Options** : volumes, secousses de l’écran, flashs, contraste élevé, vibrations, taille des boutons tactiles, touches personnalisables. Les réglages « réduire les animations » et « contraste élevé » du système sont repris par défaut.
+- **Repères renforcés** : contours hachurés sur tout ce qui blesse, et des avertissements qui se lisent à la forme, pas seulement à la couleur.
 - **Lecteurs d’écran** : dialogues et cœurs annoncés, menus étiquetés.
+- **Mobile** : en portrait, la caméra élargit le champ ; en paysage, les messages tiennent sur une ligne.
 - **Menus** : utilisables entièrement au clavier, à la manette ou au doigt. Sur mobile, on peut glisser d’un bouton à l’autre sans lever le doigt.
 - **Installation** : le jeu s’installe comme une application (PWA) et reste jouable hors ligne une fois chargé.
 

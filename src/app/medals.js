@@ -28,14 +28,14 @@ import { load, store } from './storage.js';
  * @type {Record<string, Record<HeroId, number>>}
  */
 export const REFERENCE = {
-  parking: { kevin: 14.2, charline: 12.4 },
-  lcp7: { kevin: 20.4, charline: 15.9 },
-  ts: { kevin: 49.5, charline: 47.6 },
-  copil: { kevin: 29.6, charline: 25.2 },
-  rooftop: { kevin: 60.1, charline: 53.2 },
-  intercontrat: { kevin: 21, charline: 20 },
-  pause: { kevin: 28.2, charline: 24.2 },
-  seminaire: { kevin: 22.4, charline: 17.1 },
+  parking: { kevin: 14.3, charline: 12.5 },
+  lcp7: { kevin: 24.5, charline: 21.1 },
+  ts: { kevin: 49.7, charline: 48.1 },
+  copil: { kevin: 29.9, charline: 25.3 },
+  rooftop: { kevin: 57.3, charline: 52.3 },
+  intercontrat: { kevin: 25.4, charline: 24.5 },
+  pause: { kevin: 36, charline: 31.6 },
+  seminaire: { kevin: 26.7, charline: 25.5 },
 };
 
 /** Gold and silver: within these multiples of the reference time. */
