@@ -74,7 +74,7 @@ const STORY_IDS = STAGE_IDS.slice(0, CAMPAIGN);
  * @property {string[]} secrets Every secret found, `stage:x` (whoever found it; each
  *   hero's own notebook is the results card's, see {@link secretsFound}).
  * @property {string[]} days Daily challenges met.
- * @property {''|'julien'|'copil'} run How far the current run has gone without a
+ * @property {''|'julien'|'copil'} run How far the current story run has gone without a
  *   hit from a director: Julien convinced flawlessly, then the COPIL won.
  */
 
@@ -102,8 +102,16 @@ export class Trophies {
     if (Array.isArray(saved.secrets)) this.data.secrets = saved.secrets;
     if (Array.isArray(saved.days)) this.data.days = saved.days;
     if (saved.run === 'julien' || saved.run === 'copil') this.data.run = saved.run;
-    /** Hits taken during the current boss fight. */
+    /** Hits taken during the current boss fight, respawns included. */
     this.bossHits = 0;
+    /**
+     * The simulation of the duel under way: a respawn in the same simulation is the
+     * same duel (its hits still count), a fresh one (replay, next stage) a new duel.
+     * @type {object | null}
+     */
+    this.duelSim = null;
+    /** The last duel won: its stage and whether it was flawless. @type {{stage: string, flawless: boolean} | null} */
+    this.duel = null;
   }
 
   save() {
@@ -124,6 +132,15 @@ export class Trophies {
     this.data.counts[name] = (this.data.counts[name] ?? 0) + 1;
     this.save();
     if (this.data.counts[name] >= goal) this.unlock(id);
+  }
+
+  /**
+   * A new story game (Jouer, Continuer): « Unanimité » counts from here, in one go.
+   * Call it when a story run starts, never for Chapitres, « Sans filet » or the daily.
+   */
+  newRun() {
+    this.setRun('');
+    this.duel = null;
   }
 
   /** @param {TrophyData['run']} run */
@@ -153,7 +170,9 @@ export class Trophies {
         this.count('tickets', 150, 'tickets');
         break;
       case 'bossStart':
-        this.bossHits = 0;
+        // Back in the arena after a respawn: still the same duel.
+        if (this.duelSim !== sim) this.bossHits = 0;
+        this.duelSim = sim;
         break;
       case 'hurt':
       case 'zap':
@@ -163,12 +182,10 @@ export class Trophies {
         const rodolphe = sim.boss?.id === 'regionalDirector';
         const flawless = this.bossHits === 0;
         if (flawless) this.unlock(rodolphe ? 'rodolphe' : 'julien');
-        // « Unanimité »: Julien, then the COPIL, then Rodolphe, never touched by a director.
-        if (!rodolphe) this.setRun(flawless ? 'julien' : '');
-        else {
-          if (flawless && this.data.run === 'copil') this.unlock('bosses');
-          this.setRun('');
-        }
+        // « Unanimité » moves on when the stage is won (story runs only, see stageWon).
+        this.duel = { stage: stageId, flawless };
+        this.duelSim = null;
+        this.bossHits = 0;
         break;
       }
       case 'secret': {
@@ -195,15 +212,24 @@ export class Trophies {
    * @param {string} stageId
    * @param {boolean} last
    * @param {import('./medals.js').Medals} [medals] Medals, with this run's already awarded.
+   * @param {boolean} [story] Won in a story run (not Chapitres, « Sans filet » or the daily):
+   *   only those move « Unanimité » on.
    */
-  stageWon(sim, stageId, last, medals) {
+  stageWon(sim, stageId, last, medals, story = false) {
     if (stageId === 'parking') this.unlock('badge');
     if (stageId === 'intercontrat') this.unlock('bonus');
     if (stageId === 'pause') this.unlock('pause');
     if (sim.deaths === 0) this.unlock('clean');
-    // Julien's stage leads to the COPIL, then to Rodolphe: anything else ends the run.
-    if (stageId === 'copil') this.setRun(this.data.run === 'julien' ? 'copil' : '');
-    else if (stageId !== 'ts' && stageId !== 'rooftop') this.setRun('');
+    // « Unanimité »: in one story run, Julien flawless, the COPIL, then Rodolphe flawless.
+    const duel = this.duel?.stage === stageId && this.duel.flawless;
+    this.duel = null;
+    if (!story || sim.hardcore) this.setRun('');
+    else if (stageId === 'ts') this.setRun(duel ? 'julien' : '');
+    else if (stageId === 'copil') this.setRun(this.data.run === 'julien' ? 'copil' : '');
+    else if (stageId === 'rooftop') {
+      if (duel && this.data.run === 'copil') this.unlock('bosses');
+      this.setRun('');
+    } else this.setRun('');
     if (sim.hardcore) this.unlock('sansFilet');
     if (medals && HEROES.some((h) => medals.allGold(h, STAGE_IDS))) this.unlock('golds');
     // A star from either mode counts.

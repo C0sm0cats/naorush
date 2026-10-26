@@ -24,14 +24,32 @@ describe('trophies', () => {
     /** @type {string[]} */
     const got = [];
     const t = new Trophies((x) => got.push(x.id));
-    const s = sim({ bossActive: true, boss: { id: 'regionalDirector', hp: 5, arena: [0, 1] } });
+    const fight = () =>
+      sim({ bossActive: true, boss: { id: 'regionalDirector', hp: 5, arena: [0, 1] } });
+    const s = fight();
     t.event({ type: 'bossStart', x: 0, y: 0 }, s, 'rooftop');
     t.event({ type: 'hurt', x: 0, y: 0 }, s, 'rooftop');
     t.event({ type: 'bossDone', x: 0, y: 0 }, s, 'rooftop');
     expect(got).not.toContain('rodolphe');
-    t.event({ type: 'bossStart', x: 0, y: 0 }, s, 'rooftop');
-    t.event({ type: 'bossDone', x: 0, y: 0 }, s, 'rooftop');
+    // A new attempt (replaying the stage: a fresh simulation) starts clean.
+    const again = fight();
+    t.event({ type: 'bossStart', x: 0, y: 0 }, again, 'rooftop');
+    t.event({ type: 'bossDone', x: 0, y: 0 }, again, 'rooftop');
     expect(got).toContain('rodolphe');
+  });
+
+  it('counts the hits before a respawn in the same duel', () => {
+    /** @type {string[]} */
+    const got = [];
+    const t = new Trophies((x) => got.push(x.id));
+    const s = sim({ bossActive: true, boss: { id: 'techServicesDirector', hp: 4, arena: [0, 1] } });
+    t.event({ type: 'bossStart', x: 0, y: 0 }, s, 'ts');
+    t.event({ type: 'zap', x: 0, y: 0 }, s, 'ts');
+    // Back at the badge, back in the arena: a clean rematch is not « without a hit ».
+    t.event({ type: 'respawn', x: 0, y: 0 }, s, 'ts');
+    t.event({ type: 'bossStart', x: 0, y: 0 }, s, 'ts');
+    t.event({ type: 'bossDone', x: 0, y: 0 }, s, 'ts');
+    expect(got).not.toContain('julien');
   });
 
   it('counts across sessions and unlocks once', () => {
@@ -95,48 +113,78 @@ describe('the round-ten trophies', () => {
     const flawless = (/** @type {typeof julien} */ s, /** @type {string} */ id) => {
       t.event({ type: 'bossStart', x: 0, y: 0 }, s, id);
       t.event({ type: 'bossDone', x: 0, y: 0 }, s, id);
-      t.stageWon(s, id, id === 'rooftop');
+      t.stageWon(s, id, id === 'rooftop', undefined, story);
     };
+    let story = false;
+    // Chapitres: never « in one game ».
     flawless(julien, 'ts');
     t.stageWon(julien, 'copil', false);
+    flawless(rodolphe, 'rooftop');
+    expect(got).not.toContain('bosses');
+    story = true;
+    t.newRun();
+    flawless(julien, 'ts');
+    t.stageWon(julien, 'copil', false, undefined, true);
     flawless(rodolphe, 'rooftop');
     expect(got).toContain('bosses');
   });
 
-  it('need the run unbroken: a hit or another stage in between ends it', () => {
+  it('need the run unbroken: a hit, another stage or a new game in between ends it', () => {
     /** @type {string[]} */
     const got = [];
     const t = new Trophies((x) => got.push(x.id));
-    const julien = sim({
-      heroId: 'kevin',
-      bossActive: true,
-      deaths: 0,
-      boss: { id: 'techServicesDirector', hp: 4, arena: [0, 1] },
-    });
-    const rodolphe = sim({
-      heroId: 'kevin',
-      bossActive: true,
-      deaths: 0,
-      boss: { id: 'regionalDirector', hp: 5, arena: [0, 1] },
-    });
-    t.event({ type: 'bossStart', x: 0, y: 0 }, julien, 'ts');
-    t.event({ type: 'bossDone', x: 0, y: 0 }, julien, 'ts');
-    t.stageWon(julien, 'parking', false);
-    t.stageWon(julien, 'copil', false);
-    t.event({ type: 'bossStart', x: 0, y: 0 }, rodolphe, 'rooftop');
-    t.event({ type: 'bossDone', x: 0, y: 0 }, rodolphe, 'rooftop');
+    const duel = (/** @type {string} */ id) =>
+      sim({
+        heroId: 'kevin',
+        bossActive: true,
+        deaths: 0,
+        boss: {
+          id: id === 'ts' ? 'techServicesDirector' : 'regionalDirector',
+          hp: 4,
+          arena: [0, 1],
+        },
+      });
+    /** @param {Trophies} tr @param {string} id @param {boolean} [hit] */
+    const fight = (tr, id, hit = false) => {
+      const s = duel(id);
+      tr.event({ type: 'bossStart', x: 0, y: 0 }, s, id);
+      if (hit) tr.event({ type: 'hurt', x: 0, y: 0 }, s, id);
+      tr.event({ type: 'bossDone', x: 0, y: 0 }, s, id);
+      tr.stageWon(s, id, false, undefined, true);
+    };
+    t.newRun();
+    fight(t, 'ts');
+    t.stageWon(duel('parking'), 'parking', false, undefined, true);
+    t.stageWon(duel('copil'), 'copil', false, undefined, true);
+    fight(t, 'rooftop');
     expect(got).not.toContain('bosses');
     // Julien flawless, COPIL won, but Rodolphe lands a hit.
-    t.event({ type: 'bossStart', x: 0, y: 0 }, julien, 'ts');
-    t.event({ type: 'bossDone', x: 0, y: 0 }, julien, 'ts');
-    t.stageWon(julien, 'copil', false);
-    // The run is saved: a reload in the middle keeps it.
+    t.newRun();
+    fight(t, 'ts');
+    t.stageWon(duel('copil'), 'copil', false, undefined, true);
+    fight(t, 'rooftop', true);
+    expect(got).not.toContain('bosses');
+    // Julien and the COPIL in one session; « Continuer » the next day starts a new game.
+    t.newRun();
+    fight(t, 'ts');
+    t.stageWon(duel('copil'), 'copil', false, undefined, true);
     const later = new Trophies((x) => got.push(x.id));
-    later.event({ type: 'bossStart', x: 0, y: 0 }, rodolphe, 'rooftop');
-    later.event({ type: 'hurt', x: 0, y: 0 }, rodolphe, 'rooftop');
-    later.event({ type: 'bossDone', x: 0, y: 0 }, rodolphe, 'rooftop');
+    later.newRun();
+    fight(later, 'rooftop');
     expect(got).not.toContain('bosses');
     expect(later.data.run).toBe('');
+    // « Sans filet » or the daily on the way ends it too.
+    t.newRun();
+    fight(t, 'ts');
+    t.stageWon(
+      sim({ heroId: 'kevin', deaths: 0, hardcore: true }),
+      'copil',
+      false,
+      undefined,
+      true,
+    );
+    fight(t, 'rooftop');
+    expect(got).not.toContain('bosses');
   });
 
   it('reward gold on every stage with the same hero', () => {

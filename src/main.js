@@ -393,6 +393,7 @@ const toMenu = () => {
 /** Jouer: a new story run from the parking. */
 const newGame = () => {
   runMode = 'story';
+  trophies.newRun();
   // A new game shows the first PRIMO's slow motion again.
   primoCue.reset();
   startFrom(0);
@@ -400,6 +401,7 @@ const newGame = () => {
 $('play').onclick = newGame;
 $('continue').onclick = () => {
   runMode = 'story';
+  trophies.newRun();
   startFrom(saved());
 };
 // NA-2: a short interlude on the way to the next story stage (skippable, never on bonus stages).
@@ -702,7 +704,8 @@ function stageWon() {
   const medal = medalFor(level.id, heroId, sim.time, sim.deaths, helped);
   if (!challenge) medals.record(level.id, heroId, medal, modeOf(sim));
   lastMedal = medal;
-  trophies.stageWon(sim, level.id, last, medals);
+  // Only a story run moves « Unanimité » on (not Chapitres, « Sans filet » or the daily).
+  trophies.stageWon(sim, level.id, last, medals, runMode === 'story' && !challenge);
   if (challenge && dailyMet(challenge, sim)) trophies.dailyDone(challenge.key);
   /** @type {Parameters<typeof renderResults>[1]} */
   const results = {
