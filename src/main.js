@@ -393,6 +393,8 @@ const toMenu = () => {
 /** Jouer: a new story run from the parking. */
 const newGame = () => {
   runMode = 'story';
+  // A new game shows the first PRIMO's slow motion again.
+  primoCue.reset();
   startFrom(0);
 };
 $('play').onclick = newGame;
@@ -675,7 +677,8 @@ let lastMedal = null;
 const clock = (s) => `${Math.floor(s / 60)} min ${String(Math.floor(s % 60)).padStart(2, '0')} s`;
 
 function stageWon() {
-  if (!challenge && stage < CAMPAIGN)
+  // The credits' totals only add up a story run.
+  if (!challenge && stage < CAMPAIGN && runMode === 'story')
     runStages[stage] = {
       tickets: sim.tickets,
       time: sim.time,
@@ -701,7 +704,21 @@ function stageWon() {
   lastMedal = medal;
   trophies.stageWon(sim, level.id, last, medals);
   if (challenge && dailyMet(challenge, sim)) trophies.dailyDone(challenge.key);
-  if (last) return talk(EPILOGUE, credits);
+  /** @type {Parameters<typeof renderResults>[1]} */
+  const results = {
+    sim,
+    levelId: level.id,
+    hero: heroId,
+    daily: challenge?.key,
+    medal,
+    targets: medalTargets(level.id, heroId) ?? undefined,
+  };
+  // The story's last stage goes straight to the epilogue: its record and secrets are
+  // still saved (the results card does that), on a card nobody sees.
+  if (last) {
+    renderResults(document.createElement('dl'), results);
+    return talk(EPILOGUE, credits);
+  }
   $('next').hidden = bonus || final;
   $('wonKicker').textContent = challenge
     ? dailyKicker(challenge, sim)
@@ -710,14 +727,7 @@ function stageWon() {
   $('wonTitle').textContent = STAGE_END[stage].title;
   $('wonText').textContent = STAGE_END[stage].text;
   // Medal, gap to the record, secrets per hero (the card saves the record itself).
-  const { record, allSecrets, flawless } = renderResults($('wonStats'), {
-    sim,
-    levelId: level.id,
-    hero: heroId,
-    daily: challenge?.key,
-    medal,
-    targets: medalTargets(level.id, heroId) ?? undefined,
-  });
+  const { record, allSecrets, flawless } = renderResults($('wonStats'), results);
   $('share').textContent = 'Partager mon score';
   setIntensity(0.2);
   audio.music('win');
@@ -1067,6 +1077,14 @@ function menuInput() {
     else return false;
     return true;
   }
+  if (screen === 'posters' && (input.pressed('left') || input.pressed('right'))) {
+    showPoster(input.pressed('right') ? 1 : -1);
+    return true;
+  }
+  // Every press counts, even several within one slow frame.
+  const step = input.presses('down') - input.presses('up');
+  // Laying out the menu costs a reflow: only when a press needs it, never every frame.
+  if (!step && !input.pressed('confirm')) return false;
   // In reading order (phones regrid some screens), list rows included so long lists scroll.
   const buttons = readingOrder(
     /** @type {HTMLElement[]} */ ([
@@ -1074,12 +1092,6 @@ function menuInput() {
     ]).filter((b) => b.offsetParent !== null),
   );
   const at = buttons.indexOf(/** @type {HTMLElement} */ (document.activeElement));
-  if (screen === 'posters' && (input.pressed('left') || input.pressed('right'))) {
-    showPoster(input.pressed('right') ? 1 : -1);
-    return true;
-  }
-  // Every press counts, even several within one slow frame.
-  const step = input.presses('down') - input.presses('up');
   if (step && buttons.length) {
     const n = buttons.length;
     // Nothing focused yet: down goes to the first element, up to the last.

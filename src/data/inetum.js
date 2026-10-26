@@ -17,7 +17,7 @@ export const POSTER_HINTS = {
   'bon-commande': 'Sans bon de commande signé, pas de sortie.',
   'ordre-mission': 'Chaque ramette de papier recharge trois comptes rendus.',
   'success-factors': 'Un objectif par étape : la boussole du HUD te l’indique.',
-  gcomp: 'La rémunération se négocie… avec des arguments.',
+  gcomp: 'Mets ton CV à jour sur GComp : chaque étape franchie est une mission de plus.',
   'power-up': 'Les ascenseurs montent et descendent : saute au bon moment.',
   'power-up-tour': 'Le grand rendez-vous de la Région Ouest, sur le toit. Tout le monde y est.',
   'lets-connect': 'Les collègues en call sont partout. Garde des CR.',

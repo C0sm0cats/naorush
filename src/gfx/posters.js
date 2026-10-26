@@ -1368,73 +1368,77 @@ const artSuccess = {
 };
 
 /** @type {Art} */
-const artComp = {
+const artProfile = {
   w: 620,
   h: 440,
   draw(ctx) {
-    const cx = 310;
-    glow(ctx, cx, 170, 160, C.lime, 0.2);
-    // Arguments, ready.
-    box(ctx, 446, 0, 170, 84, 22, C.paper);
-    poly(ctx, [462, 80, 492, 80, 440, 100], C.paper);
-    for (let i = 0; i < 3; i++) {
-      check(ctx, 470, 20 + i * 24, 8, 5, C.blue);
-      box(ctx, 488, 16 + i * 24, 100 - i * 20, 9, 4, mix(C.navy, C.paper, 0.55));
-    }
-    // Base and pole.
-    oval(ctx, cx, 438, 110, 10, SHADE);
+    // The GComp profile card: who you are, then the four sections that make the CV.
+    at(ctx, 300, 222, -0.04, () => {
+      box(ctx, -236, -200, 472, 410, 30, 'rgba(10,14,30,0.3)');
+      box(ctx, -244, -212, 472, 410, 30, C.paper);
+      // Header: avatar, name bar, trigram tag.
+      box(ctx, -244, -212, 472, 110, [30, 30, 0, 0], C.blue);
+      avatar(ctx, -178, -157, 42, SKIN[1], HAIR[0], C.sky);
+      box(ctx, -118, -184, 190, 22, 11, C.paper);
+      box(ctx, -118, -148, 130, 16, 8, alpha(C.paper, 0.55));
+      box(ctx, 96, -186, 108, 50, 14, C.lime);
+      text(ctx, 'ABC', 150, -149, 34, C.navy, { align: 'center', maxW: 90 });
+      /** @type {[string, string, string][]} */
+      const rows = [
+        ['Compétences', C.lime, 'star'],
+        ['Missions', C.sky, 'pin'],
+        ['Formations', C.sun, 'cap'],
+        ['Certifications', C.pink, 'medal'],
+      ];
+      rows.forEach(([label, c, ic], i) => {
+        const y = -78 + i * 70;
+        box(ctx, -220, y, 52, 52, 14, c);
+        const ix = -194;
+        const iy = y + 26;
+        if (ic === 'star') spark(ctx, ix, iy, 18, C.navy);
+        else if (ic === 'pin') pin(ctx, ix, iy + 16, 11, C.navy, c);
+        else if (ic === 'cap') {
+          poly(ctx, [ix - 20, iy - 4, ix, iy - 14, ix + 20, iy - 4, ix, iy + 6], C.navy);
+          box(ctx, ix - 11, iy, 22, 12, 4, C.navy);
+        } else {
+          circle(ctx, ix, iy - 2, 13, C.navy);
+          poly(ctx, [ix - 10, iy + 6, ix - 14, iy + 20, ix - 2, iy + 12], C.navy);
+          poly(ctx, [ix + 10, iy + 6, ix + 14, iy + 20, ix + 2, iy + 12], C.navy);
+        }
+        text(ctx, label, -152, y + 38, 40, C.navy, { maxW: 300 });
+      });
+    });
+    // « CV » file sliding out on the right, with its download arrow.
+    at(ctx, 548, 132, 0.12, () => {
+      box(ctx, -58, -76, 116, 152, 14, 'rgba(10,14,30,0.3)');
+      box(ctx, -62, -82, 116, 152, 14, '#ffffff');
+      poly(ctx, [24, -82, 54, -52, 24, -52], mix(C.sky, C.paper, 0.4));
+      text(ctx, 'CV', -4, -14, 48, C.blue, { align: 'center' });
+      for (let k = 0; k < 3; k++)
+        box(ctx, -42, 6 + k * 18, 76 - k * 14, 8, 4, mix(C.navy, C.paper, 0.6));
+    });
+    // Certification badge: a gold rosette with a tick.
+    const bx = 540;
+    const by = 360;
     poly(
       ctx,
-      [cx - 90, 436, cx + 90, 436, cx + 50, 396, cx - 50, 396],
-      grad(ctx, cx - 90, 0, cx + 90, 0, [C.paper, mix(C.paper, C.sky, 0.45)]),
+      [bx - 30, by + 20, bx - 46, by + 76, bx - 18, by + 62, bx - 6, by + 84, bx + 2, by + 26],
+      C.pink,
     );
-    box(
+    poly(
       ctx,
-      cx - 12,
-      90,
-      24,
-      312,
-      10,
-      grad(ctx, cx - 12, 0, cx + 12, 0, [C.paper, mix(C.paper, C.sky, 0.5)]),
+      [bx + 30, by + 20, bx + 46, by + 76, bx + 18, by + 62, bx + 6, by + 84, bx - 2, by + 26],
+      C.pink,
     );
-    // Beam.
-    box(ctx, cx - 230, 112, 460, 20, 10, SHADE);
-    box(ctx, cx - 230, 106, 460, 20, 10, C.paper);
-    box(ctx, cx - 230, 118, 460, 8, [0, 0, 10, 10], mix(C.paper, C.sky, 0.4));
-    glow(ctx, cx, 84, 60, C.lime, 0.5);
-    circle(ctx, cx, 84, 26, C.lime);
-    circle(ctx, cx - 8, 76, 8, mix(C.lime, '#ffffff', 0.6));
-    for (const side of [-1, 1]) {
-      const px = cx + side * 200;
-      path(ctx, [px, 120, px - 84, 280], 4, mix(C.paper, C.sky, 0.3), [8, 6]);
-      path(ctx, [px, 120, px + 84, 280], 4, mix(C.paper, C.sky, 0.3), [8, 6]);
-      circle(ctx, px, 118, 13, C.lime);
-      ctx.beginPath();
-      ctx.moveTo(px - 104, 280);
-      ctx.lineTo(px + 104, 280);
-      ctx.quadraticCurveTo(px + 90, 342, px, 342);
-      ctx.quadraticCurveTo(px - 90, 342, px - 104, 280);
-      ctx.fillStyle = grad(ctx, 0, 280, 0, 342, [C.lime, mix(C.lime, '#2e7d32', 0.45)]);
-      ctx.fill();
-      oval(ctx, px, 280, 104, 10, mix(C.lime, '#ffffff', 0.35));
+    for (let k = 0; k < 12; k++) {
+      const ang = (k / 12) * TAU;
+      circle(ctx, bx + Math.cos(ang) * 46, by + Math.sin(ang) * 46, 14, C.sun);
     }
-    // Left pan: a stack of coins.
-    const coin = mix(C.sun, '#e0a030', 0.45);
-    for (let i = 0; i < 5; i++) {
-      const y = 262 - i * 20;
-      box(ctx, cx - 262 + (i % 2) * 6, y, 120, 22, 10, coin);
-      oval(ctx, cx - 202 + (i % 2) * 6, y + 4, 60, 7, C.sun);
-    }
-    circle(ctx, cx - 192, 148, 42, SHADE);
-    circle(ctx, cx - 200, 140, 42, grad(ctx, cx - 240, 100, cx - 160, 180, [C.sun, coin]));
-    arc(ctx, cx - 200, 140, 32, 5, mix(C.sun, '#a0661a', 0.45));
-    text(ctx, '€', cx - 200, 156, 42, mix(C.sun, '#a0661a', 0.7), { align: 'center' });
-    // Right pan: a star for the work done.
-    starShape(ctx, cx + 206, 216, 70, 32, SHADE);
-    starShape(ctx, cx + 200, 210, 70, 32, C.pink);
-    starShape(ctx, cx + 190, 196, 22, 10, mix(C.pink, '#ffffff', 0.45));
-    spark(ctx, cx + 110, 40, 16, C.lime);
-    spark(ctx, cx - 120, 46, 12, C.sky);
+    circle(ctx, bx, by, 48, C.sun);
+    circle(ctx, bx, by, 36, mix(C.sun, '#ffffff', 0.35));
+    check(ctx, bx, by + 2, 18, 9, C.navy);
+    spark(ctx, 40, 40, 18, C.lime);
+    spark(ctx, 600, 250, 12, C.paper);
   },
 };
 
@@ -3420,18 +3424,18 @@ const SPECS = {
   gcomp: {
     title: 'GComp',
     shape: 'portrait',
-    kicker: 'Global Compensation',
+    kicker: 'Ton profil, tes missions, ton CV',
     lines: ['GCOMP'],
     colors: [C.lime],
     shadow: C.navy,
     titleSize: 200,
-    tagline: 'Une rémunération lisible,\nsans formule magique.',
+    tagline: 'Tes missions racontent ton parcours.\nTon CV suit.',
     bg: [mix(C.navy, C.sky, 0.32), mix(C.navy, C.sky, 0.12)],
     ink: C.lime,
     accent: C.lime,
     tagBg: C.lime,
     tagFg: C.navy,
-    art: artComp,
+    art: artProfile,
   },
   'power-up': {
     title: 'Power UP',
