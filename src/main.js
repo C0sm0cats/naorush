@@ -25,7 +25,6 @@ import {
   bossLighting,
   fightFocus,
   primoCue,
-  withLights,
 } from './app/staging.js';
 import { findSpot, heroRegion, title } from './app/title.js';
 import { Trophies } from './app/trophies.js';
@@ -929,6 +928,8 @@ function showcase() {
   Object.assign(sim.hero, { x: spot.x - HERO.w / 2, y: spot.y, facing: -1, vx: 0 });
 }
 title.still = reducedMotion;
+// The light and the line of the day follow the clock; the mouse leans the camera.
+title.mount($('title'));
 /** The heroes stand in whatever part of the screen the title menu leaves free. */
 function frameTitle() {
   const panel = document.querySelector('.title-panel')?.getBoundingClientRect();
@@ -957,6 +958,7 @@ function leaveTitle(go) {
   audio.sfx('confirm');
   if (screen !== 'title' || reducedMotion) return go();
   document.body.classList.add('title-out');
+  title.leave();
   setTimeout(() => {
     const fade = $('fade');
     fade.classList.remove('on');
@@ -1214,7 +1216,7 @@ function frame(now) {
   }
   // Key, rim and fill lights on the heroes posing behind the title menu.
   const lit = view.showcase
-    ? withLights(lighting, title.lights(t, heroId))
+    ? title.lighting(lighting, t, heroId)
     : bossLighting(level, sim, t, lighting, prefs.flash);
   renderer.render(cam, lit, view.items(sim, t, particles.list), view.sprites, { flash });
   // Messages count down on every screen; first-time tips check this frame's camera.
