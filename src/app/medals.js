@@ -9,7 +9,9 @@ import { load, store } from './storage.js';
  * tests): gold under 1.6× its time, silver under 2.5×, bronze for any finish.
  * A star crowns a run without a single return to the badge. Relaxed mode or a
  * slower game speed still finish the stage, for a bronze: the medals measure
- * the game as designed. The best medal and the star can come from different runs.
+ * the game as designed. Such a medal says what held it back and what the run
+ * would have earned without the help (`held`), so the results card can tell the
+ * player kindly. The best medal and the star can come from different runs.
  *
  * « Sans filet », unlocked after the credits, replays a stage with one heart, no
  * coffee, faster traps and shorter PRIMO windows (`setHardcore` in the simulation),
@@ -17,7 +19,13 @@ import { load, store } from './storage.js';
  *
  * @typedef {'kevin'|'charline'} HeroId
  * @typedef {'gold'|'silver'|'bronze'} Tier
- * @typedef {{tier: Tier, star: boolean}} Medal
+ * @typedef {'relaxed'|'slow'|'both'|'any'} Help What held a medal at bronze: relaxed
+ *   mode, a slower game speed, both, or one of them (unsaid).
+ * @typedef {{by: Help, tier: Tier, star: boolean}} Held The help, and the medal the
+ *   same time and returns would have earned without it.
+ * @typedef {{tier: Tier, star: boolean, held?: Held}} Medal
+ * @typedef {boolean | {relaxed?: boolean, slow?: boolean}} Assist Relaxed mode or a
+ *   slower speed at any point of the run (`true`: one or the other, unsaid).
  * @typedef {'normal'|'sansFilet'} Mode
  */
 
@@ -64,17 +72,30 @@ export function medalTargets(stageId, hero) {
 }
 
 /**
- * The medal a finished run earns.
+ * What held a run back, from the assist flags. Null for a run without help.
+ * @param {Assist} assisted @returns {Help | null}
+ */
+export function helpOf(assisted) {
+  if (!assisted) return null;
+  if (assisted === true) return 'any';
+  if (assisted.relaxed && assisted.slow) return 'both';
+  return assisted.relaxed ? 'relaxed' : assisted.slow ? 'slow' : null;
+}
+
+/**
+ * The medal a finished run earns. A helped run gets a bronze without a star, and
+ * keeps in `held` what it would have earned: the card's « ton temps vaut l'or ».
  * @param {string} stageId @param {HeroId} hero
  * @param {number} time Stage time (s). @param {number} deaths Returns to the badge.
- * @param {boolean} [assisted] Played in relaxed mode or below normal speed.
+ * @param {Assist} [assisted] Played in relaxed mode or below normal speed.
  * @returns {Medal}
  */
 export function medalFor(stageId, hero, time, deaths, assisted = false) {
-  if (assisted) return { tier: 'bronze', star: false };
   const t = medalTargets(stageId, hero);
   /** @type {Tier} */
   const tier = !t ? 'bronze' : time < t.gold ? 'gold' : time < t.silver ? 'silver' : 'bronze';
+  const by = helpOf(assisted);
+  if (by) return { tier: 'bronze', star: false, held: { by, tier, star: deaths === 0 } };
   return { tier, star: deaths === 0 };
 }
 

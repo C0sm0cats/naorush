@@ -31,19 +31,19 @@ export const PARKING = {
     {
       x0: 5.5,
       x1: 7.5,
-      keys: 'Espace : saute sur le toit de la voiture.',
+      keys: '{jump} : saute sur le toit de la voiture.',
       touch: 'SAUT : monte sur le toit de la voiture.',
     },
     {
       x0: 12,
       x1: 14.5,
-      keys: 'Saute contre le mur pour t’accrocher. ↑ grimpe, ↓ lâche.',
+      keys: 'Saute contre le mur pour t’accrocher. {up} grimpe, {down} lâche.',
       touch: 'Saute contre le mur pour t’accrocher. ▲ grimpe, ▼ lâche.',
     },
     {
       x0: 28.5,
       x1: 31.5,
-      keys: 'X : un compte rendu, et le collègue file en réunion.',
+      keys: '{fire} : un compte rendu, et le collègue file en réunion.',
       touch: 'CR : un compte rendu, et le collègue file en réunion.',
     },
     {

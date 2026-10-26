@@ -22,6 +22,41 @@ const CAST_ORDER = [
 ];
 
 /**
+ * A list row the keyboard and the gamepad can stop on (up/down in menuInput), so a
+ * long list scrolls without a mouse or a finger. Not in the Tab order.
+ * @param {HTMLElement} li
+ */
+function navigable(li) {
+  li.tabIndex = -1;
+  li.dataset.nav = '';
+}
+
+/**
+ * Menu elements in the order the eye reads them: rows top to bottom, each row left to
+ * right, whatever order the markup has them in (CSS grids and `grid-row` reorder screens
+ * on phones). Up/down then visits every element exactly once.
+ * @template {{getBoundingClientRect: () => {top: number, left: number, height: number}}} T
+ * @param {T[]} items
+ * @returns {T[]}
+ */
+export function readingOrder(items) {
+  const boxes = items.map((el, i) => {
+    const r = el.getBoundingClientRect();
+    return { el, i, top: r.top, left: r.left, mid: r.top + r.height / 2, h: r.height };
+  });
+  boxes.sort((a, b) => a.top - b.top || a.left - b.left || a.i - b.i);
+  /** @type {Array<typeof boxes>} */
+  const rows = [];
+  for (const b of boxes) {
+    const row = rows.at(-1);
+    // Same row: its middle sits within the first element's height.
+    if (row && Math.abs(b.mid - row[0].mid) < Math.max(4, Math.min(b.h, row[0].h) / 2)) row.push(b);
+    else rows.push([b]);
+  }
+  return rows.flatMap((row) => row.sort((a, b) => a.left - b.left || a.i - b.i).map((b) => b.el));
+}
+
+/**
  * @param {HTMLElement} list
  * @param {Array<{name: string, text: string, got: boolean}>} trophies
  */
@@ -30,6 +65,7 @@ export function renderTrophies(list, trophies) {
     ...trophies.map((t) => {
       const li = document.createElement('li');
       li.className = t.got ? 'got' : '';
+      navigable(li);
       const name = document.createElement('b');
       name.textContent = t.name;
       const text = document.createElement('span');
@@ -46,6 +82,7 @@ export function renderCast(list) {
     ...CAST_ORDER.map((id) => {
       const c = CAST[id];
       const li = document.createElement('li');
+      navigable(li);
       const name = document.createElement('b');
       name.textContent = c.title ? `${c.name} · ${c.title}` : c.name;
       const bio = document.createElement('span');
@@ -71,6 +108,77 @@ export function renderBonus(row, stages, play) {
       return b;
     }),
   );
+}
+
+// ---- Générique -----------------------------------------------------------------
+
+/**
+ * One line of the credits: `t` the title, `h` a heading, `s` a kind line under a name.
+ * @typedef {[string, ('t'|'h'|'s')?]} CreditLine
+ */
+
+/** @param {HTMLElement} roll @param {CreditLine[]} lines */
+export function renderCredits(roll, lines) {
+  roll.replaceChildren(
+    ...lines.map(([text, kind]) => {
+      const n = el(
+        kind === 't' ? 'h2' : kind === 'h' ? 'h3' : 'p',
+        kind === 's' ? 'creditLine' : '',
+        text,
+      );
+      return n;
+    }),
+  );
+  roll.scrollTop = 0;
+}
+
+/** Credits roll speed (px a second) and the pause before they start rolling. */
+export const ROLL_SPEED = 24;
+export const ROLL_DELAY = 3;
+
+/**
+ * Rolls the credits up their scroll box, like a real end credits sequence, then stops at
+ * the end. A wheel, a finger, a click or a manual scroll hands control to the player;
+ * the screen closing stops it too.
+ * @param {HTMLElement} box The scroll box (`#creditsRoll`).
+ * @param {{reduced?: boolean, speed?: number, delay?: number,
+ *   raf?: (f: (now: number) => void) => unknown}} [o] `reduced`: no motion, nothing rolls.
+ * @returns {() => void} Stops the roll.
+ */
+export function autoRoll(box, o = {}) {
+  const speed = o.speed ?? ROLL_SPEED;
+  const raf = o.raf ?? requestAnimationFrame;
+  const events = ['wheel', 'pointerdown', 'touchstart', 'keydown'];
+  let stopped = false;
+  let t = -(o.delay ?? ROLL_DELAY);
+  /** @type {number | null} */
+  let last = null;
+  // scrollTop is rounded by the browser: the roll keeps its own fractional position.
+  let pos = box.scrollTop;
+  const stop = () => {
+    stopped = true;
+    for (const type of events) box.removeEventListener(type, stop);
+  };
+  if (o.reduced) return stop;
+  for (const type of events) box.addEventListener(type, stop, { passive: true });
+  const tick = (/** @type {number} */ now) => {
+    if (stopped) return;
+    if (!box.isConnected || box.closest('[hidden]')) return stop();
+    // The player scrolled by hand (scrollbar, keyboard): leave it there.
+    if (Math.abs(box.scrollTop - pos) > 2) return stop();
+    const dt = last === null ? 0 : Math.min(0.1, Math.max(0, (now - last) / 1000));
+    last = now;
+    t += dt;
+    if (t > 0) {
+      pos = Math.min(pos + speed * dt, Math.max(0, box.scrollHeight - box.clientHeight));
+      box.scrollTop = pos;
+      pos = Math.abs(box.scrollTop - pos) < 1 ? pos : box.scrollTop;
+      if (pos >= box.scrollHeight - box.clientHeight - 1) return stop();
+    }
+    raf(tick);
+  };
+  raf(tick);
+  return stop;
 }
 
 /**
@@ -277,9 +385,22 @@ export function renderChapters(host, rowsFor, o) {
       };
       return b;
     });
+    // A radio group: only the chosen mode is in the Tab order, left/right switch modes
+    // (once per press, a held arrow does not flicker between the two).
     const mark = () => {
-      for (const b of buttons) b.setAttribute('aria-checked', String(b.dataset.mode === mode));
+      for (const b of buttons) {
+        b.setAttribute('aria-checked', String(b.dataset.mode === mode));
+        b.tabIndex = b.dataset.mode === mode ? 0 : -1;
+      }
     };
+    group.addEventListener('keydown', (ev) => {
+      const e = /** @type {KeyboardEvent} */ (ev);
+      if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.repeat) return;
+      e.preventDefault();
+      const other = buttons[1 - MODES.indexOf(mode)];
+      other.click();
+      other.focus();
+    });
     mark();
     group.append(...buttons);
     host.modes.replaceChildren(group, hint);

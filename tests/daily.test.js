@@ -6,11 +6,13 @@ import {
   dailyChallenge,
   dailyFor,
   dailyKicker,
+  dailyLimit,
   dailyMet,
   dailyStages,
   shareCard,
   twistFits,
 } from '../src/app/daily.js';
+import { medalTargets } from '../src/app/medals.js';
 import { LEVELS } from '../src/data/levels/index.js';
 import { createSim, step } from '../src/game/sim.js';
 import { solve } from '../src/game/solver.js';
@@ -44,9 +46,27 @@ describe('daily challenge', () => {
       expect([0, 1, 3]).toContain(dailyChallenge([0, 1, 3], new Date(2026, 9, 1 + i, 12)).stage);
   });
 
-  it('draws every stage without a boss, bonus stages included, with six twists', () => {
-    expect(TWISTS).toHaveLength(6);
-    expect(new Set(TWISTS.map((t) => t.id)).size).toBe(6);
+  it('deals every stage and every twist once per cycle, never twice in a row', () => {
+    const stages = [0, 1, 3, 5, 6, 7];
+    const days = Array.from({ length: 84 }, (_, i) =>
+      dailyChallenge(stages, new Date(2026, 9, 1 + i, 12)),
+    );
+    for (let i = 1; i < days.length; i++) {
+      expect(days[i].stage).not.toBe(days[i - 1].stage);
+      expect(days[i].twist).not.toBe(days[i - 1].twist);
+    }
+    // Days since 1 January 2026: 273 is 1 October, a cycle start for six stages and seven twists.
+    for (let k = 0; k < 12; k++)
+      expect(new Set(days.slice(k * 7, k * 7 + 7).map((c) => c.twist.id)).size).toBe(7);
+    for (let k = 0; k < 13; k++)
+      expect(new Set(days.slice(k * 6 + 3, k * 6 + 9).map((c) => c.stage)).size).toBe(6);
+    // A date before the epoch deals too.
+    expect(stages).toContain(dailyChallenge(stages, new Date(2025, 5, 1, 12)).stage);
+  });
+
+  it('draws every stage without a boss, bonus stages included, with seven twists', () => {
+    expect(TWISTS).toHaveLength(7);
+    expect(new Set(TWISTS.map((t) => t.id)).size).toBe(7);
     const stages = dailyStages(LEVELS);
     expect(stages.map((i) => LEVELS[i].id)).toEqual([
       'parking',
@@ -75,7 +95,8 @@ describe('daily challenge', () => {
       expect(twistFits(LEVELS[c.stage], c.hero, c.twist.id)).toBe(false);
       const next = dailyFor(LEVELS, date);
       expect([next.stage, next.hero]).toEqual([c.stage, c.hero]);
-      expect(next.twist).toBe(TWISTS[(TWISTS.indexOf(c.twist) + 1) % TWISTS.length]);
+      const at = TWISTS.findIndex((t) => t.id === c.twist.id);
+      expect(next.twist.id).toBe(TWISTS[(at + 1) % TWISTS.length].id);
     } finally {
       UNFIT.delete(key);
     }
@@ -96,9 +117,31 @@ describe('daily challenge', () => {
     applyTwist(hard, challenge('sansFilet'));
     expect([hard.hardcore, hard.hero.hearts]).toEqual([true, 1]);
     expect(hard.things.filter((t) => t.kind === 'cup' && t.alive)).toEqual([]);
-    const plain = fresh();
-    applyTwist(plain, challenge('secret'));
-    expect(plain).toEqual(fresh());
+    for (const id of /** @type {const} */ (['secret', 'chrono'])) {
+      const plain = fresh();
+      applyTwist(plain, challenge(id));
+      expect(plain).toEqual(fresh());
+    }
+  });
+
+  it('asks for the silver time on « chrono d’argent », and names it', () => {
+    const c = challenge('chrono');
+    const silver = /** @type {{silver: number}} */ (medalTargets('parking', 'kevin')).silver;
+    expect(dailyLimit(c)).toBe(silver);
+    expect(dailyMet(c, { secrets: 0, time: silver - 0.1 })).toBe(true);
+    expect(dailyMet(c, { secrets: 0, time: silver })).toBe(false);
+    expect(dailyKicker(c, { secrets: 0, time: silver + 5 })).toMatch(
+      /^Défi du jour · chrono à battre : 0 min \d\d s$/,
+    );
+    // The title button, the card and the share say the time.
+    const year = Array.from({ length: 21 }, (_, i) =>
+      dailyFor(LEVELS, new Date(2026, 9, 1 + i, 12)),
+    );
+    const day = /** @type {import('../src/app/daily.js').Challenge} */ (
+      year.find((d) => d.twist.id === 'chrono')
+    );
+    expect(day.twist.label).toMatch(/^chrono d’argent, sous \d+ min \d\d s$/);
+    expect(dailyMet(day, { secrets: 0, time: dailyLimit(day) - 1 })).toBe(true);
   });
 
   it('asks for a secret on « un secret à dénicher » only', () => {

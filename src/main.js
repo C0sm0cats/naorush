@@ -4,16 +4,19 @@ import { applyTwist, dailyFor, dailyKicker, dailyMet, shareCard } from './app/da
 import { Bubbles, Dialogue } from './app/dialogue.js';
 import { Particles, landPower } from './app/fx.js';
 import { Hud } from './app/hud.js';
-import { Input } from './app/input.js';
+import { Input, tipText } from './app/input.js';
 import { Medals, applySansFilet, medalFor, medalTargets, modeOf } from './app/medals.js';
 import {
+  autoRoll,
   chapterRows,
   clearFloor,
+  readingOrder,
   renderCast,
   renderChapters,
+  renderCredits,
   renderTrophies,
 } from './app/menus.js';
-import { applyPrefs, prefs, reducedMotion, setupOptions } from './app/options.js';
+import { applyPrefs, caption, prefs, reducedMotion, setupOptions } from './app/options.js';
 import { BEST_KEY, renderResults, secretsFound } from './app/results.js';
 import { load, store } from './app/storage.js';
 import {
@@ -80,8 +83,11 @@ const medals = new Medals();
  * @type {'story'|'chapter'|'sansFilet'}
  */
 let runMode = 'story';
-/** Relaxed mode or a slower speed at any point of the run: a bronze at most. */
-let helped = false;
+/**
+ * Relaxed mode or a slower speed at any point of the run: a bronze at most, and the
+ * results card says which one held the medal back.
+ */
+let helped = { relaxed: false, slow: false };
 
 applyPrefs();
 
@@ -193,12 +199,16 @@ async function loadStage(i) {
   sim.assist = prefs.assist && !challenge && runMode !== 'sansFilet';
   if (challenge) applyTwist(sim, challenge);
   else if (runMode === 'sansFilet') applySansFilet(sim);
-  helped = false;
+  helped = { relaxed: false, slow: false };
   particles.clear();
   view.doorT = 0;
   camera.snap(sim.hero.x, sim.hero.y + 3);
   hud.lastHearts = -1;
-  hud.setStage({ keyLabel: level.keyLabel, bottle: sim.things.some((t) => t.kind === 'bottle') });
+  hud.setStage({
+    id: level.id,
+    keyLabel: level.keyLabel,
+    bottle: sim.things.some((t) => t.kind === 'bottle'),
+  });
   pending = null;
   hitstop = 0;
   wonTimer = 0;
@@ -661,7 +671,7 @@ function stageWon() {
 
 function credits() {
   const hero = CAST[heroId];
-  /** @type {Array<[string, string?]>} */
+  /** @type {import('./app/menus.js').CreditLine[]} */
   const lines = [
     ['NAO Rush', 't'],
     ['Les NAO sont sauvées !', 'h'],
@@ -671,26 +681,26 @@ function credits() {
     ],
     ['Avec', 'h'],
     ...CREDITS.flatMap(
-      (c) => /** @type {Array<[string, string?]>} */ ([[`${c.name} · ${c.role}`], [c.line, 's']]),
+      (c) =>
+        /** @type {import('./app/menus.js').CreditLine[]} */ ([
+          [`${c.name} · ${c.role}`],
+          [c.line, 's'],
+        ]),
     ),
     ['Fabriqué avec', 'h'],
     ['Un moteur WebGL2 maison · des affiches dessinées en code'],
     ['Une musique et des bruitages synthétisés en direct'],
     ['Merci d’avoir joué. Bonnes NAO !', 'h'],
   ];
-  $('creditsRoll').replaceChildren(
-    ...lines.map(([text, kind]) => {
-      const el = document.createElement(kind === 't' ? 'h2' : kind === 'h' ? 'h3' : 'p');
-      el.textContent = text;
-      if (kind === 's') el.className = 'creditLine';
-      return el;
-    }),
-  );
+  renderCredits($('creditsRoll'), lines);
   setIntensity(0.2);
   audio.music('credits');
   audio.sfx('sign');
   view.party = (level.boss?.arena[0] ?? 80) + 8;
   show('credits');
+  // The roll scrolls up by itself between the title and the buttons (stops on its own
+  // when the screen closes, or as soon as the player scrolls).
+  autoRoll($('creditsRoll'), { reduced: reducedMotion });
 }
 
 // ---- Sharing ------------------------------------------------------------------------
@@ -809,6 +819,8 @@ function onEvent(e) {
   // Rodolphe's third phase is his grand finale: it gets its own sting.
   const finale = e.type === 'bossPhase' && sim.things.find((t) => t.kind === 'boss')?.phase === 3;
   audio.sfx(finale ? 'finale' : eventSfx(e), { pan: panAt(e.x) });
+  // IN6: the warning sounds also get a bracketed caption, when the player wants them.
+  caption(e, sim);
   // A few frames of freeze sell the impact.
   hitstop = Math.max(hitstop, HITSTOP[e.type] ?? 0);
   const boss = level.boss?.id ?? '';
@@ -900,15 +912,14 @@ function onEvent(e) {
   }
 }
 
-const touch = matchMedia('(pointer: coarse)').matches;
-/** Tutorial tip for where the hero stands, worded for keyboard or touch. */
+/** Tutorial tip for where the hero stands, in the player's own controls (keys, gamepad or touch). */
 function tipAt() {
   const x = sim.hero.x;
   const y = sim.hero.y;
   const tip = level.tips?.find(
     (t) => x >= t.x0 && x <= t.x1 && y >= (t.y0 ?? -Infinity) && y <= (t.y1 ?? Infinity),
   );
-  return tip ? (touch ? tip.touch : tip.keys) : undefined;
+  return tip ? tipText(tip) : undefined;
 }
 
 /** Puts the heroes on a clear stretch of floor for the title (the run restarts from S anyway). */
@@ -992,9 +1003,12 @@ function menuInput() {
     else return false;
     return true;
   }
-  const buttons = /** @type {HTMLElement[]} */ ([
-    ...overlay.querySelectorAll('button, input, select'),
-  ]).filter((b) => b.offsetParent !== null);
+  // In reading order (phones regrid some screens), list rows included so long lists scroll.
+  const buttons = readingOrder(
+    /** @type {HTMLElement[]} */ ([
+      ...overlay.querySelectorAll('button, input, select, [data-nav]'),
+    ]).filter((b) => b.offsetParent !== null),
+  );
   const at = buttons.indexOf(/** @type {HTMLElement} */ (document.activeElement));
   if (screen === 'posters' && (input.pressed('left') || input.pressed('right'))) {
     showPoster(input.pressed('right') ? 1 : -1);
@@ -1004,11 +1018,13 @@ function menuInput() {
   const step = input.presses('down') - input.presses('up');
   if (step && buttons.length) {
     const n = buttons.length;
-    buttons[(((at + step) % n) + n) % n].focus();
+    // Nothing focused yet: down goes to the first element, up to the last.
+    const from = at < 0 && step < 0 ? 0 : at;
+    buttons[(((from + step) % n) + n) % n].focus();
     audio.sfx('menuMove');
     return true;
   }
-  if (input.pressed('confirm') && at >= 0) {
+  if (input.pressed('confirm') && at >= 0 && buttons[at].tagName !== 'LI') {
     buttons[at].click();
     return true;
   }
@@ -1035,7 +1051,8 @@ function frame(now) {
         acc += dt * speed() * primoCue.update(sim, dt);
         if (primoCue.started) hud.toast(PRIMO_PROMPT, 'consult');
       }
-      if (sim.assist || speed() < 1) helped = true;
+      if (sim.assist) helped.relaxed = true;
+      if (speed() < 1) helped.slow = true;
       while (acc >= DT && !pending && hitstop <= 0 && gameOverTimer <= 0) {
         step(sim, input.state());
         if (sim.doorOpen) view.doorT += DT;
@@ -1134,6 +1151,17 @@ function frame(now) {
     }
     for (const th of sim.things)
       if (th.kind === 'cr' && th.alive) particles.emit('trail', th.x, th.y);
+  }
+  // The colleague on a call: the hold music leaks from their headset as the hero comes close.
+  if (screen === 'play') {
+    let near = Infinity;
+    let nx = 0;
+    for (const th of sim.things) {
+      if (th.kind !== 'colleague' || !th.alive || th.state === 'meeting') continue;
+      const d = Math.hypot(th.x - (h.x + HERO.w / 2), th.y - h.y);
+      if (d < near) [near, nx] = [d, th.x];
+    }
+    audio.headset(near, panAt(nx));
   }
   // A little life in the air, around what the camera sees.
   if (screen === 'play' || screen === 'title') {

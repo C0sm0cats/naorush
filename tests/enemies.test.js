@@ -189,7 +189,7 @@ describe('archive boxes', () => {
     const s = sim(def, 'charline');
     const events = throwCr(s).concat(untilCrGone(s));
     expect(has(events, 'block')).toBe(true);
-    expect(events.find((e) => e.type === 'block')?.cause).toBeUndefined();
+    expect(events.find((e) => e.type === 'block')?.cause).toBe('crate');
     expect(has(events, 'archive')).toBe(false);
     for (const y of [3, 4, 5]) expect(tileAt(s, 8, y)).toBe(TILE.CRATE);
   });

@@ -70,6 +70,8 @@
     </div>
     <div class="hint" id="hint"></div>
     <div class="toast" id="toast" role="status"></div>
+    <!-- IN6: captions of the warning sounds (options.js); the sounds themselves are not read out. -->
+    <div class="captions" id="captions" aria-hidden="true"></div>
 
     <section class="screen title" id="title" aria-labelledby="titleLogo">
       <div class="title-fx" aria-hidden="true">
@@ -82,6 +84,7 @@
         <h1 class="logo" id="titleLogo">
           <span class="logo-nao">NAO</span> <span class="logo-rush">Rush</span>
         </h1>
+        <p class="title-day" id="titleDay"></p>
         <p class="lead">
           Les NAO commencent jeudi et l’enveloppe des augmentations a disparu. Cinq étapes, deux
           directeurs à convaincre, une seule signature.
@@ -140,8 +143,9 @@
         <h2 id="pauseTitle">Pause café</h2>
         <p class="lead" id="pauseInfo"></p>
         <p class="keys-hint">
-          <kbd>←</kbd><kbd>→</kbd> courir · <kbd>Espace</kbd> sauter · <kbd>↑</kbd> grimper ·
-          <kbd>X</kbd> CR
+          <kbd data-action="left">←</kbd><kbd data-action="right">→</kbd> courir ·
+          <kbd data-action="jump">Espace</kbd> sauter · <kbd data-action="up">↑</kbd> grimper ·
+          <kbd data-action="fire">X</kbd> CR
         </p>
         <button class="go" id="resume">Reprendre</button>
         <button class="ghost" id="restart">Recommencer</button>
@@ -164,10 +168,10 @@
         <label>Bruitages <input type="range" id="volSfx" min="0" max="1" step="0.05" /></label>
         <label class="check"
           ><input type="checkbox" id="optAssist" /> Mode détente : les obstacles ne coûtent pas de
-          cœur</label
+          cœur (médaille de bronze garantie)</label
         >
         <label
-          >Vitesse du jeu
+          >Vitesse du jeu <small class="opt-note">(réduite : médaille de bronze)</small>
           <select id="optSpeed">
             <option value="1">Normale</option>
             <option value="0.8">Réduite (80 %)</option>
@@ -183,6 +187,10 @@
         <label class="check"
           ><input type="checkbox" id="optCues" /> Repères renforcés : dangers hachurés, alertes
           lisibles sans les couleurs</label
+        >
+        <label class="check"
+          ><input type="checkbox" id="optCaptions" /> Sous-titres des sons : [Imprimante qui chauffe
+          →]</label
         >
         <label class="check"><input type="checkbox" id="optVibrate" /> Vibrations (mobile)</label>
         <label
@@ -298,7 +306,13 @@
       aria-label="Générique"
       hidden
     >
-      <div class="roll" id="creditsRoll"></div>
+      <div
+        class="roll"
+        id="creditsRoll"
+        tabindex="0"
+        role="region"
+        aria-label="Texte du générique"
+      ></div>
       <div class="credits-actions">
         <button class="go" id="creditsShare">Partager mon score</button>
         <button class="ghost" id="creditsClose">Retour au menu</button>

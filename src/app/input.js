@@ -2,6 +2,8 @@
  * Keyboard, touch and gamepad controls merged into one {@link import('../game/sim.js').Input}.
  * `pressed()` reports one-shot actions (pause, read, confirm) for the menus.
  * Players can add their own key for each action; it is saved locally.
+ * Texts that name a control write it `{jump}`, `{fire}`…: {@link fillKeys} puts in the key
+ * the player really uses (their own binding, the gamepad button or the touch button).
  */
 import { load, store } from './storage.js';
 
@@ -38,7 +40,26 @@ export const ACTIONS = /** @type {const} */ ({
 
 const BIND_KEY = 'naorush.keys';
 
-/** Human-readable key name. @param {string} code */
+/**
+ * What each physical key prints on this keyboard: `KeyQ` is « A » on a French AZERTY.
+ * Filled from the browser's layout map when it has one, and from every key pressed.
+ * @type {Map<string, string>}
+ */
+export const layout = new Map();
+if (typeof navigator !== 'undefined')
+  /** @type {any} */ (navigator).keyboard
+    ?.getLayoutMap?.()
+    .then((/** @type {Map<string, string>} */ map) => {
+      for (const [code, key] of map) if (!layout.has(code)) layout.set(code, key);
+    })
+    .catch(() => {});
+
+/** Learns what a key prints from a key press. @param {KeyboardEvent} e */
+export function learnKey(e) {
+  if (e.key && [...e.key].length === 1 && e.key !== ' ') layout.set(e.code, e.key);
+}
+
+/** Human-readable key name, as printed on the player's keyboard. @param {string} code */
 export const keyName = (code) =>
   ({
     ArrowLeft: '←',
@@ -48,7 +69,102 @@ export const keyName = (code) =>
     Space: 'Espace',
     Escape: 'Échap',
     Enter: 'Entrée',
-  })[code] ?? code.replace(/^Key|^Digit/, '');
+    NumpadEnter: 'Entrée',
+    Tab: 'Tab',
+    Backspace: 'Retour arrière',
+    ShiftLeft: 'Maj',
+    ShiftRight: 'Maj droite',
+    ControlLeft: 'Ctrl',
+    ControlRight: 'Ctrl droite',
+    AltLeft: 'Alt',
+    AltRight: 'Alt Gr',
+  })[code] ??
+  layout.get(code)?.toUpperCase() ??
+  code.replace(/^Key|^Digit/, '').replace(/^Numpad/, 'Pavé ');
+
+/** What the player last played with: tips and menus name its buttons. @typedef {'keys' | 'pad' | 'touch'} Device */
+/** Gamepad face buttons differ by brand: Xbox-style letters or PlayStation symbols. @typedef {'xbox' | 'ps'} PadKind */
+
+/** Standard-mapping gamepad buttons, Xbox-style letters (A bottom, X left). */
+const PAD_NAMES = /** @type {Record<keyof typeof ACTIONS, string>} */ ({
+  left: '◀',
+  right: '▶',
+  up: '▲',
+  down: '▼',
+  jump: 'A',
+  fire: 'X',
+  pause: 'Start',
+});
+/** The same buttons on a PlayStation pad. */
+const PS_NAMES = /** @type {Record<keyof typeof ACTIONS, string>} */ ({
+  ...PAD_NAMES,
+  jump: '✕',
+  fire: '□',
+  pause: 'Options',
+});
+/** The on-screen touch buttons (index.html, `.touch`). */
+const TOUCH_NAMES = /** @type {Record<keyof typeof ACTIONS, string>} */ ({
+  left: '◀',
+  right: '▶',
+  up: '▲',
+  down: '▼',
+  jump: 'SAUT',
+  fire: 'CR',
+  pause: '❚❚',
+});
+
+/**
+ * The name of the control for an action on a device.
+ * @param {keyof typeof ACTIONS} action
+ * @param {Device} device
+ * @param {string} [code] Keyboard: the key bound to the action (default key otherwise).
+ * @param {PadKind} [pad]
+ */
+export function controlName(action, device, code, pad = 'xbox') {
+  if (device === 'touch') return TOUCH_NAMES[action];
+  if (device === 'pad') return (pad === 'ps' ? PS_NAMES : PAD_NAMES)[action];
+  return keyName(code || ACTIONS[action]);
+}
+
+const PLACEHOLDER = /\{(left|right|up|down|jump|fire|pause)\}/g;
+
+/**
+ * Replaces `{jump}`, `{fire}`, `{up}`… in a text with the controls' names.
+ * @param {string} text
+ * @param {(action: keyof typeof ACTIONS) => string} name
+ */
+export function fillControls(text, name) {
+  return text.replace(PLACEHOLDER, (_, a) => name(/** @type {keyof typeof ACTIONS} */ (a)));
+}
+
+/** A PlayStation pad (Sony's USB vendor id, or its name). @param {string} id */
+export const padKind = (id) =>
+  /054c|playstation|dualshock|dualsense/i.test(id) ? /** @type {const} */ ('ps') : 'xbox';
+
+/** The game's one Input, once built: {@link keyLabel} and {@link fillKeys} read it. @type {Input | null} */
+let current = null;
+
+/**
+ * The name of the control the player uses for an action right now: their own key,
+ * the gamepad button, or the touch button.
+ * @param {keyof typeof ACTIONS} action
+ */
+export const keyLabel = (action) => current?.label(action) ?? keyName(ACTIONS[action]);
+
+/**
+ * A text with `{jump}`, `{fire}`, `{up}`… written with the player's own controls.
+ * Texts without placeholders come back unchanged.
+ * @param {string} text
+ */
+export const fillKeys = (text) => fillControls(text, keyLabel);
+
+/**
+ * A tutorial tip in the player's own controls: the touch wording on the touch pad,
+ * the keyboard wording (placeholders filled) on a keyboard or a gamepad.
+ * @param {{keys: string, touch: string}} tip
+ */
+export const tipText = (tip) =>
+  fillKeys((current?.device ?? 'keys') === 'touch' ? tip.touch : tip.keys);
 
 export class Input {
   constructor() {
@@ -69,8 +185,20 @@ export class Input {
     this.padHeld = new Set();
     /** Gamepad buttons to ignore until released. @type {Set<string>} */
     this.padBlocked = new Set();
+    /** What the player last used. @type {Device} */
+    this.device =
+      typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
+        ? 'touch'
+        : 'keys';
+    /** @type {PadKind} */
+    this.pad = 'xbox';
+    /** Called when the player switches device (keyboard, gamepad, touch). @type {Array<() => void>} */
+    this.deviceListeners = [];
+    current = this;
+    if (typeof document !== 'undefined') document.body.dataset.device = this.device;
 
     addEventListener('keydown', (/** @type {KeyboardEvent} */ e) => {
+      learnKey(e);
       if (this.capture) {
         e.preventDefault();
         const done = this.capture;
@@ -81,6 +209,7 @@ export class Input {
       }
       document.body.classList.remove('padnav');
       const k = this.actionFor(e.code);
+      if (k) this.setDevice('keys');
       if (!k) return;
       // On a focused menu button, Enter and Space press the button as usual
       // (in play they stay game keys, even if the mute button kept focus).
@@ -130,6 +259,19 @@ export class Input {
     return this.custom[action] ?? ACTIONS[action];
   }
 
+  /** The name of the control for an action on the device in use. @param {keyof typeof ACTIONS} action */
+  label(action) {
+    return controlName(action, this.device, this.binding(action), this.pad);
+  }
+
+  /** @param {Device} device */
+  setDevice(device) {
+    if (device === this.device) return;
+    this.device = device;
+    document.body.dataset.device = device;
+    for (const f of this.deviceListeners) f();
+  }
+
   /** @param {keyof typeof ACTIONS} action @param {string} code */
   bind(action, code) {
     for (const [a, c] of Object.entries(this.custom)) if (c === code) delete this.custom[a];
@@ -175,6 +317,7 @@ export class Input {
         const el = at(e);
         if (!el) return;
         e.preventDefault();
+        this.setDevice('touch');
         /** @type {HTMLElement} */ (pad).setPointerCapture(e.pointerId);
         fingers.set(e.pointerId, el);
         refresh();
@@ -220,6 +363,8 @@ export class Input {
       if (!this.padHeld.has(k)) {
         this.tap(k);
         document.body.classList.add('padnav');
+        this.pad = padKind(pad.id);
+        this.setDevice('pad');
       }
     for (const k of this.padHeld) if (!now.has(k)) this.held.delete(k);
     for (const k of now) this.held.add(k);

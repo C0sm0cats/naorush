@@ -349,7 +349,8 @@ export function stepCr(s, t) {
         if (box) box.alive = false;
       }
       emit(s, 'archive', c + 0.5, r + 0.5);
-    } else emit(s, tileAt(s, c, r) === TILE.CRATE ? 'block' : 'poof', t.x, t.y);
+    } else if (tileAt(s, c, r) === TILE.CRATE) emit(s, 'block', t.x, t.y, 'crate');
+    else emit(s, 'poof', t.x, t.y);
     return;
   }
   for (const k of s.things) {
@@ -408,7 +409,7 @@ export function stepCr(s, t) {
     }
     if (k.kind === 'vacuum' && t.y < k.y + 0.5) {
       t.alive = false;
-      emit(s, 'block', k.x, k.y + 0.3);
+      emit(s, 'block', k.x, k.y + 0.3, 'vacuum');
       return;
     }
   }

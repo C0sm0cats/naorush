@@ -16,6 +16,7 @@ import {
   trackInfo,
 } from '../src/app/audio.js';
 import { ceilingCurve } from '../src/app/audio/engine.js';
+import { LEAK_RANGE, PHONE_HIGH, PHONE_LOW, nearness } from '../src/app/audio/phone.js';
 import { position, step } from '../src/app/audio/scheduler.js';
 import { BARS, SONGS, barsFor } from '../src/app/audio/tracks/index.js';
 import { chord, degreeOf } from '../src/app/audio/tracks/theory.js';
@@ -613,6 +614,102 @@ describe('audio engine', () => {
     a.music('parking');
     a.music('win');
     expect(a.run?.name).toBe('win');
+  });
+
+  it('puts the music on hold down a phone line in pause, and takes it back on resume', () => {
+    expect([PHONE_LOW, PHONE_HIGH]).toEqual([300, 3400]);
+    const a = engine();
+    a.music('office');
+    advance(1);
+    const dry = /** @type {any} */ (a.dryNode).gain;
+    const line = /** @type {any} */ (a.phone).line.gain;
+    a.sfx('pause');
+    expect(a.held).toBe(true);
+    expect(dry.last.v).toBe(0);
+    expect(line.last.v).toBe(1);
+    // The line hiss runs only on hold.
+    expect(/** @type {any} */ (a)._hiss).not.toBeNull();
+    // The track keeps playing (no restart): the same run, in time.
+    const run = a.run;
+    advance(1);
+    expect(a.run).toBe(run);
+    a.sfx('resume');
+    expect(a.held).toBe(false);
+    expect(dry.last.v).toBe(1);
+    expect(line.last.v).toBe(0);
+    // Back smoothly: the way out is gentler than the way in.
+    expect(line.last.tc).toBeGreaterThan(0.05);
+    expect(/** @type {any} */ (a)._hiss).toBeNull();
+    // Quitting, restarting the stage or any new music leaves the switchboard.
+    a.sfx('pause');
+    a.stage({ id: 'lcp7', music: 'office', theme: 'office' });
+    expect(a.held).toBe(false);
+    a.sfx('pause');
+    a.music('title');
+    expect(a.held).toBe(false);
+    expect(dry.last.v).toBe(1);
+  });
+
+  it('lets the hold music leak from a colleague headset, placed and discreet', () => {
+    expect(nearness(Infinity)).toBe(0);
+    expect(nearness(NaN)).toBe(0);
+    expect(nearness(LEAK_RANGE + 1)).toBe(0);
+    expect(nearness(0)).toBe(1);
+    expect(nearness(2)).toBeGreaterThan(nearness(4));
+    const a = engine();
+    a.music('office');
+    advance(0.5);
+    const phone = /** @type {any} */ (a.phone);
+    const dry = /** @type {any} */ (a.dryNode).gain;
+    a.headset(1, 0.8);
+    const close = phone.leak.gain.last.v;
+    expect(close).toBeGreaterThan(0);
+    // Discreet: under the line level, and the room music only dips a little.
+    expect(close).toBeLessThanOrEqual(1);
+    expect(dry.last.v).toBeGreaterThan(0.6);
+    expect(dry.last.v).toBeLessThan(1);
+    expect(phone.pan.pan.last.v).toBeCloseTo(0.8);
+    a.headset(4, -0.5);
+    expect(phone.leak.gain.last.v).toBeLessThan(close);
+    expect(phone.pan.pan.last.v).toBeCloseTo(-0.5);
+    // Same place every frame: the mix is left alone.
+    const calls = phone.leak.gain.last;
+    a.headset(4, -0.5);
+    expect(phone.leak.gain.last).toBe(calls);
+    a.headset(Infinity);
+    expect(phone.leak.gain.last.v).toBe(0);
+    expect(dry.last.v).toBe(1);
+    // On hold, the whole music is on the line: no extra leak.
+    a.headset(1, 0);
+    a.hold(true);
+    expect(phone.leak.gain.last.v).toBe(0);
+    // A new track clears the headset until the game reports it again.
+    a.hold(false);
+    a.headset(1, 0);
+    a.music('copil');
+    expect(phone.leak.gain.last.v).toBe(0);
+  });
+
+  it('skips the steps missed during a stall, even at a hand-over, never plays them late', () => {
+    const a = engine();
+    a.music('office');
+    advance(1);
+    // The main thread freezes 0.6 s (a stage being built): the clock runs, no tick.
+    stats.ctx.currentTime += 0.6;
+    const thaw = stats.ctx.currentTime;
+    stats.starts = [];
+    a.music('copil');
+    advance(0.5);
+    expect(stats.starts.length).toBeGreaterThan(0);
+    for (const t of stats.starts) expect(t).toBeGreaterThanOrEqual(thaw - 0.03);
+    // Same without a hand-over: the clock jumps ahead instead of catching up.
+    a.music('office');
+    advance(1);
+    stats.ctx.currentTime += 0.6;
+    const cut = stats.ctx.currentTime;
+    stats.starts = [];
+    advance(0.1);
+    for (const t of stats.starts) expect(t).toBeGreaterThanOrEqual(cut - 0.03);
   });
 
   it('keeps every sample under the -1 dBFS ceiling', () => {

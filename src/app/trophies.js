@@ -1,4 +1,4 @@
-import { LEVELS } from '../data/levels/index.js';
+import { CAMPAIGN, LEVELS } from '../data/levels/index.js';
 import { noteSecrets, secretsFound } from './results.js';
 import { load, store } from './storage.js';
 
@@ -47,6 +47,16 @@ export const TROPHIES = [
   { id: 'pause', name: 'Pause méritée', text: 'Échapper aux bonbonnes de la salle de pause.' },
   { id: 'daily', name: 'Habitué du défi', text: 'Réussir le défi du jour trois jours différents.' },
   { id: 'celine', name: 'Pour Céline', text: 'Réserver les places du concert de Céline Dion.' },
+  {
+    id: 'sansFilet',
+    name: 'Funambule',
+    text: 'Finir une étape en mode Sans filet : un cœur, pas de café.',
+  },
+  {
+    id: 'stars',
+    name: 'Qualité certifiée',
+    text: 'L’étoile (aucun retour au badge) sur les cinq étapes de l’histoire, avec le même héros.',
+  },
 ];
 
 const KEY = 'naorush.trophies';
@@ -54,6 +64,8 @@ const KEY = 'naorush.trophies';
 const HEROES = ['kevin', 'charline'];
 /** Every stage, bonus stages included, for the per-hero goals. */
 const STAGE_IDS = LEVELS.map((l) => l.id);
+/** The stages of the story, for « Qualité certifiée ». */
+const STORY_IDS = STAGE_IDS.slice(0, CAMPAIGN);
 
 /**
  * @typedef {Object} TrophyData
@@ -192,7 +204,16 @@ export class Trophies {
     // Julien's stage leads to the COPIL, then to Rodolphe: anything else ends the run.
     if (stageId === 'copil') this.setRun(this.data.run === 'julien' ? 'copil' : '');
     else if (stageId !== 'ts' && stageId !== 'rooftop') this.setRun('');
+    if (sim.hardcore) this.unlock('sansFilet');
     if (medals && HEROES.some((h) => medals.allGold(h, STAGE_IDS))) this.unlock('golds');
+    // A star from either mode counts.
+    if (
+      medals &&
+      HEROES.some((h) =>
+        STORY_IDS.every((id) => medals.get(id, h)?.star || medals.get(id, h, 'sansFilet')?.star),
+      )
+    )
+      this.unlock('stars');
     if (last) {
       this.unlock('nao');
       this.unlock(sim.heroId);

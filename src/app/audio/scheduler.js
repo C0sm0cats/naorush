@@ -11,6 +11,8 @@ import { PATCHES } from './voice.js';
 
 const LOOKAHEAD = 0.14;
 const TICK_MS = 25;
+// A step may start this late (inaudible); later than that, it is skipped.
+export const LATE = 0.03;
 // Pads, comping and stabs are voiced inside one octave from here (MIDI), so chords move
 // by the nearest notes instead of jumping in parallel.
 const PAD_LOW = 53;
@@ -30,14 +32,7 @@ const DRUM_GAIN = 0.7;
 export function startClock(ctx, run, total, silent, targets) {
   const { def } = run;
   run.timer = setInterval(() => {
-    // After a main-thread stall (a stage being built), skip the missed steps instead
-    // of playing them all at once.
-    const s16 = 60 / def.bpm / 4;
-    if (run.next < ctx.currentTime - s16) {
-      const skip = Math.ceil((ctx.currentTime - run.next) / s16);
-      run.step += skip;
-      run.next += skip * s16;
-    }
+    catchUp(run, ctx.currentTime);
     // Muted or music at zero: keep time, but schedule nothing (saves the whole graph).
     const quiet = silent();
     while (run.next < ctx.currentTime + LOOKAHEAD) {
@@ -51,6 +46,21 @@ export function startClock(ctx, run, total, silent, targets) {
       run.step++;
     }
   }, TICK_MS);
+}
+
+/**
+ * After a main-thread stall (a stage being built, a frozen tab), skips the steps that are
+ * already late instead of playing them all at once: the song keeps its place in time.
+ * Returns how many steps were skipped.
+ * @param {Run} run @param {number} now
+ */
+export function catchUp(run, now) {
+  if (!(run.next < now - LATE)) return 0;
+  const s16 = 60 / run.def.bpm / 4;
+  const skip = Math.ceil((now - LATE - run.next) / s16);
+  run.step += skip;
+  run.next += skip * s16;
+  return skip;
 }
 
 /**

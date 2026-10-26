@@ -36,7 +36,7 @@ export const LCP7 = {
     {
       x0: 37,
       x1: 39.5,
-      keys: 'Le stagiaire s’arrête, puis fonce : saute par-dessus, ou X pour une pause café.',
+      keys: 'Le stagiaire s’arrête, puis fonce : saute par-dessus, ou {fire} pour une pause café.',
       touch: 'Le stagiaire s’arrête, puis fonce : saute par-dessus, ou CR pour une pause café.',
     },
   ],

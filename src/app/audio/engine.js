@@ -1,8 +1,9 @@
 // The audio engine: context, mixer (master, buses, compressor, limiter), music runs and SFX.
 
 import { AMB_FADE, AMBIENCES, buildBed } from './ambience.js';
+import { HOLD_IN_TC, HOLD_OUT_TC, LEAK_TC, buildPhone, nearness, phoneTargets } from './phone.js';
 import { MUTE_KEY, VOL_KEYS, load, loadVolume, save } from './prefs.js';
-import { harmonyAt, liftAt, playUntil, startClock } from './scheduler.js';
+import { catchUp, harmonyAt, liftAt, playUntil, startClock } from './scheduler.js';
 import { SFX, VARIED } from './sfx.js';
 import { stageBed, stageFloor, stageTrack } from './stages.js';
 import { STINGS } from './stingers.js';
@@ -139,6 +140,17 @@ export class Audio {
     this._signed = false;
     /** @type {GainNode | null} music ducking (under hurt, boss hits, keys) */
     this.duckNode = null;
+    /** The music straight to the bus (the line takes over while on hold). @type {GainNode | null} */
+    this.dryNode = null;
+    /** Switchboard line: hold music in pause, headset leak near a colleague. @type {ReturnType<typeof buildPhone> | null} */
+    this.phone = null;
+    /** Paused: the music plays down the phone line. */
+    this._held = false;
+    /** Nearness (0..1) to a colleague's headset, and where it is (pan). */
+    this._near = 0;
+    this._nearPan = 0;
+    /** Line hiss while on hold. @type {AudioBufferSourceNode | null} */
+    this._hiss = null;
   }
 
   get muted() {
@@ -200,7 +212,10 @@ export class Audio {
     music.gain.value = BUS_GAIN.music * this._vol.music;
     music.connect(master);
     const duck = ctx.createGain();
-    duck.connect(music);
+    const dry = ctx.createGain();
+    duck.connect(dry).connect(music);
+    const phone = buildPhone(ctx, music);
+    duck.connect(phone.input);
     const amb = ctx.createGain();
     amb.connect(sfx);
     // Music reverb, shared by every track (each run feeds it through its own send).
@@ -224,6 +239,8 @@ export class Audio {
       sfxBus: sfx,
       musicBus: music,
       duckNode: duck,
+      dryNode: dry,
+      phone,
       ambBus: amb,
       verbIn,
     });
@@ -252,6 +269,77 @@ export class Audio {
   /** @param {Bus} bus */
   getVolume(bus) {
     return bus === 'music' || bus === 'sfx' ? this._vol[bus] : 0;
+  }
+
+  /**
+   * Switchboard hold: the music goes down a phone line (300–3400 Hz, mono, a faint hiss)
+   * and comes back smoothly. The pause and resume effects call it; any music request
+   * releases it.
+   * @param {boolean} on
+   */
+  hold(on) {
+    const held = Boolean(on);
+    if (held === this._held) return;
+    this._held = held;
+    const ctx = this.ctx;
+    if (!ctx || !this.phone || !this.buf) return;
+    const now = ctx.currentTime;
+    if (held && !this._hiss) {
+      const src = ctx.createBufferSource();
+      src.buffer = this.buf;
+      src.loop = true;
+      src.connect(this.phone.hissIn);
+      src.start(now);
+      this._hiss = src;
+    } else if (!held && this._hiss) {
+      const src = this._hiss;
+      this._hiss = null;
+      src.stop(now + HOLD_OUT_TC * 8);
+      src.onended = () => src.disconnect();
+    }
+    this.#route(held ? HOLD_IN_TC : HOLD_OUT_TC);
+  }
+
+  /** On hold (paused). */
+  get held() {
+    return this._held;
+  }
+
+  /**
+   * The colleague on a call: the same music leaks from their headset, placed where they
+   * stand and louder as the hero comes close. Call it every frame in play with the
+   * nearest one (Infinity when there is none).
+   * @param {number} dist distance from the hero, in tiles
+   * @param {number} [pan] where the headset is, -1..1 (see `screenPan`)
+   */
+  headset(dist, pan = 0) {
+    const near = nearness(dist);
+    const p = Number.isFinite(pan) ? Math.max(-1, Math.min(1, pan)) : 0;
+    // Per-frame calls: only move the mix when it audibly changes.
+    if (Math.abs(near - this._near) < 0.01 && Math.abs(p - this._nearPan) < 0.02) return;
+    if (near === 0 && this._near === 0) return;
+    this._near = near;
+    this._nearPan = p;
+    this.#route(LEAK_TC);
+  }
+
+  /** Moves dry music, line and leak to their targets. @param {number} tc */
+  #route(tc) {
+    const ctx = this.ctx;
+    const phone = this.phone;
+    if (!ctx || !phone || !this.dryNode) return;
+    const now = ctx.currentTime;
+    const t = phoneTargets(this._held, this._near);
+    for (const [param, v] of /** @type {[AudioParam, number][]} */ ([
+      [this.dryNode.gain, t.dry],
+      [phone.line.gain, t.line],
+      [phone.leak.gain, t.leak],
+    ])) {
+      param.cancelScheduledValues(now);
+      param.setValueAtTime(param.value, now);
+      param.setTargetAtTime(v, now, tc);
+    }
+    if (phone.pan) phone.pan.pan.setTargetAtTime(this._nearPan, now, tc);
   }
 
   /**
@@ -365,6 +453,9 @@ export class Audio {
   /** What an effect does to the music. @param {string} type @param {number} at */
   #cue(type, at) {
     if (type === 'sign') this._signed = true;
+    // The pause and resume chimes put the music on hold and take it off.
+    if (type === 'pause') this.hold(true);
+    else if (type === 'resume') this.hold(false);
     const run = this.run;
     if (!run || !this.ctx) return;
     if ((type === 'bossPhase' || type === 'finale') && BOSS_TRACKS.has(run.name)) this.#lift(run);
@@ -421,6 +512,9 @@ export class Audio {
   music(track) {
     let name = track === 'boss' ? 'bossJulien' : track;
     if (name !== null && !Object.hasOwn(SONGS, name)) return;
+    // Any music request leaves the switchboard: a menu, a restart, a boss, a result.
+    this.hold(false);
+    this.headset(Infinity);
     if (name === 'win' && (this._signed || this.wanted === 'winSigned')) name = 'winSigned';
     if (name !== 'winSigned' && name !== this.wanted) this._signed = false;
     this.wanted = name;
@@ -577,6 +671,9 @@ export class Audio {
    * @param {Run} old @param {number} now
    */
   #handOver(old, now) {
+    // After a stall (a stage being built), the steps already late are skipped, never
+    // played in a burst at the hand-over.
+    catchUp(old, now);
     const s16 = 60 / old.def.bpm / 4;
     // First sixteenth at least 30 ms away, then up to the beat it belongs to.
     const first = old.step + Math.ceil((now + 0.03 - old.next) / s16);

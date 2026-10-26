@@ -5,6 +5,7 @@ import { HERO } from '../game/sim.js';
 import { PATTERNS, consultLength } from '../game/boss.js';
 import { prefs } from './options.js';
 import { project } from '../gfx/mat4.js';
+import { fillKeys } from './input.js';
 
 /** @param {string} id */
 const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
@@ -13,7 +14,7 @@ const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 const EVENT_TEXT = {
   door: 'Badge accepté : la porte du fond s’ouvre.',
   collapse: 'Le planning s’effondre !',
-  bump: '« Je suis en call, là ! » — un CR (X) l’enverra en réunion.',
+  bump: '« Je suis en call, là ! » — un CR ({fire}) l’enverra en réunion.',
   block: 'Il est concentré : attends qu’il consulte PRIMO.',
   concert: 'Deux places pour le concert de Céline Dion : réservées !',
   consult: 'Il consulte PRIMO… c’est le moment !',
@@ -49,7 +50,7 @@ const TIPS_KEY = 'naorush.tips';
 /** One-line versions for short screens (landscape phones), where a toast must stay on one line. */
 const SHORT = {
   door: 'Badge accepté : porte ouverte.',
-  bump: 'En call : un CR (X) l’envoie en réunion.',
+  bump: 'En call : un CR ({fire}) l’envoie en réunion.',
   block: 'Attends qu’il consulte PRIMO.',
   concert: 'Places pour Céline Dion réservées !',
   consult: 'Il consulte PRIMO : vas-y !',
@@ -74,6 +75,64 @@ const SHORT = {
   secret: 'Secret trouvé ! Un par héros et par étape.',
 };
 
+/**
+ * Why a CR stopped, when it is worth a word (sim `block` events carry a `cause`).
+ * Said once per game and per cause: after that, the bounce speaks for itself.
+ */
+const BLOCK_TEXT = {
+  crate: 'Ces cartons sont trop lourds pour ce CR : seuls ceux de Kévin les font tomber.',
+  vacuum: 'Le robot aspirateur encaisse les CR sans broncher. Saute dessus : c’est un tremplin !',
+};
+const BLOCK_SHORT = {
+  crate: 'Cartons trop lourds : les CR de Kévin, oui.',
+  vacuum: 'Le robot encaisse : saute dessus !',
+};
+
+/**
+ * Key items named with a feminine noun (« Enveloppe signée »): messages agree with them.
+ * Matched on the first word of `keyLabel`.
+ */
+const FEMININE = new Set([
+  'enveloppe',
+  'clé',
+  'clef',
+  'carte',
+  'attestation',
+  'feuille',
+  'note',
+  'convocation',
+  'invitation',
+  'signature',
+  'validation',
+  'fiche',
+  'lettre',
+]);
+
+/**
+ * The word agreed with a key item: `agree('Enveloppe signée', 'récupéré', 'récupérée')`.
+ * @param {string} label @param {string} masculine @param {string} feminine
+ */
+export function agree(label, masculine, feminine) {
+  const first = label
+    .trim()
+    .split(/[\s’']/)[0]
+    .toLowerCase();
+  return FEMININE.has(first) ? feminine : masculine;
+}
+
+/**
+ * The toast when the key item is picked up, agreed with its gender.
+ * @param {string} label @param {{bottle?: boolean, short?: boolean}} [o]
+ */
+export function keyLine(label, o = {}) {
+  const got = `${label} ${agree(label, 'récupéré', 'récupérée')} !`;
+  if (o.bottle) return got + (o.short ? ' Gare à la bonbonne…' : ' Attention à la bonbonne…');
+  return o.short ? got : `${got} Direction la sortie.`;
+}
+
+/** A text with the player's own controls; « un CR (CR) » on the touch pad reads « un CR ». @param {string} text */
+const withKeys = (text) => fillKeys(text).replace(' CR (CR)', ' CR');
+
 /** During a boss fight only the fight speaks: the duel's own moves and the CR stock. */
 const FIGHT_EVENTS = new Set([
   'key',
@@ -97,7 +156,13 @@ const TIP_RANGE = 10;
 const SHORT_SCREEN = 500;
 const SHORT_TOAST = 2.5;
 
-/** Once Chronotime is explained, later badges get a short line, in turn. */
+/**
+ * Once Chronotime is explained, later badges get a short line, in turn: never twice for
+ * the same badge on a stage (a restart badges them again), never over a more useful
+ * message, and only if no badge spoke in the last few seconds.
+ */
+const CHECKPOINT_GAP = 12;
+const CHECKPOINT_TOAST = 2;
 const CHECKPOINT_LINES = [
   'Badgé ! Pointage enregistré.',
   'Bip ! Chronotime a tout noté.',
@@ -129,6 +194,11 @@ export class Hud {
     this.lastHearts = -1;
     this.lastPoster = '';
     this.checkpoints = 0;
+    /** Badges already announced on this stage (`x,y`), and the stage they belong to. @type {Set<string>} */
+    this.badged = new Set();
+    this.badgedStage = '';
+    /** Real seconds since a badge last spoke (counted in countdown()). */
+    this.sinceBadge = Infinity;
     /** Mechanics already explained. @type {Set<string>} */
     this.seen = new Set(/** @type {string[]} */ (load(TIPS_KEY, [])));
     this.bossbar = $('bossbar');
@@ -144,6 +214,7 @@ export class Hud {
     this.toastTime = 0;
     this.toastKind = '';
     this.toastEl.classList.remove('show', 'trophy');
+    document.body.classList.remove('toast-trophy');
     document.body.style.setProperty('--toast-h', '0px');
   }
 
@@ -152,16 +223,21 @@ export class Hud {
     return typeof innerHeight === 'number' && innerHeight < SHORT_SCREEN;
   }
 
-  /** @param {string} text @param {string} [kind] What it is about (see toastKind). */
-  toast(text, kind = '') {
+  /**
+   * @param {string} text @param {string} [kind] What it is about (see toastKind).
+   * @param {number} [time] Seconds on screen, when shorter than the reading time.
+   */
+  toast(text, kind = '', time) {
     this.toastKind = kind;
     this.toastEl.textContent = text;
     this.toastEl.classList.add('show');
     this.toastEl.classList.toggle('trophy', kind === 'trophy');
+    // Over a menu or a results card, the screen makes room under a trophy (style.css).
+    document.body.classList.toggle('toast-trophy', kind === 'trophy');
     // Long tips stay long enough to read (about 14 characters a second), slower games longer;
     // on short screens they are one line and must leave the arena quickly.
     const read = this.short ? SHORT_TOAST : Math.max(2.8, text.length / 14);
-    this.toastTime = read / prefs.speed;
+    this.toastTime = Math.min(read, time ?? read) / prefs.speed;
     // On touch screens the hint sits under the toast: tell it how far down to go.
     document.body.style.setProperty('--toast-h', `${this.toastEl.offsetHeight + 8}px`);
   }
@@ -185,6 +261,7 @@ export class Hud {
 
   /** @param {number} dt */
   countdown(dt) {
+    this.sinceBadge += dt;
     if (this.toastTime > 0 && (this.toastTime -= dt) <= 0) this.clearToast();
   }
 
@@ -215,9 +292,36 @@ export class Hud {
     return (this.short && SHORT[/** @type {keyof typeof SHORT} */ (type)]) || text;
   }
 
-  /** Stage-specific wording. @param {{keyLabel: string, bottle: boolean}} stage */
+  /**
+   * Stage-specific wording. Called on every (re)start: badges announced on the same
+   * stage stay quiet the next time round.
+   * @param {{keyLabel: string, bottle: boolean, id?: string}} stage
+   */
   setStage(stage) {
     this.stage = stage;
+    const id = stage.id ?? stage.keyLabel;
+    if (id !== this.badgedStage) this.badged.clear();
+    this.badgedStage = id;
+    this.sinceBadge = Infinity;
+  }
+
+  /**
+   * A badge at a Chronotime terminal: a short line, unless it would repeat itself.
+   * @param {{x: number, y: number}} e
+   */
+  checkpoint(e) {
+    const at = `${Math.round(e.x)},${Math.round(e.y)}`;
+    const known = this.badged.has(at);
+    this.badged.add(at);
+    if (known || this.sinceBadge < CHECKPOINT_GAP) return;
+    // A tip or a warning on show matters more than « Badgé ! ».
+    if (this.toastTime > 0 && this.toastKind && this.toastKind !== 'checkpoint') return;
+    this.sinceBadge = 0;
+    this.toast(
+      CHECKPOINT_LINES[this.checkpoints++ % CHECKPOINT_LINES.length],
+      'checkpoint',
+      CHECKPOINT_TOAST,
+    );
   }
 
   /** @param {import('../game/sim.js').SimEvent} e */
@@ -228,13 +332,25 @@ export class Hud {
       this.clearPrimo();
     }
     if (e.type === 'key' && this.stage) {
-      // Neutral wording: some key items are feminine (« Enveloppe signée »).
-      const bottle = this.short ? ' Gare à la bonbonne…' : ' Attention à la bonbonne…';
-      this.toast(`${this.stage.keyLabel} : en poche !` + (this.stage.bottle ? bottle : ''), 'key');
+      // Agreed with the item: « Badge récupéré », « Enveloppe signée récupérée ».
+      this.toast(
+        keyLine(this.stage.keyLabel, { bottle: this.stage.bottle, short: this.short }),
+        'key',
+      );
       return;
     }
-    // Every obstacle that stops a CR fires 'block'; only a boss on guard needs the advice.
-    if (e.type === 'block' && e.cause !== 'boss') return;
+    // Every obstacle that stops a CR fires 'block': a boss on guard gets the PRIMO advice,
+    // a few other causes a one-time word on why, the rest bounces in silence.
+    if (e.type === 'block' && e.cause !== 'boss') {
+      const why = BLOCK_TEXT[/** @type {keyof typeof BLOCK_TEXT} */ (e.cause ?? '')];
+      const seen = `block:${e.cause}`;
+      if (!why || this.fight || this.seen.has(seen) || !this.inView(e)) return;
+      this.seen.add(seen);
+      store(TIPS_KEY, [...this.seen]);
+      const short = BLOCK_SHORT[/** @type {keyof typeof BLOCK_SHORT} */ (e.cause)];
+      this.toast(this.short ? short : why, 'block');
+      return;
+    }
     if (e.type === 'bossHit') {
       this.flashBoss();
       this.clearPrimo();
@@ -246,15 +362,17 @@ export class Hud {
     if (tip && !this.seen.has(e.type) && this.inView(e)) {
       this.seen.add(e.type);
       store(TIPS_KEY, [...this.seen]);
-      this.toast(this.line(e.type, tip), e.type);
+      if (e.type === 'checkpoint') {
+        // The explanation counts as this badge's line.
+        this.badged.add(`${Math.round(e.x)},${Math.round(e.y)}`);
+        this.sinceBadge = 0;
+      }
+      this.toast(withKeys(this.line(e.type, tip)), e.type);
       return;
     }
-    if (e.type === 'checkpoint') {
-      this.toast(CHECKPOINT_LINES[this.checkpoints++ % CHECKPOINT_LINES.length], e.type);
-      return;
-    }
+    if (e.type === 'checkpoint') return this.checkpoint(e);
     const text = EVENT_TEXT[/** @type {keyof typeof EVENT_TEXT} */ (e.type)];
-    if (text) this.toast(this.line(e.type, text), e.type);
+    if (text) this.toast(withKeys(this.line(e.type, text)), e.type);
   }
 
   /** The conviction bar jolts when an argument lands. */
@@ -362,7 +480,7 @@ export class Hud {
     const hint = near.tip
       ? near.tip
       : near.board
-        ? '↑ Lire le tableau'
+        ? fillKeys('{up} Lire le tableau')
         : near.poster
           ? (POSTER_HINTS[/** @type {keyof typeof POSTER_HINTS} */ (near.poster)] ?? '')
           : '';

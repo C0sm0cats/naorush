@@ -13,6 +13,28 @@ function fakeEl(tag = 'div') {
     textContent: '',
     innerHTML: '',
     hidden: false,
+    tabIndex: 0,
+    /** @type {Record<string, string>} */
+    dataset: {},
+    /** @type {Record<string, Function[]>} */
+    listeners: {},
+    /** @param {string} type @param {Function} f */
+    addEventListener(type, f) {
+      (node.listeners[type] ??= []).push(f);
+    },
+    /** @param {string} type @param {any} e */
+    dispatch(type, e) {
+      for (const f of node.listeners[type] ?? []) f(e);
+    },
+    focused: false,
+    focus() {
+      node.focused = true;
+    },
+    /** @type {(() => void) | null} */
+    onclick: null,
+    click() {
+      node.onclick?.();
+    },
     offsetHeight: 40,
     offsetWidth: 200,
     /** @type {any[]} */
@@ -104,7 +126,9 @@ Object.assign(globalThis, {
   },
 });
 
-const { Hud } = await import('../src/app/hud.js');
+const { Hud, agree, keyLine } = await import('../src/app/hud.js');
+const { autoRoll, readingOrder, renderChapters, renderCredits, renderTrophies } =
+  await import('../src/app/menus.js');
 const { buildResults, gapText, readMedal, renderResults, secretsFound } =
   await import('../src/app/results.js');
 
@@ -180,6 +204,237 @@ describe('hud toasts', () => {
     expect(hud.toastTime).toBeLessThanOrEqual(2.5);
     hud.event(ev('meeting'));
     expect(hud.toastEl.textContent.length).toBeLessThan(45);
+  });
+});
+
+describe('trophy toast', () => {
+  it('asks the screen for room under it, and gives it back when it goes', () => {
+    const hud = new Hud();
+    hud.trophy('Fouineur');
+    expect(document.body.classList.contains('toast-trophy')).toBe(true);
+    hud.toast('Autre chose');
+    expect(document.body.classList.contains('toast-trophy')).toBe(false);
+    hud.trophy('Fouineur');
+    for (let i = 0; i < 60; i++) hud.tick(0.05);
+    expect(document.body.classList.contains('toast-trophy')).toBe(false);
+  });
+});
+
+describe('badge messages', () => {
+  /** A hud that already explained Chronotime. */
+  const badged = () => {
+    const hud = new Hud();
+    hud.setStage({ id: 'parking', keyLabel: 'Badge', bottle: false });
+    hud.seen.add('checkpoint');
+    return hud;
+  };
+
+  it('the first badge explains Chronotime, the next ones get a short line', () => {
+    const hud = new Hud();
+    hud.setStage({ id: 'parking', keyLabel: 'Badge', bottle: false });
+    hud.event(ev('checkpoint', 10));
+    expect(hud.toastEl.textContent).toContain('Chronotime');
+    hud.clearToast();
+    hud.tick(20);
+    hud.event(ev('checkpoint', 15));
+    expect(showing(hud)).toBe(true);
+    expect(hud.toastTime).toBeLessThanOrEqual(2);
+  });
+
+  it('never repeat for a badge already announced, even after a restart', () => {
+    const hud = badged();
+    hud.event(ev('checkpoint', 10));
+    expect(showing(hud)).toBe(true);
+    hud.clearToast();
+    hud.setStage({ id: 'parking', keyLabel: 'Badge', bottle: false });
+    hud.tick(30);
+    hud.event(ev('checkpoint', 10));
+    expect(showing(hud)).toBe(false);
+    // Another stage starts afresh.
+    hud.setStage({ id: 'lcp7', keyLabel: 'Bon de commande', bottle: false });
+    hud.event(ev('checkpoint', 10));
+    expect(showing(hud)).toBe(true);
+  });
+
+  it('stay quiet when badges come in quick succession', () => {
+    const hud = badged();
+    hud.event(ev('checkpoint', 10));
+    hud.clearToast();
+    hud.tick(4);
+    hud.event(ev('checkpoint', 14));
+    expect(showing(hud)).toBe(false);
+    hud.tick(12);
+    hud.event(ev('checkpoint', 30));
+    expect(showing(hud)).toBe(true);
+  });
+
+  it('never cover a more useful message', () => {
+    const hud = badged();
+    hud.event(ev('meeting'));
+    const text = hud.toastEl.textContent;
+    hud.event(ev('checkpoint', 10));
+    expect(hud.toastEl.textContent).toBe(text);
+  });
+});
+
+describe('key item messages', () => {
+  it('agree with the item', () => {
+    expect(agree('Enveloppe signée', 'récupéré', 'récupérée')).toBe('récupérée');
+    expect(agree('Enveloppe', 'récupéré', 'récupérée')).toBe('récupérée');
+    expect(agree('Badge cafét’', 'récupéré', 'récupérée')).toBe('récupéré');
+    expect(keyLine('Enveloppe signée')).toBe('Enveloppe signée récupérée ! Direction la sortie.');
+    expect(keyLine('Bon de commande')).toBe('Bon de commande récupéré ! Direction la sortie.');
+    expect(keyLine('CR validé', { bottle: true, short: true })).toBe(
+      'CR validé récupéré ! Gare à la bonbonne…',
+    );
+  });
+
+  it('use the stage’s item when picked up', () => {
+    const hud = new Hud();
+    hud.setStage({ id: 'ts', keyLabel: 'Enveloppe', bottle: false });
+    hud.event(ev('key'));
+    expect(hud.toastEl.textContent).toBe('Enveloppe récupérée ! Direction la sortie.');
+  });
+});
+
+describe('blocked CRs', () => {
+  it('say once why archive boxes stop the CR, and stay quiet otherwise', () => {
+    const hud = new Hud();
+    hud.event(ev('block'));
+    expect(showing(hud)).toBe(false);
+    hud.event(ev('block', 10, 1, 'crate'));
+    expect(hud.toastEl.textContent).toContain('Kévin');
+    hud.clearToast();
+    hud.event(ev('block', 10, 1, 'crate'));
+    expect(showing(hud)).toBe(false);
+    hud.event(ev('block', 10, 1, 'vacuum'));
+    expect(hud.toastEl.textContent).toContain('tremplin');
+  });
+
+  it('name the player’s own fire key, not a hard-coded X', () => {
+    const hud = new Hud();
+    hud.event(ev('bump'));
+    expect(hud.toastEl.textContent).toMatch(/un CR \(\S+\)/);
+    expect(hud.toastEl.textContent).not.toContain('{fire}');
+  });
+});
+
+describe('menus', () => {
+  /** @param {number} top @param {number} left @param {string} id */
+  const box = (top, left, id, height = 40) => ({
+    id,
+    getBoundingClientRect: () => ({ top, left, height }),
+  });
+
+  it('move through elements in reading order, whatever the markup order', () => {
+    const items = [
+      box(300, 20, 'play'),
+      box(100, 220, 'charline', 120),
+      box(110, 20, 'kevin', 100),
+      box(400, 220, 'options'),
+      box(402, 20, 'chapters'),
+    ];
+    expect(readingOrder(items).map((b) => b.id)).toEqual([
+      'kevin',
+      'charline',
+      'play',
+      'chapters',
+      'options',
+    ]);
+    // Every element exactly once.
+    expect(new Set(readingOrder(items)).size).toBe(items.length);
+  });
+
+  it('let the arrows and the gamepad stop on trophy rows', () => {
+    const list = /** @type {any} */ (document.createElement('ol'));
+    renderTrophies(list, [{ name: 'Fouineur', text: 'Un secret', got: true }]);
+    expect(list.children[0].dataset.nav).toBe('');
+    expect(list.children[0].tabIndex).toBe(-1);
+  });
+
+  it('switch the chapter mode once per arrow press, not on auto-repeat', () => {
+    const host = {
+      modes: /** @type {any} */ (document.createElement('div')),
+      list: /** @type {any} */ (document.createElement('ol')),
+    };
+    /** @type {string[]} */
+    const heard = [];
+    renderChapters(host, () => [], {
+      sansFilet: true,
+      play: () => {},
+      onMode: (m) => heard.push(m),
+    });
+    const group = host.modes.children[0];
+    const [normal, hard] = group.children;
+    expect([normal.tabIndex, hard.tabIndex]).toEqual([0, -1]);
+    const key = (/** @type {boolean} */ repeat) =>
+      group.dispatch('keydown', { key: 'ArrowRight', repeat, preventDefault() {} });
+    key(false);
+    key(true);
+    key(true);
+    expect(heard).toEqual(['sansFilet']);
+    expect(hard.focused).toBe(true);
+    expect([normal.tabIndex, hard.tabIndex]).toEqual([-1, 0]);
+  });
+
+  it('render the credits and roll them up by themselves, then stop at the end', () => {
+    const roll = /** @type {any} */ (document.createElement('div'));
+    renderCredits(roll, [['NAO Rush', 't'], ['Avec', 'h'], ['Kévin'], ['Merci', 's']]);
+    expect(roll.children.map((/** @type {any} */ c) => c.tagName)).toEqual(['H2', 'H3', 'P', 'P']);
+    expect(roll.children[3].className).toBe('creditLine');
+    Object.assign(roll, {
+      scrollTop: 0,
+      scrollHeight: 400,
+      clientHeight: 300,
+      isConnected: true,
+      closest: () => null,
+      removeEventListener() {},
+    });
+    /** @type {Array<(now: number) => void>} */
+    let queue = [];
+    const raf = (/** @type {(now: number) => void} */ f) => queue.push(f);
+    autoRoll(roll, { raf, delay: 1, speed: 50 });
+    let now = 0;
+    for (let i = 0; i < 200 && queue.length; i++) {
+      const next = queue;
+      queue = [];
+      for (const f of next) f((now += 50));
+    }
+    expect(roll.scrollTop).toBe(100);
+    expect(queue.length).toBe(0);
+  });
+
+  it('hand the credits over to the player as soon as they scroll', () => {
+    const roll = /** @type {any} */ (document.createElement('div'));
+    Object.assign(roll, {
+      scrollTop: 0,
+      scrollHeight: 2000,
+      clientHeight: 300,
+      isConnected: true,
+      closest: () => null,
+      removeEventListener() {},
+    });
+    /** @type {Array<(now: number) => void>} */
+    let queue = [];
+    const raf = (/** @type {(now: number) => void} */ f) => queue.push(f);
+    autoRoll(roll, { raf, delay: 0, speed: 50 });
+    const run = (/** @type {number} */ n) => {
+      for (let i = 0; i < n && queue.length; i++) {
+        const next = queue;
+        queue = [];
+        for (const f of next) f(i * 50);
+      }
+    };
+    run(5);
+    roll.dispatch('wheel', {});
+    const at = roll.scrollTop;
+    run(5);
+    expect(roll.scrollTop).toBe(at);
+    // Reduced motion: nothing rolls at all.
+    roll.scrollTop = 0;
+    queue = [];
+    autoRoll(roll, { raf, reduced: true });
+    expect(queue.length).toBe(0);
   });
 });
 
@@ -332,7 +587,8 @@ describe('results card', () => {
     expect(stats.children).toHaveLength(12);
     const medal = card.children[0];
     expect(medal.className).toBe('medal silver star');
-    expect(medal.text).toBe('Médaille : Argent★ Sans retour au badgeOr sous 0 min 32 s');
+    // The gap to the next medal may follow (results.js, Difficulté).
+    expect(medal.text).toMatch(/^Médaille : Argent★ Sans retour au badgeOr sous 0 min 32 s/);
 
     // Same secret again: no double count; no medal (daily): the line hides.
     renderResults(/** @type {any} */ (stats), { sim: run, levelId: 'copil', hero: 'charline' });

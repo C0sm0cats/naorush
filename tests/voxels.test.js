@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { LEVELS } from '../src/data/levels/index.js';
 import { TILE, createSim } from '../src/game/sim.js';
 import { MeshBuilder } from '../src/gfx/geometry.js';
-import { propGeometry } from '../src/gfx/props.js';
+import { PROP_IDS, PROP_VARIANTS, propGeometry } from '../src/gfx/props.js';
 import {
   MAT,
   STRIDE,
@@ -11,7 +11,14 @@ import {
   meshVolume,
   partitionMesh,
 } from '../src/gfx/voxels.js';
-import { PALETTE, V, buildForeground, buildOffice, floorPlan } from '../src/gfx/world-builder.js';
+import {
+  PALETTE,
+  V,
+  buildForeground,
+  buildOffice,
+  floorPlan,
+  signLabel,
+} from '../src/gfx/world-builder.js';
 
 /** A small room-like volume: floor, back wall, a desk and scattered blocks. */
 function sampleVolume() {
@@ -158,6 +165,85 @@ describe('set dressing', () => {
             expect(plan.ground[x >> 3], `${l.id} column ${x >> 3}`).toBe(plan.base);
             expect(traps.has(x >> 3)).toBe(false);
           }
+    }
+  });
+
+  it('dims the foreground objects in their own colours, never to near-black', () => {
+    for (const l of LEVELS) {
+      const sim = createSim(l, 'kevin');
+      const plan = floorPlan(sim, l.map, l.decor, () => false, []);
+      const fg = buildForeground(plan, l.mood ?? 'morning', new Set());
+      if (!fg) continue;
+      let sum = 0,
+        n = 0;
+      for (let i = 0; i < fg.data.length; i++) {
+        const v = fg.data[i];
+        if (!v) continue;
+        sum += 0.3 * ((v >> 16) & 255) + 0.59 * ((v >> 8) & 255) + 0.11 * (v & 255);
+        n++;
+      }
+      expect(sum / n, l.id).toBeGreaterThan(48);
+    }
+  });
+
+  it('clads tall walls instead of leaving blank slabs', () => {
+    for (const l of LEVELS) {
+      if (l.theme === 'rooftop') continue;
+      const sim = createSim(l, 'kevin');
+      const { vol } = build(l);
+      const at = (/** @type {number} */ c, /** @type {number} */ r) =>
+        c < 0 || c >= sim.w || r < 0 || r >= sim.h ? TILE.SOLID : sim.tiles[c + r * sim.w];
+      for (let r = 2; r < sim.h - 2; r++)
+        for (let c = 1; c < sim.w - 2; c++) {
+          // A 2×2 block of plain wall tiles shows panel joints on its front face.
+          const block = [0, 1].every((dc) =>
+            [0, 1].every(
+              (dr) =>
+                at(c + dc, r + dr) === TILE.SOLID &&
+                l.map[sim.h - 1 - r - dr][c + dc] === '#' &&
+                at(c + dc, r + dr - 1) === TILE.SOLID,
+            ),
+          );
+          if (!block) continue;
+          /** @type {number[]} */
+          const lum = [];
+          for (let x = c * V; x < (c + 2) * V; x++)
+            for (let y = r * V; y < (r + 2) * V - 3; y++) {
+              const v = vol.get(x, y, vol.sz - 1);
+              lum.push(0.3 * ((v >> 16) & 255) + 0.59 * ((v >> 8) & 255) + 0.11 * (v & 255));
+            }
+          const median = [...lum].sort((a, b) => a - b)[lum.length >> 1];
+          const joints = lum.filter((v) => v < median * 0.85).length;
+          expect(joints, `${l.id} ${c},${r}`).toBeGreaterThanOrEqual(4);
+        }
+    }
+  });
+
+  it('names every room on its hanging sign, short enough to fit', () => {
+    for (const l of LEVELS)
+      for (const name of l.rooms) {
+        const label = signLabel(name, 52);
+        expect(label, `${l.id} ${name}`).toMatch(/^[A-Z0-9&’.\- ]+$/);
+      }
+    expect(signLabel('Coin imprimantes', 52)).toBe('IMPRIMANTES');
+    expect(signLabel('Baby-foot', 52)).toBe('BABY-FOOT');
+    expect(signLabel('', 52)).toBe('');
+  });
+
+  it('dresses the break room with its table football and vending machines', () => {
+    const pause = LEVELS.find((l) => l.id === 'pause');
+    const types = pause?.decor.map((d) => d.type) ?? [];
+    for (const t of ['babyFoot', 'vendingSnack', 'vendingDrink']) expect(types).toContain(t);
+    for (const id of ['babyFoot', 'vendingSnack', 'vendingDrink'])
+      expect(propGeometry(/** @type {any} */ (id)).count).toBeGreaterThan(0);
+  });
+
+  it('offers five large and three small plants, every prop within its vertex budget', () => {
+    expect(PROP_VARIANTS.plant).toHaveLength(5);
+    expect(PROP_VARIANTS.plantSmall).toHaveLength(3);
+    for (const id of PROP_IDS) {
+      const g = /** @type {{vertices: number}} */ (/** @type {unknown} */ (propGeometry(id)));
+      expect(g.vertices, id).toBeLessThan(6000);
     }
   });
 

@@ -234,6 +234,18 @@ export function mountSoundTest(audio) {
       tracks.pick(audio.wanted);
     }),
   );
+  // Switchboard hold music: the pause line, and the colleague's headset walking past.
+  const phone = section('Switchboard (hold music)');
+  phone.append(
+    button('▶ pause / resume (phone line)', () => audio.sfx(audio.held ? 'resume' : 'pause')),
+    button('▶ walk past a colleague on a call (left → right)', () => {
+      for (let i = 0; i <= 40; i++) {
+        const x = -8 + i * 0.4;
+        setTimeout(() => audio.headset(Math.abs(x), Math.max(-1, Math.min(1, x / 6))), i * 120);
+      }
+      setTimeout(() => audio.headset(Infinity), 41 * 120);
+    }),
+  );
   const space = section('Stereo and takes');
   space.append(
     button('▶ pan sweep (tickets left → right)', () => {

@@ -11,6 +11,7 @@ import {
   recordKey,
 } from '../src/app/medals.js';
 import { chapterRows } from '../src/app/menus.js';
+import { buildResults, heldText, secretHint } from '../src/app/results.js';
 import { CAMPAIGN, LEVELS } from '../src/data/levels/index.js';
 import { createSim, step } from '../src/game/sim.js';
 import { solve } from '../src/game/solver.js';
@@ -41,8 +42,88 @@ describe('medals', () => {
     expect(medalFor('nowhere', 'kevin', 1, 0)).toEqual({ tier: 'bronze', star: true });
   });
 
-  it('give only a bronze to a run in relaxed mode or slowed down', () => {
-    expect(medalFor('parking', 'kevin', 5, 0, true)).toEqual({ tier: 'bronze', star: false });
+  it('give only a bronze to a run in relaxed mode or slowed down, and say what held it', () => {
+    const { gold, silver } = /** @type {{gold: number, silver: number}} */ (
+      medalTargets('parking', 'kevin')
+    );
+    expect(medalFor('parking', 'kevin', 5, 0, true)).toEqual({
+      tier: 'bronze',
+      star: false,
+      held: { by: 'any', tier: 'gold', star: true },
+    });
+    expect(medalFor('parking', 'kevin', gold, 1, { relaxed: true }).held).toEqual({
+      by: 'relaxed',
+      tier: 'silver',
+      star: false,
+    });
+    expect(medalFor('parking', 'kevin', silver, 0, { slow: true }).held?.by).toBe('slow');
+    expect(medalFor('parking', 'kevin', 5, 0, { relaxed: true, slow: true }).held?.by).toBe('both');
+    // No help at all: the medal the time earns, nothing held.
+    expect(medalFor('parking', 'kevin', 5, 0, { relaxed: false, slow: false })).toEqual({
+      tier: 'gold',
+      star: true,
+    });
+  });
+
+  it('say kindly on the results card why the medal stayed bronze', () => {
+    const targets = /** @type {{gold: number, silver: number}} */ (
+      medalTargets('parking', 'kevin')
+    );
+    const held = medalFor('parking', 'kevin', 5, 0, { relaxed: true });
+    const card = buildResults({
+      time: 5,
+      deaths: 0,
+      tickets: 0,
+      secrets: 0,
+      secretTotal: 2,
+      medal: held,
+      targets,
+    });
+    expect(card.why).toBe(
+      'Mode détente : la médaille s’arrête au bronze. Ton temps vaut l’or et l’étoile, rejoue sans le mode détente pour les décrocher !',
+    );
+    // No « Argent sous … » next to a time that is already worth gold.
+    expect(card.next).toBe('');
+    const slow = medalFor('parking', 'kevin', targets.gold, 1, { slow: true }).held;
+    expect(heldText(/** @type {any} */ (slow), targets)).toBe(
+      'Vitesse réduite : la médaille s’arrête au bronze. Ton temps vaut l’argent, rejoue à vitesse normale pour le décrocher !',
+    );
+    const late = medalFor('parking', 'kevin', 999, 1, { relaxed: true, slow: true }).held;
+    expect(heldText(/** @type {any} */ (late), targets)).toMatch(
+      /^Mode détente et vitesse réduite : .* Rejoue sans aide : l’argent t’attend sous 0 min \d\d s !$/,
+    );
+    // A run without help reads as before, with the seconds still to find.
+    const plain = buildResults({
+      time: targets.silver + 3,
+      deaths: 1,
+      tickets: 0,
+      secrets: 0,
+      secretTotal: 2,
+      medal: medalFor('parking', 'kevin', targets.silver + 3, 1),
+      targets,
+    });
+    expect([plain.why, plain.next]).toEqual([
+      '',
+      `Argent sous 0 min ${targets.silver} s · 3,0 s à gagner`,
+    ]);
+  });
+
+  it('point at the room of a secret still to find', () => {
+    const rooms = /** @type {string[]} */ (LEVELS[0].rooms);
+    expect(secretHint('parking', [], [65, 25])).toBe(rooms[1]);
+    expect(secretHint('parking', [25], [65, 25])).toBe(rooms[3]);
+    expect(secretHint('parking', [25, 65], [65, 25])).toBe('');
+    const r = { time: 30, deaths: 0, tickets: 0, secretTotal: 2, hint: rooms[1] };
+    expect(buildResults({ ...r, secrets: 1 }).hint).toBe(`Piste : « ${rooms[1]} »`);
+    expect(buildResults({ ...r, secrets: 2 }).hint).toBe('');
+  });
+
+  it('save only the tier and the star of a held medal', () => {
+    const m = new Medals();
+    m.record('parking', 'kevin', medalFor('parking', 'kevin', 5, 0, { relaxed: true }));
+    expect(JSON.parse(saved['naorush.medals'])).toEqual({
+      'parking:kevin': { tier: 'bronze', star: false },
+    });
   });
 
   it('keep the best medal and the star, from different runs if need be', () => {

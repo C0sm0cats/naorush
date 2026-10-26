@@ -1,13 +1,17 @@
 import { CAST } from '../data/cast.js';
+import { LEVELS, ROOM_W } from '../data/levels/index.js';
 import { load, store } from './storage.js';
 
 /**
  * Stage results card: medal, time and gap to the record, and the secrets each hero
- * has found on this stage. Saves the record and the secrets as it goes.
+ * has found on this stage. Saves the record and the secrets as it goes. A medal held
+ * at bronze by relaxed mode or a slower speed says so, kindly, with what the time
+ * is worth without the help; a missed secret gets a hint (the room it hides in).
  *
  * @typedef {'kevin'|'charline'} HeroId
  * @typedef {'gold'|'silver'|'bronze'} MedalTier
- * @typedef {{tier: MedalTier | null, star: boolean}} Medal
+ * @typedef {import('./medals.js').Held} Held
+ * @typedef {{tier: MedalTier | null, star: boolean, held?: Held}} Medal
  * @typedef {[label: string, value: string, best?: boolean]} Row
  */
 
@@ -19,6 +23,13 @@ export const SECRETS_KEY = 'naorush.secrets';
 const HEROES = ['kevin', 'charline'];
 /** @type {Record<MedalTier, string>} */
 const TIER_NAME = { gold: 'Or', silver: 'Argent', bronze: 'Bronze' };
+/** What held the medal back, and how to play without it. @type {Record<Held['by'], [string, string]>} */
+const HELP = {
+  relaxed: ['Mode détente', 'sans le mode détente'],
+  slow: ['Vitesse réduite', 'à vitesse normale'],
+  both: ['Mode détente et vitesse réduite', 'sans aide'],
+  any: ['Mode détente ou vitesse réduite', 'sans aide'],
+};
 
 /** @param {number} s */
 export const clock = (s) =>
@@ -40,15 +51,53 @@ export function readMedal(m) {
   const raw = o.tier ?? o.medal ?? o.rank ?? o.id;
   const tier = raw === 'gold' || raw === 'silver' || raw === 'bronze' ? raw : null;
   const star = Boolean(o.star);
-  return tier || star ? { tier, star } : null;
+  const h = /** @type {Partial<Held> | undefined} */ (o.held);
+  const held =
+    h && h.by && h.by in HELP && (h.tier === 'gold' || h.tier === 'silver' || h.tier === 'bronze')
+      ? { by: h.by, tier: h.tier, star: Boolean(h.star) }
+      : undefined;
+  if (!tier && !star) return null;
+  return held ? { tier, star, held } : { tier, star };
+}
+
+/**
+ * Why a medal stayed bronze, and what the same time is worth without the help.
+ * @param {Held} held @param {{gold?: number, silver?: number}} [targets]
+ */
+export function heldText(held, targets) {
+  const [what, undo] = HELP[held.by];
+  const why = `${what} : la médaille s’arrête au bronze.`;
+  if (held.tier !== 'bronze') {
+    const prize = held.tier === 'gold' ? 'l’or' : 'l’argent';
+    const both = held.star && held.tier === 'gold';
+    return `${why} Ton temps vaut ${prize}${both ? ' et l’étoile' : ''}, rejoue ${undo} pour ${both ? 'les' : 'le'} décrocher !`;
+  }
+  const silver = targets?.silver;
+  return silver === undefined
+    ? `${why} Rejoue ${undo} pour viser l’argent !`
+    : `${why} Rejoue ${undo} : l’argent t’attend sous ${clock(silver)} !`;
+}
+
+/**
+ * The room where the first secret this hero hasn't found yet hides, if any.
+ * @param {string} levelId @param {number[]} found Columns in the hero's notebook.
+ * @param {number[]} secrets Columns of every secret of the stage.
+ */
+export function secretHint(levelId, found, secrets) {
+  const rooms = LEVELS.find((l) => l.id === levelId)?.rooms;
+  const missing = [...secrets].sort((a, b) => a - b).find((c) => !found.includes(c));
+  return missing === undefined ? '' : (rooms?.[Math.floor(missing / ROOM_W)] ?? '');
+}
+
+/** The columns of the secrets a hero has found on a stage. @param {string} levelId @param {HeroId} hero */
+function notebook(levelId, hero) {
+  const all = /** @type {Record<string, number[]>} */ (load(SECRETS_KEY, {}));
+  const list = all[`${levelId}:${hero}`];
+  return Array.isArray(list) ? list : [];
 }
 
 /** @param {string} levelId @param {HeroId} hero */
-export function secretsFound(levelId, hero) {
-  const all = /** @type {Record<string, number[]>} */ (load(SECRETS_KEY, {}));
-  const list = all[`${levelId}:${hero}`];
-  return Array.isArray(list) ? list.length : 0;
-}
+export const secretsFound = (levelId, hero) => notebook(levelId, hero).length;
 
 /**
  * Adds the secrets found in this run to the hero's notebook for the stage.
@@ -67,9 +116,10 @@ export function noteSecrets(levelId, hero, columns) {
 
 /**
  * What the card shows, from a finished run and the record before it. Pure.
+ * `hint`: the room of a secret the hero hasn't found yet, if any.
  * @param {{time: number, deaths: number, tickets: number, secrets: number, secretTotal: number,
  *   best?: number, perHero?: Record<HeroId, number>, medal?: Medal | null,
- *   targets?: {gold?: number, silver?: number}}} r
+ *   targets?: {gold?: number, silver?: number}, hint?: string}} r
  */
 export function buildResults(r) {
   const record = !(/** @type {number} */ (r.best) <= r.time);
@@ -99,11 +149,16 @@ export function buildResults(r) {
     ]);
   }
   const medal = r.medal ?? null;
-  return { rows, record, gap, allSecrets, flawless: !r.deaths, medal, next: nextTarget(r) };
+  const why = medal?.held ? heldText(medal.held, r.targets) : '';
+  const next = why ? '' : nextTarget(r);
+  // A lead for the next run, while this hero's notebook still has a gap.
+  const hint = r.hint && !allSecrets ? `Piste : « ${r.hint} »` : '';
+  return { rows, record, gap, allSecrets, flawless: !r.deaths, medal, next, why, hint };
 }
 
 /**
- * The next medal to aim for, when the medal API gives the target times.
+ * The next medal to aim for and the seconds still to find, when the medal API
+ * gives the target times.
  * @param {{time: number, medal?: Medal | null, targets?: {gold?: number, silver?: number}}} r
  */
 function nextTarget(r) {
@@ -112,7 +167,11 @@ function nextTarget(r) {
   if (!t || tier === 'gold') return '';
   const aim = tier === 'silver' || t.silver === undefined ? 'gold' : 'silver';
   const limit = aim === 'gold' ? t.gold : t.silver;
-  return limit === undefined ? '' : `${TIER_NAME[aim]} sous ${clock(limit)}`;
+  if (limit === undefined) return '';
+  // Strictly under the limit: a tenth at least to find.
+  const short = Math.max(0.1, r.time - limit);
+  const seconds = `${short.toFixed(1).replace('.', ',')} s`;
+  return `${TIER_NAME[aim]} sous ${clock(limit)} · ${seconds} à gagner`;
 }
 
 /**
@@ -131,10 +190,10 @@ export function renderResults(stats, ctx) {
     : `${levelId}:${hero}${sim.hardcore ? ':sansfilet' : ''}`;
   const best = typeof bests[key] === 'number' ? bests[key] : undefined;
   // The secrets of this run go into the hero's notebook before counting.
-  const columns = sim.things
-    .filter((t) => t.kind === 'secret' && !t.alive)
-    .map((t) => Math.floor(t.x));
+  const secrets = sim.things.filter((t) => t.kind === 'secret');
+  const columns = secrets.filter((t) => !t.alive).map((t) => Math.floor(t.x));
   noteSecrets(levelId, hero, columns);
+  const all = secrets.map((t) => Math.floor(t.x));
   const r = buildResults({
     time: sim.time,
     deaths: sim.deaths,
@@ -145,6 +204,7 @@ export function renderResults(stats, ctx) {
     perHero: { kevin: secretsFound(levelId, 'kevin'), charline: secretsFound(levelId, 'charline') },
     medal: readMedal(ctx.medal),
     targets: ctx.targets,
+    hint: secretHint(levelId, notebook(levelId, hero), all),
   });
   if (r.record) {
     bests[key] = sim.time;
@@ -157,18 +217,25 @@ export function renderResults(stats, ctx) {
       dt.textContent = k;
       dd.textContent = v;
       if (gold) dd.className = 'best';
+      if (k === 'Secrets' && r.hint) {
+        const hint = document.createElement('span');
+        hint.className = 'secret-hint';
+        hint.textContent = r.hint;
+        dd.append(hint);
+      }
       return [dt, dd];
     }),
   );
-  renderMedal(stats, r.medal, r.next);
+  renderMedal(stats, r.medal, r.next, r.why);
   return r;
 }
 
 /**
- * The medal line above the stats: a disc in the medal's colour, its name, the star.
- * @param {HTMLElement} stats @param {Medal | null} medal @param {string} next
+ * The medal line above the stats: a disc in the medal's colour, its name, the star,
+ * then the next target or, for a helped run, why it stayed bronze.
+ * @param {HTMLElement} stats @param {Medal | null} medal @param {string} next @param {string} why
  */
-function renderMedal(stats, medal, next) {
+function renderMedal(stats, medal, next, why) {
   let el = /** @type {HTMLElement | null} */ (stats.previousElementSibling);
   if (!el || !el.classList.contains('medal')) {
     el = document.createElement('p');
@@ -200,5 +267,6 @@ function renderMedal(stats, medal, next) {
     parts.push(star);
   }
   if (next) parts.push(make('span', 'medal-next', next));
+  if (why) parts.push(make('span', 'medal-why', why));
   el.replaceChildren(...parts);
 }

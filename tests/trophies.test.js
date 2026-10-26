@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { Medals } from '../src/app/medals.js';
 import { secretsFound } from '../src/app/results.js';
 import { TROPHIES, Trophies } from '../src/app/trophies.js';
-import { LEVELS } from '../src/data/levels/index.js';
+import { CAMPAIGN, LEVELS } from '../src/data/levels/index.js';
 
 /** In-memory stand-in for the browser's localStorage. */
 beforeEach(() => {
@@ -52,10 +52,10 @@ describe('trophies', () => {
 });
 
 describe('the round-ten trophies', () => {
-  it('number twenty, each with its own id', () => {
+  it('number twenty-two, each with its own id', () => {
     const ids = TROPHIES.map((t) => t.id);
-    expect(ids).toHaveLength(20);
-    expect(new Set(ids).size).toBe(20);
+    expect(ids).toHaveLength(22);
+    expect(new Set(ids).size).toBe(22);
   });
 
   it('reward a secret on every stage with one hero', () => {
@@ -151,6 +151,33 @@ describe('the round-ten trophies', () => {
       t.stageWon(won, level.id, false, medals);
     }
     expect(got).toContain('golds');
+  });
+
+  it('reward a stage finished « Sans filet »', () => {
+    /** @type {string[]} */
+    const got = [];
+    const t = new Trophies((x) => got.push(x.id));
+    t.stageWon(sim({ heroId: 'kevin', deaths: 1 }), 'lcp7', false);
+    expect(got).not.toContain('sansFilet');
+    t.stageWon(sim({ heroId: 'kevin', deaths: 1, hardcore: true }), 'lcp7', false);
+    expect(got).toContain('sansFilet');
+  });
+
+  it('reward the star on every story stage with the same hero, from either mode', () => {
+    /** @type {string[]} */
+    const got = [];
+    const t = new Trophies((x) => got.push(x.id));
+    const medals = new Medals();
+    const won = sim({ heroId: 'kevin', deaths: 0 });
+    const story = LEVELS.slice(0, CAMPAIGN);
+    for (const [i, level] of story.entries()) {
+      expect(got).not.toContain('stars');
+      // Charline's stars don't help Kévin's set.
+      medals.record(level.id, 'charline', { tier: 'bronze', star: i < CAMPAIGN - 1 });
+      medals.record(level.id, 'kevin', { tier: 'bronze', star: true }, i ? 'normal' : 'sansFilet');
+      t.stageWon(won, level.id, false, medals);
+    }
+    expect(got).toContain('stars');
   });
 
   it('load an older save without the new parts', () => {

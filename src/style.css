@@ -327,6 +327,55 @@ body:not([data-screen='play']) .touch {
 body.boss .toast {
   top: calc(max(12px, env(safe-area-inset-top)) + 124px);
 }
+/* IN6: sound captions, bottom centre over the hint (touch: over the pads). Brackets and an
+   arrow say what and where without colour; white on ink stays readable on any scene. */
+.captions {
+  position: fixed;
+  left: 50%;
+  bottom: calc(max(18px, env(safe-area-inset-bottom)) + 78px);
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: max-content;
+  max-width: min(560px, 92vw);
+  pointer-events: none;
+  z-index: 3;
+}
+.captions p {
+  margin: 0;
+  padding: 3px 12px;
+  border-radius: 8px;
+  background: #0e1424e6;
+  color: #fff;
+  box-shadow: inset 0 0 0 1.5px #ffffff59;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: 0.2px;
+}
+body:not([data-screen='play']) .captions {
+  visibility: hidden;
+}
+@media (pointer: coarse) {
+  .captions {
+    bottom: calc(max(16px, env(safe-area-inset-bottom)) + 100px);
+  }
+  body[data-pad='l'] .captions {
+    bottom: calc(max(16px, env(safe-area-inset-bottom)) + 124px);
+  }
+}
+@media (pointer: coarse) and (max-height: 500px) {
+  /* Landscape: the pads sit in the corners, the bottom centre is free. */
+  .captions,
+  body[data-pad='l'] .captions {
+    bottom: max(10px, env(safe-area-inset-bottom));
+    max-width: 40vw;
+  }
+  .captions p {
+    font-size: 14px;
+  }
+}
 /* Trophy toasts announce themselves over menus and result cards. */
 .toast.trophy {
   z-index: 12;
@@ -531,10 +580,9 @@ kbd {
   font-size: 13px;
   line-height: 2.1;
 }
-@media (pointer: coarse) {
-  .keys-hint {
-    display: none;
-  }
+/* The touch pad is on screen: its buttons speak for themselves (input.js sets data-device). */
+body[data-device='touch'] .keys-hint {
+  display: none;
 }
 
 .reader {
@@ -1051,7 +1099,8 @@ body:not([data-screen='play']) .bossbar {
   bottom: calc(100% + 6px);
   padding: 22px 0 4px;
   background: linear-gradient(180deg, #fff2d900, var(--paper-2) 70%);
-  color: var(--soft);
+  /* --muted, not --soft: 5.2:1 on the card (AA for 12 px text), --soft was 3.2:1. */
+  color: var(--muted);
   font-size: 12px;
   font-weight: 900;
   letter-spacing: 1px;
@@ -1209,6 +1258,12 @@ body:not([data-screen='play']) .bossbar {
 #credits .roll {
   text-align: left;
   max-width: min(560px, 60vw);
+}
+/* The roll is a scroll box (UI-1, below): reachable with Tab, so the keyboard can scroll it. */
+#credits .roll:focus-visible {
+  outline: 3px solid var(--lime);
+  outline-offset: 6px;
+  border-radius: 8px;
 }
 .credits-actions {
   display: flex;
@@ -1414,8 +1469,8 @@ body:not([data-screen='play']) .bossbar {
 }
 .chapter-name small {
   margin-right: 6px;
-  color: var(--soft);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 11.5px;
   letter-spacing: 1.2px;
   text-transform: uppercase;
 }
@@ -2140,6 +2195,9 @@ body[data-screen='won'] .bark {
   .touch button {
     border: 2px solid ButtonText;
   }
+  .captions p {
+    border: 1px solid CanvasText;
+  }
 }
 
 /* Stage results (results.js): the three secondary buttons share one row. */
@@ -2203,6 +2261,24 @@ body[data-screen='won'] .bark {
   font-size: 13px;
   font-weight: 700;
 }
+/* A medal held at bronze by relaxed mode or a slower speed: why, and what the time is worth. */
+.medal-why {
+  flex-basis: 100%;
+  padding: 5px 10px;
+  border-radius: 10px;
+  background: #c9783d1f;
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 19px;
+}
+/* The room of a secret still to find, after the secrets count. */
+.secret-hint {
+  margin-left: 10px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 700;
+}
 /* Narrow portrait: tall enough to stack the buttons again. */
 @media (max-width: 480px) {
   #won .card {
@@ -2263,6 +2339,16 @@ body[data-screen='won'] .bark {
   .medal-name {
     font-size: 15px;
   }
+  /* Beside the medal's name, on one or two short lines. */
+  .medal-why {
+    flex: 1 1 0;
+    padding: 2px 8px;
+    font-size: 12px;
+    line-height: 15px;
+  }
+  .secret-hint {
+    display: none;
+  }
 }
 @media (max-height: 400px) {
   #won h2 {
@@ -2273,9 +2359,112 @@ body[data-screen='won'] .bark {
   }
 }
 
+/* DF-2's note under « Vitesse du jeu »: its own small line, the label stays one word wide. */
+.opt-note {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+/* Touch only: no keyboard to rebind, the list would only push the settings away. */
+body[data-device='touch'] .options .keys {
+  display: none;
+}
+
 /* Credits: a kind line under each cast member. */
 .creditLine {
   opacity: 0.8;
   font-style: italic;
   margin-top: -4px;
+}
+
+/* UI-1 · Credits: the roll scrolls in its own box (menus.js rolls it up by itself), the
+   buttons keep their own row under it: no line ever runs beneath them. */
+#credits {
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 14px;
+  overflow: hidden;
+}
+#credits .roll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #ffffff40 transparent;
+  padding: 0 10px 32px 0;
+  -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 44px), transparent);
+  mask-image: linear-gradient(180deg, #000 calc(100% - 44px), transparent);
+}
+#credits .credits-actions {
+  position: static;
+  align-self: end;
+}
+
+/* Trophy over a menu or a results card: the toast sits at the top edge and the screen
+   makes room under it (hud.js sets body.toast-trophy and --toast-h), so it never covers
+   the card's heading. */
+body:not([data-screen='play']):not([data-screen='title']) .toast.trophy {
+  top: max(8px, env(safe-area-inset-top));
+}
+#won,
+.screen:not(.title) {
+  transition: padding-top 0.25s;
+}
+body.toast-trophy:not([data-screen='play']) .screen:not(.title),
+body.toast-trophy:not([data-screen='play']) #won {
+  padding-top: calc(max(8px, env(safe-area-inset-top)) + var(--toast-h, 0px));
+}
+
+/* List rows reachable with the arrows and the gamepad (menus.js, data-nav): a focus ring,
+   clear of the sticky Fermer button when scrolled into view. */
+[data-nav] {
+  scroll-margin: 12px 0 96px;
+}
+[data-nav]:focus {
+  outline: none;
+}
+[data-nav]:focus-visible,
+.padnav [data-nav]:focus {
+  outline: 3px solid var(--pink);
+  outline-offset: 2px;
+}
+
+/* UI-2 · Landscape phones: the options in two columns, so most settings show at once. */
+@media (max-height: 500px) {
+  .options {
+    width: min(860px, 100%);
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    gap: 6px 12px;
+  }
+  .options h2,
+  .options .keys,
+  #optionsClose {
+    grid-column: 1 / -1;
+  }
+  .options h2 {
+    margin: 0;
+    font-size: 22px;
+  }
+  .options label {
+    grid-template-columns: 7em 1fr;
+    font-size: 14px;
+  }
+  .options label.check {
+    padding: 5px 10px;
+    font-size: 13px;
+    line-height: 1.25;
+  }
+  .options select {
+    padding: 6px 10px;
+  }
+  .options .keys {
+    margin: 2px 0;
+    padding: 6px 10px 10px;
+  }
+  #keyList {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
