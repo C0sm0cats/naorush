@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DT, HARDCORE_TRAPS, HERO_STATS, setHardcore, step } from '../src/game/sim.js';
+import { DT, HARDCORE_TRAPS, HERO_STATS, PEEK_DELAY, setHardcore, step } from '../src/game/sim.js';
 import { IDLE, fill, has, input, room, run, runUntil, sim } from './mechanics-kit.js';
 
 /** @typedef {import('./mechanics-kit.js').Sim} Sim */
@@ -369,5 +369,35 @@ describe('lifts', () => {
     }
     expect(tries).toBeGreaterThan(20);
     expect(through).toBe(0);
+  });
+});
+
+describe('looking around', () => {
+  const def = room(16, [['S', 8, 3]]);
+  const frames = Math.ceil(PEEK_DELAY / DT);
+
+  it('looks up or down after holding the key a beat, standing still', () => {
+    const s = sim(def, 'kevin');
+    run(s, input({ up: true }), frames - 2);
+    expect(s.hero.peek).toBe(0);
+    run(s, input({ up: true }), 3);
+    expect(s.hero.peek).toBe(1);
+    run(s, input({ down: true }), frames + 1);
+    expect(s.hero.peek).toBe(-1);
+    run(s, IDLE, 1);
+    expect(s.hero.peek).toBe(0);
+  });
+
+  it('never while running or in the air, and leaves the hero where they stand', () => {
+    const s = sim(def, 'kevin');
+    run(s, input({ up: true, right: true }), frames + 5);
+    expect(s.hero.peek).toBe(0);
+    const t = sim(def, 'kevin');
+    const x = t.hero.x;
+    run(t, input({ down: true }), frames + 5);
+    expect(t.hero.x).toBe(x);
+    expect(t.hero.state).toBe('ground');
+    run(t, input({ down: true, jump: true }), 3);
+    expect(t.hero.peek).toBe(0);
   });
 });

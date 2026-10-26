@@ -1,0 +1,157 @@
+/* NA-2: the interlude between two story stages (src/app/interlude.js). */
+.interlude {
+  position: fixed;
+  inset: 0;
+  z-index: 11;
+  display: grid;
+  place-items: center;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: radial-gradient(circle at 50% 35%, #27408b66, transparent 65%), #0e1424f2;
+  color: #fff;
+  cursor: pointer;
+  animation: il-in 0.35s ease both;
+}
+.il-card {
+  width: min(640px, 100%);
+  padding: 24px 22px 18px;
+  border-radius: 26px;
+  background: linear-gradient(180deg, #26345a, var(--ink, #0e1424));
+  box-shadow:
+    inset 0 0 0 1px #ffffff2e,
+    0 30px 80px #000a;
+  text-align: center;
+}
+.il-clock::first-letter {
+  text-transform: uppercase;
+}
+.il-clock {
+  margin: 0;
+  font-size: clamp(30px, 6.4vw, 54px);
+  font-weight: 900;
+  letter-spacing: -1px;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 3px 0 #0e1424;
+}
+.il-count {
+  display: inline-block;
+  margin: 8px 0 0;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--lime, #c6f432);
+  color: var(--ink, #0e1424);
+  font-weight: 800;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 3px 0 var(--lime-edge, #8db51a);
+}
+.il-map {
+  display: block;
+  width: 100%;
+  margin: 18px 0 6px;
+  overflow: visible;
+}
+.il-road {
+  stroke: #ffffff40;
+  stroke-width: 4;
+  stroke-dasharray: 2 10;
+  stroke-linecap: round;
+}
+.il-trail {
+  stroke: var(--lime, #c6f432);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+.il-stop circle {
+  fill: #1f2a44;
+  stroke: #ffffff66;
+  stroke-width: 3;
+}
+.il-stop.done circle {
+  fill: var(--lime, #c6f432);
+  stroke: var(--lime-edge, #8db51a);
+}
+.il-stop.next circle {
+  stroke: #fff;
+}
+.il-nao circle {
+  fill: var(--pink, #ff4f9a);
+  stroke: #fff;
+}
+.il-stop text {
+  fill: #ffffffb3;
+  font:
+    800 15px system-ui,
+    sans-serif;
+}
+.il-stop.next text,
+.il-nao text {
+  fill: #fff;
+}
+.il-dot {
+  fill: #fff;
+  stroke: #3656b0;
+  stroke-width: 4;
+}
+.interlude[data-hero='charline'] .il-dot {
+  stroke: #c42a66;
+}
+.il-line {
+  margin: 10px auto 0;
+  max-width: 34em;
+  font-size: clamp(16px, 2.6vw, 19px);
+  font-weight: 700;
+  line-height: 1.4;
+}
+.il-who {
+  color: #8fb0ff;
+}
+.interlude[data-hero='charline'] .il-who {
+  color: #ff8fbd;
+}
+.il-skip {
+  margin-top: 18px;
+  padding: 8px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: #ffffff1f;
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.il-skip:focus-visible {
+  outline: 3px solid var(--lime, #c6f432);
+  outline-offset: 2px;
+}
+/* Phones held upright: the route shrinks with the card, its labels must not. */
+@media (max-width: 520px) {
+  .il-stop text {
+    font-size: 24px;
+  }
+}
+/* Phones held sideways: less height, a tighter card. */
+@media (max-height: 420px) {
+  .il-card {
+    padding: 12px 18px 10px;
+  }
+  .il-clock {
+    font-size: 30px;
+  }
+  .il-map {
+    margin: 8px 0 2px;
+  }
+  .il-skip {
+    margin-top: 8px;
+  }
+}
+@keyframes il-in {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .interlude {
+    animation: none;
+  }
+}

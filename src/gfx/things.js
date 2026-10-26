@@ -947,6 +947,53 @@ function bolts() {
 }
 
 /**
+ * IN1: the yellow « Attention sol glissant » A-frame that stands before a puddle.
+ * Origin on the floor, 0.9 high, 0.5 wide: a black-framed yellow board facing the
+ * camera with a black band for the words and the slipping-figure pictogram, a plain
+ * board behind it, a black handle on top.
+ */
+function wetSign() {
+  const b = new MeshBuilder();
+  const YELLOW = '#ffcf1f',
+    BLACK = '#17171c';
+  const H = 0.88,
+    HW = 0.25,
+    TILT = 0.16;
+  for (const side of [1, -1])
+    posed(b, rotX(-side * TILT), [0, 0, side * H * Math.sin(TILT)], () => {
+      rb(b, [0, H / 2, 0], [HW, H / 2, 0.014], 0.012, YELLOW, GLOSSY, 2);
+      if (side < 0) return;
+      const z = 0.017;
+      for (const y of [0.04, H - 0.04]) flatBox(b, [0, y, z], [HW - 0.025, 0.012, 0.003], BLACK);
+      for (const x of [-HW + 0.035, HW - 0.035])
+        flatBox(b, [x, H / 2, z], [0.012, H / 2 - 0.04, 0.003], BLACK);
+      // The band where « ATTENTION » is written.
+      flatBox(b, [0, H - 0.13, z], [HW - 0.07, 0.035, 0.003], BLACK);
+      // Pictogram: a figure falling backwards, one foot up, over a wet floor line.
+      flatBox(b, [0, 0.13, z], [0.16, 0.012, 0.003], BLACK);
+      b.ellipsoid([-0.11, 0.53, z], [0.045, 0.045, 0.006], BLACK, { seg: 8 });
+      /** @type {Array<[number, number, number, number]>} x, y, half length, angle */
+      const limbs = [
+        [-0.03, 0.4, 0.1, 0.9],
+        [0.08, 0.33, 0.09, -1.2],
+        [0.03, 0.24, 0.08, -0.3],
+        [0.0, 0.52, 0.065, -0.5],
+        [-0.13, 0.36, 0.06, 1.6],
+      ];
+      for (const [x, y, l, a] of limbs)
+        posed(b, rotZ(a), [x, y, z], () => flatBox(b, [0, 0, 0], [0.022, l, 0.003], BLACK));
+      for (const [x, y] of [
+        [0.12, 0.17],
+        [0.16, 0.21],
+        [0.18, 0.16],
+      ])
+        b.ellipsoid([x, y, z], [0.014, 0.02, 0.005], BLACK, { seg: 6 });
+    });
+  rb(b, [0, H * Math.cos(TILT) + 0.02, 0], [0.13, 0.025, 0.035], 0.02, BLACK, MATTE, 2);
+  return b;
+}
+
+/**
  * 5 x 7 pixel font of the arena signs (rows top to bottom). É is a full-height E
  * with its accent in three extra rows above the line (accent, gap): it never reads
  * as a lowercase é next to the other capitals.
@@ -1158,6 +1205,7 @@ export function buildThings(gl) {
     concert: mesh(concertTickets()),
     valve: mesh(valve(false)),
     valveOn: mesh(valve(true)),
+    wetSign: mesh(wetSign()),
     pile: mesh(filePile()),
     boss: bossModels(gl),
   };

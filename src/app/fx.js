@@ -71,6 +71,18 @@ const EFFECTS = {
   },
   smash: { n: 20, colors: [[0.95, 0.94, 0.9]], speed: 4, up: 2, life: 0.8, size: 0.12 },
   splash: { n: 40, colors: [BLUE, [0.8, 0.95, 1]], speed: 5, up: 3, life: 0.9, size: 0.08 },
+  // IN1, wet floor: a few droplets as the feet touch it, a spray of them behind a slide.
+  puddle: { n: 10, colors: [BLUE, [0.8, 0.95, 1]], speed: 2, up: 1.5, life: 0.45, size: 0.06 },
+  slip: {
+    n: 16,
+    colors: [BLUE, [0.8, 0.95, 1], WHITE],
+    speed: 2.6,
+    up: 0.4,
+    life: 0.4,
+    gravity: 6,
+    size: 0.06,
+    ring: true,
+  },
   key: { n: 24, colors: [GOLD, WHITE], speed: 4, up: 3, life: 0.9 },
   switch: { n: 18, colors: [BLUE, WHITE], speed: 3, up: 2, life: 0.7 },
   concert: { n: 50, colors: [GOLD, PINK, WHITE], speed: 5, up: 4, life: 1.2 },

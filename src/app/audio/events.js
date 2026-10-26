@@ -11,6 +11,12 @@ export const EVENT_SFX = {
   step: 'touchdown',
   // A CR bouncing off a director who is not consulting PRIMO.
   'block:boss': 'guard',
+  // Julien's supervision follows the hero (rackDrop:tracking): a lock-on, not a tock.
+  'telegraph:tracking': 'lockOn',
+  // Rodolphe's encores (leap:double, fan:encore, dash:return): the crowd asks for more.
+  'telegraph:encore': 'encore',
+  // Julien's maintenance window (cables:maintenance): the building's announcement chime.
+  'cableWarn:maintenance': 'maintenance',
 };
 
 /**

@@ -719,7 +719,7 @@ function officeChair(b, fabric, cushion, seam, accent) {
 }
 
 /**
- * @typedef {'plant'|'plantSnake'|'plantMonstera'|'plantFicus'|'plantPalm'|'plantSmall'|'cactus'|'plantPothos'|'cooler'|'printer'|'coffee'|'chair'|'chairTeal'|'chairGrey'|'rack'|'hvac'|'antenna'|'parasol'|'bistro'|'speaker'|'lampPost'|'monitor'|'monitorCode'|'monitorCall'|'kpi'|'wave'|'lift'|'gate'|'carBlue'|'carRed'|'carWhite'|'barrier'|'pillarSign'|'drawer'|'sprinkler'|'spray'|'paper'|'binders'|'vacuum'|'laptopStand'|'invite'|'cup'|'archive'|'copilTable'|'projector'|'truss'|'spotlight'|'curtain'|'shadow'|'puddle'|'warn'|'arrow'|'rackFall'|'confetti'|'babyFoot'|'vendingSnack'|'vendingDrink'} PropId
+ * @typedef {'plant'|'plantSnake'|'plantMonstera'|'plantFicus'|'plantPalm'|'plantSmall'|'cactus'|'plantPothos'|'cooler'|'printer'|'coffee'|'chair'|'chairTeal'|'chairGrey'|'rack'|'hvac'|'antenna'|'parasol'|'bistro'|'speaker'|'lampPost'|'monitor'|'monitorCode'|'monitorCall'|'kpi'|'wave'|'lift'|'gate'|'carBlue'|'carRed'|'carWhite'|'barrier'|'pillarSign'|'drawer'|'sprinkler'|'spray'|'paper'|'binders'|'vacuum'|'laptopStand'|'invite'|'cup'|'archive'|'copilTable'|'projector'|'truss'|'spotlight'|'curtain'|'shadow'|'puddle'|'warn'|'arrow'|'rackFall'|'confetti'|'babyFoot'|'vendingSnack'|'vendingDrink'|'evCharger'|'solarPanel'|'microwave'|'beanBag'|'coatRack'|'mailboxes'|'phoneBooth'} PropId
  */
 
 /**
@@ -1270,7 +1270,7 @@ const BUILDERS = {
       let prev = [dir[0] * 0.09, 0.155, dir[2] * 0.09];
       for (let k = 1; k <= 4; k++) {
         const out = 0.1 + k * 0.012;
-        const p = [dir[0] * out, 0.155 - k * 0.045, dir[2] * out];
+        const p = [dir[0] * out, 0.155 - k * 0.03, dir[2] * out];
         rod(b, prev, p, 0.004, '#6a8f3a', { seg: 4 });
         const col = tone(greens[k % 3], 0.95 + r() * 0.1);
         leaf(b, 0.06, 0.045, 0.01, col, mul(rotY(ang + (k % 2 ? 0.5 : -0.5)), rotX(0.9)), p);
@@ -1347,6 +1347,153 @@ const BUILDERS = {
 
   vendingDrink(b) {
     vending(b, true);
+  },
+
+  evCharger(b) {
+    // Car-park charging post: a slim white column, lit lime ring, a screen and a coiled cable.
+    b.roundedBox([0, 0.04, 0], [0.2, 0.04, 0.16], 0.02, '#3a3f48', { seg: 3 });
+    b.roundedBox([0, 0.68, 0], [0.16, 0.62, 0.11], 0.06, '#eef1f4', { mat: GLOSSY, seg: 5 });
+    b.roundedBox([0, 1.32, 0.01], [0.17, 0.035, 0.13], 0.03, NAVY, { mat: GLOSSY, seg: 3 });
+    flatBox(b, [0, 1.07, 0.111], [0.1, 0.08, 0.003], '#0f1a24');
+    flatBox(b, [0, 1.08, 0.115], [0.08, 0.055, 0.001], '#58d5ff', EMISSIVE);
+    flatBox(b, [-0.03, 1.1, 0.117], [0.03, 0.006, 0.001], '#e6f5ff', EMISSIVE);
+    flatBox(b, [0, 1.24, 0.112], [0.15, 0.012, 0.003], LIME, EMISSIVE);
+    flatBox(b, [0, 0.88, 0.112], [0.06, 0.04, 0.003], PINK);
+    // Plug holster and the cable looping down to the floor.
+    b.roundedBox([0.1, 0.72, 0.13], [0.04, 0.06, 0.035], 0.02, GRAPHITE, { seg: 3 });
+    const pts = [
+      [0.1, 0.66, 0.15],
+      [0.24, 0.5, 0.18],
+      [0.27, 0.3, 0.2],
+      [0.18, 0.16, 0.2],
+      [0.04, 0.22, 0.17],
+      [0.0, 0.36, 0.14],
+    ];
+    for (let i = 0; i < pts.length - 1; i++) rod(b, pts[i], pts[i + 1], 0.016, BLACK, { seg: 6 });
+    flatBox(b, [0, 0.4, 0.111], [0.11, 0.02, 0.003], '#2f6fd6');
+  },
+
+  solarPanel(b) {
+    // Two photovoltaic modules tilted to the sky on a galvanised frame.
+    for (const x of [-0.95, 0, 0.95]) {
+      rod(b, [x, 0, 0.28], [x, 0.3, 0.28], 0.02, '#aeb5be', { seg: 6 });
+      rod(b, [x, 0, -0.3], [x, 0.78, -0.3], 0.02, '#aeb5be', { seg: 6 });
+      flatBox(b, [x, 0.015, 0], [0.04, 0.015, 0.36], '#7d8592');
+    }
+    const s = mark(b);
+    for (const x of [-0.49, 0.49]) {
+      flatBox(b, [x, 0, 0], [0.47, 0.018, 0.4], '#d8dde3', GLOSSY);
+      flatBox(b, [x, 0.019, 0], [0.45, 0.002, 0.38], '#1f3a6e', GLOSSY);
+      for (let i = 1; i < 6; i++)
+        flatBox(b, [x - 0.45 + i * 0.15, 0.022, 0], [0.003, 0.001, 0.38], '#8fa6c4');
+      for (const z of [-0.19, 0, 0.19]) flatBox(b, [x, 0.022, z], [0.45, 0.001, 0.003], '#8fa6c4');
+      flatBox(b, [x - 0.3, 0.023, -0.25], [0.08, 0.001, 0.02], '#9fd8ff', GLOSSY);
+    }
+    place(b, s, rotX(0.62), [0, 0.54, -0.01]);
+  },
+
+  microwave(b) {
+    // A microwave on a small cabinet, the queue's reason to be: door glass, a timer, a lit plate.
+    b.roundedBox([0, 0.4, 0], [0.3, 0.4, 0.24], 0.025, '#d2ae84', { seg: 3 });
+    flatBox(b, [0, 0.4, 0.241], [0.002, 0.34, 0.003], '#a7835c');
+    for (const x of [-0.06, 0.06])
+      flatBox(b, [x, 0.62, 0.245], [0.012, 0.04, 0.006], CHROME, GLOSSY);
+    flatBox(b, [0, 0.805, 0], [0.31, 0.008, 0.25], '#f3f5f7');
+    b.roundedBox([0, 0.98, -0.02], [0.27, 0.17, 0.2], 0.03, '#e8ebef', { mat: GLOSSY, seg: 3 });
+    flatBox(b, [-0.06, 0.98, 0.181], [0.17, 0.13, 0.004], '#20262f', GLOSSY);
+    flatBox(b, [-0.06, 0.96, 0.184], [0.12, 0.07, 0.001], '#ffcf6a', EMISSIVE);
+    b.ellipsoid([-0.06, 0.92, 0.17], [0.06, 0.02, 0.06], '#f4efe6', { seg: 6 });
+    flatBox(b, [0.2, 1.08, 0.181], [0.05, 0.022, 0.004], '#0f1a14');
+    flatBox(b, [0.2, 1.08, 0.186], [0.038, 0.012, 0.001], '#46ff9b', EMISSIVE);
+    for (let i = 0; i < 3; i++)
+      for (let j = 0; j < 2; j++)
+        flatBox(b, [0.18 + j * 0.04, 1.01 - i * 0.04, 0.183], [0.013, 0.012, 0.004], '#c3cad3');
+    flatBox(b, [0.2, 0.86, 0.185], [0.04, 0.012, 0.004], LIME);
+    // A note stuck on it: « Merci de nettoyer ».
+    flatBox(b, [-0.2, 1.11, 0.186], [0.05, 0.04, 0.002], '#ffe066');
+  },
+
+  beanBag(b) {
+    // Bean bag for the nap corner, slumped, with a cushion and a sleep mask on it.
+    const s = mark(b);
+    b.ellipsoid([0, 0.26, 0], [0.42, 0.26, 0.36], '#e86a3a', { seg: 12 });
+    deform(b, s, ([x, y, z]) => [x, y * (1 - 0.25 * Math.max(0, z / 0.36)), z]);
+    b.ellipsoid([-0.05, 0.47, -0.16], [0.3, 0.2, 0.16], '#d75d30', { seg: 10 });
+    for (const a of [0, 1.2, 2.4, 3.6, 4.8])
+      rod(
+        b,
+        [Math.sin(a) * 0.4, 0.2, Math.cos(a) * 0.33],
+        [Math.sin(a) * 0.3, 0.44, Math.cos(a) * 0.2],
+        0.006,
+        '#b84d26',
+        { seg: 4 },
+      );
+    b.roundedBox([0.14, 0.5, 0.12], [0.12, 0.04, 0.09], 0.04, '#9fd8ff', { seg: 4 });
+    b.roundedBox([0.14, 0.545, 0.12], [0.07, 0.012, 0.025], 0.012, NAVY, { seg: 3 });
+  },
+
+  coatRack(b) {
+    // Cloakroom rail on wheels: coats, a lanyard and a scarf, the seminar tote on the floor.
+    for (const x of [-0.6, 0.6]) {
+      rod(b, [x, 0.06, 0], [x, 1.55, 0], 0.016, CHROME, { mat: GLOSSY, seg: 8 });
+      rod(b, [x, 0.06, -0.22], [x, 0.06, 0.22], 0.014, CHROME, { mat: GLOSSY, seg: 6 });
+      for (const z of [-0.22, 0.22])
+        b.ellipsoid([x, 0.03, z], [0.03, 0.03, 0.03], BLACK, { seg: 5 });
+    }
+    rod(b, [-0.62, 1.55, 0], [0.62, 1.55, 0], 0.014, CHROME, { mat: GLOSSY, seg: 6 });
+    const coats = ['#1f2a44', '#c8323c', '#4b5563', '#2f8f8a', '#e8c26e', '#5b3fa8'];
+    coats.forEach((c, i) => {
+      const x = -0.48 + i * 0.19;
+      rod(b, [x, 1.55, 0], [x, 1.48, 0], 0.005, '#8a94a3', { seg: 4 });
+      const s = mark(b);
+      b.roundedBox([0, 0, 0], [0.085, 0.36 + (i % 3) * 0.04, 0.12], 0.06, c, { seg: 4 });
+      flatBox(b, [0, 0.2, 0.121], [0.012, 0.15, 0.002], tone(c, 0.7));
+      place(b, s, rotZ(((i % 2) - 0.5) * 0.06), [x, 1.12 - (i % 3) * 0.04, 0]);
+    });
+    rod(b, [0.13, 1.5, 0.08], [0.16, 0.95, 0.13], 0.008, PINK, { seg: 4 });
+    flatBox(b, [0.16, 0.92, 0.13], [0.04, 0.05, 0.004], WHITE);
+    b.roundedBox([-0.3, 0.14, 0.2], [0.16, 0.13, 0.05], 0.03, LIME, { seg: 3 });
+  },
+
+  mailboxes(b) {
+    // Pigeonholes of the mail room on a low cabinet: names, envelopes, a parcel on top.
+    b.roundedBox([0, 0.4, 0], [0.62, 0.4, 0.22], 0.02, '#b9875a', { seg: 3 });
+    b.roundedBox([0, 1.1, -0.04], [0.6, 0.3, 0.17], 0.015, '#d6c4a6', { seg: 3 });
+    const env = ['#f4f1ea', '#ffe066', '#9fd8ff', '#f4f1ea', '#ff8fc0'];
+    for (let i = 0; i < 4; i++)
+      for (let j = 0; j < 3; j++) {
+        const x = -0.45 + i * 0.3,
+          y = 0.9 + j * 0.2;
+        flatBox(b, [x, y, 0.12], [0.13, 0.08, 0.01], '#5a4632');
+        flatBox(b, [x, y - 0.075, 0.131], [0.13, 0.005, 0.002], '#8a6a4a');
+        if ((i + j * 2) % 3 !== 1)
+          flatBox(b, [x + 0.02, y - 0.03, 0.125], [0.08, 0.05, 0.004], env[(i + j) % 5]);
+        flatBox(b, [x, y + 0.085, 0.131], [0.05, 0.008, 0.002], WHITE);
+      }
+    flatBox(b, [0, 0.4, 0.221], [0.003, 0.34, 0.003], '#8a6a4a');
+    b.roundedBox([0.3, 1.47, -0.02], [0.16, 0.07, 0.12], 0.01, '#c79b67', { seg: 2 });
+    flatBox(b, [0.3, 1.47, 0.101], [0.06, 0.03, 0.002], WHITE);
+    flatBox(b, [0.3, 1.541, -0.02], [0.03, 0.002, 0.12], '#e3cd9c');
+  },
+
+  phoneBooth(b) {
+    // Acoustic phone pod: felt shell, a glass door with the house lime pull, a lamp inside.
+    b.roundedBox([0, 1.05, 0], [0.5, 1.05, 0.48], 0.06, '#3a4a5e', { seg: 4 });
+    b.roundedBox([0, 2.09, 0], [0.52, 0.03, 0.5], 0.02, '#2b3446', { seg: 3 });
+    flatBox(b, [0, 1.0, 0.482], [0.4, 0.92, 0.004], '#1a2533', GLOSSY);
+    flatBox(b, [0, 1.2, 0.47], [0.36, 0.5, 0.002], '#2a3a50');
+    flatBox(b, [0, 0.62, 0.47], [0.3, 0.02, 0.06], '#b9875a');
+    b.roundedBox([0, 0.45, 0.35], [0.22, 0.08, 0.1], 0.04, PINK, { seg: 3 });
+    flatBox(b, [0, 1.86, 0.4], [0.2, 0.012, 0.06], '#fff1c9', EMISSIVE);
+    for (const [x, y, h] of [
+      [-0.25, 1.4, 0.4],
+      [0.1, 0.8, 0.25],
+    ])
+      flatBox(b, [x, y, 0.488], [0.012, h, 0.001], '#4a6078', GLOSSY);
+    flatBox(b, [0.32, 1.0, 0.5], [0.012, 0.2, 0.012], LIME);
+    // « Occupé » light over the door, felt panels on the side.
+    flatBox(b, [0, 2.0, 0.49], [0.12, 0.03, 0.004], '#ff3b3b', EMISSIVE);
+    for (const z of [-0.2, 0.15]) flatBox(b, [0.505, 1.05, z], [0.002, 0.85, 0.12], '#4a5d74');
   },
 
   cooler(b) {
@@ -2837,6 +2984,13 @@ export const PROP_IDS = [
   'babyFoot',
   'vendingSnack',
   'vendingDrink',
+  'evCharger',
+  'solarPanel',
+  'microwave',
+  'beanBag',
+  'coatRack',
+  'mailboxes',
+  'phoneBooth',
 ];
 
 /**

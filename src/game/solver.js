@@ -103,7 +103,8 @@ function key(s) {
   const moving = s.things
     .map((t) => {
       if (t.kind === 'lift' && near(t)) return Math.round(t.y * 2);
-      if (t.kind === 'boss' && s.bossActive) return `${t.state}${t.hp}${Math.floor(t.t * 4)}`;
+      if (t.kind === 'boss' && s.bossActive)
+        return `${t.phase}${t.step}${t.state}${t.variant ?? ''}${t.hp}${Math.floor(t.t * 4)}`;
       if (t.kind in PERIODIC && near(t))
         return Math.floor((phaseOf(s, t, PERIODIC[t.kind]) / PERIODIC[t.kind]) * 8);
       if ((t.kind === 'chair' || t.kind === 'vacuum') && near(t))
@@ -129,8 +130,12 @@ function remaining(s) {
       : !s.hasKey
         ? find('key')
         : find('exit');
+  // Between two arguments a duel only moves on through its sequence: getting further
+  // into it counts as progress (a little more than the moves it takes), so the search
+  // keeps dodging forward instead of widening every early frame.
+  const lasted = boss && s.bossActive ? Math.max(0, boss.step ?? 0) * 3 + Math.min(3, boss.t) : 0;
   const stage =
-    (s.doorOpen ? 0 : 300) + (boss ? 100 + (boss.hp ?? 0) * 60 : 0) + (s.hasKey ? 0 : 100);
+    (s.doorOpen ? 0 : 300) + (boss ? 100 + (boss.hp ?? 0) * 60 - lasted : 0) + (s.hasKey ? 0 : 100);
   if (!target) return stage;
   // Face the boss from a throwing distance rather than walking into it.
   const tx = boss ? target.x - 4 : target.x;

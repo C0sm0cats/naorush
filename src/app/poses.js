@@ -17,6 +17,8 @@
  * @typedef {import('../gfx/characters.js').Pose} Pose
  */
 
+import { LIVE, WARN } from '../game/boss.js';
+
 /** @param {number} v @param {number} [lo] @param {number} [hi] */
 const clamp = (v, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v));
 /** @param {number} a @param {number} b @param {number} k */
@@ -68,6 +70,12 @@ const BOSS_OUT = {
   facing: 1,
 };
 const TINT = [1, 1, 1];
+/** Julien's alternating attacks: when the second wave is warned (boss.js SWAP). */
+const SWAP = WARN + LIVE + 0.1;
+/** When each rack of Julien's supervision is warned (boss.js TRACK). */
+const TRACK_BEAT = 0.75;
+/** When Rodolphe pulled up at the end of a dash run (his `b.t`), while he stands there. */
+const ARRIVED = new WeakMap();
 
 /**
  * Resets every field of `p`: the legs and arms as given, the rest neutral, eyes
@@ -156,6 +164,8 @@ export function bossPose(b, hx, t, id) {
           ? 1
           : Math.sign(hx - b.x) || -1;
   const bt = b.t ?? 0;
+  // Which side the hero is on: once convinced, he turns to him (never his back).
+  const side = Math.sign(hx - b.x) || 1;
   const breath = Math.sin(t * 2.2);
   // Keeps an eye on the hero: chin down when close, up when far.
   const glance = clamp((5 - Math.abs(hx - b.x)) / 5) * 0.18 - 0.05;
@@ -232,9 +242,13 @@ export function bossPose(b, hx, t, id) {
     }
     case 'fan':
       if (bt < 0.55) {
+        // The encore ('again') starts from the open arms of the first fan and swings
+        // them straight back for the next one: no snap back to a standing pose.
+        const again = b.variant === 'again';
         const w = smooth(clamp(bt / 0.35));
-        base(p, bt1, 0.4 * w, -0.4 * w, -1.4 * w + charge, -1.4 * w - charge);
-        p.armSpread = 0.6 * w;
+        const arms = mix(again ? 1.4 : 0, -1.4, w);
+        base(p, bt1, 0.4 * w, -0.4 * w, arms + charge * w, arms - charge * w);
+        p.armSpread = mix(again ? 1.1 : 0, 0.6, w);
         p.lean = -0.15 * w;
         p.squash = 0.07 * w;
         p.head = glance;
@@ -251,6 +265,21 @@ export function bossPose(b, hx, t, id) {
       }
       break;
     case 'rackDrop': {
+      if (b.variant === 'tracking') {
+        // Supervision: the pointing arm stays on the hero; on each new rack a crisp
+        // tap on the tablet, eyes down to it, then back up over the glasses at him.
+        const w = smooth(clamp(bt / 0.25));
+        const since = bt % TRACK_BEAT;
+        const tap = bt < TRACK_BEAT * 3 ? Math.exp(-since * 9) : 0;
+        base(p, bt1, 0.18 * w, -0.18 * w, (1.45 - tap * 0.1) * w, (1.0 + tap * 0.18) * w);
+        p.armSpread = (0.04 + tap * 0.08) * w;
+        p.head = mix(glance - 0.06, 0.3, tap) * w;
+        p.gaze = mix(0.7, -0.4, tap) * w;
+        p.lean = 0.04 + tap * 0.05;
+        p.bob = breath * 0.15 - tap * 0.3;
+        turn = 0.75;
+        break;
+      }
       // Precise: tablet held out, the other hand points at the racks and lowers them
       // one notch at a time (from shoulder height down: no raised hand).
       const w = smooth(clamp(bt / 0.3));
@@ -265,6 +294,26 @@ export function bossPose(b, hx, t, id) {
       break;
     }
     case 'cables': {
+      if (b.variant === 'maintenance') {
+        // Maintenance window: both hands gather at the chest, then open wide and flat
+        // over the whole floor (everything goes live but one window); again for the
+        // second window. Symmetric and at waist height: nothing like a wave.
+        const w = smooth(clamp(bt / 0.3));
+        const k = bt < SWAP ? bt : bt - SWAP;
+        const open = smooth(clamp((k - 0.15) / 0.45));
+        const gather = bt >= SWAP ? 1 - smooth(clamp(k / 0.15)) : 0;
+        const o = Math.max(open, gather);
+        base(p, bt1, 0.24 * w, -0.24 * w, (1.0 + 0.2 * o) * w, (1.0 + 0.12 * o) * w);
+        p.armSpread = mix(-0.35, 0.8, o) * w;
+        p.head = mix(0.22, glance - 0.08, o);
+        p.gaze = mix(-0.3, 0.4, o);
+        p.lean = mix(0.06, -0.04, o);
+        p.squash = 0.04 * (1 - o) * w;
+        p.bob = breath * 0.15 + o * 0.25;
+        p.hem = 0.15 * o;
+        turn = 0.5;
+        break;
+      }
       // Routes the current from the tablet: steady stance, a pointing hand, crisp taps.
       const w = smooth(clamp(bt / 0.3));
       const tap = Math.max(0, Math.sin(t * 11)) ** 3;
@@ -284,27 +333,34 @@ export function bossPose(b, hx, t, id) {
       break;
     }
     case 'teleport': {
+      // Failover, calm and precise: he stands tall, one hand on his tablet, and the
+      // backup site takes over in a cool cyan glow. Feet on the floor, his own
+      // colours kept: an architect switching sites, never a ghost.
       const k = clamp(bt / 0.55);
-      base(p, bt1, 0, 0, 1.45, 1.45);
-      p.armSpread = 0.9 + k * 0.35;
-      p.head = -0.2;
-      p.squash = bt < 0.55 ? -0.1 * k : 0.12 * Math.max(0, 1 - (bt - 0.55) / 0.2);
-      p.bob = bt < 0.55 ? k * 1.5 : 0;
-      p.hem = bt < 0.55 ? 0.5 * k : 0;
+      const tap = Math.max(0, Math.sin(t * 11)) ** 3;
+      base(p, bt1, 0.08, -0.08, 0.3, 1.0 + tap * 0.1);
+      p.armSpread = 0.15;
+      p.head = -0.12;
+      p.squash = bt < 0.55 ? -0.04 * k : 0.06 * Math.max(0, 1 - (bt - 0.55) / 0.2);
+      p.bob = bt < 0.55 ? 0.12 * k : 0;
+      p.mood = 'focus';
       if (bt < 0.55) {
-        TINT[0] = 1 + bt * 2;
-        TINT[1] = 1 + bt * 2.4;
-        TINT[2] = 1 + bt * 3;
+        TINT[0] = 1 + k * 0.25;
+        TINT[1] = 1 + k * 0.5;
+        TINT[2] = 1 + k * 0.75;
         tint = TINT;
       }
-      turn = 0.5 + bt * 4;
+      turn = 0.6;
       break;
     }
     case 'leap': {
       if (bt < 0.5) {
-        // Deep crouch, arms swung back: the slam is coming.
+        // Deep crouch, arms swung back: the slam is coming. The second leap of a
+        // double ('again') sinks straight on from the first landing's crouch.
+        const from = b.variant === 'again' ? 0.3 : 0;
         const w = smooth(clamp(bt / 0.3));
-        base(p, bt1, 1.1 * w, 1.1 * w, -0.8 * w + charge, -0.8 * w - charge);
+        const legs = mix(from, 1.1, w);
+        base(p, bt1, legs, legs, -0.8 * w + charge, -0.8 * w - charge);
         p.squash = 0.2 * w;
         p.lean = 0.35 * w;
         p.head = glance - 0.2 * w;
@@ -319,7 +375,8 @@ export function bossPose(b, hx, t, id) {
         p.squash = k > 0.95 ? 0.18 : k < 0.15 ? -0.1 : -0.04;
         p.lean = 0.1 - tuck * 0.15;
         p.hem = k < 0.5 ? 0.2 : 0.7 * k;
-        p.mood = 'effort';
+        // The crowd asked for this one: he enjoys it.
+        p.mood = b.variant === 'again' ? 'happy' : 'effort';
       } else {
         // Landing: squash and the arms follow through down.
         const k = clamp((bt - 1.1) / 0.4);
@@ -350,14 +407,27 @@ export function bossPose(b, hx, t, id) {
       p.hem = Math.abs(sw) * 0.15;
       break;
     }
-    case 'dash':
+    case 'dash': {
+      const back = b.variant === 'back';
+      const running = bt >= 0.85 && (bt < 0.95 || Math.abs(b.vx ?? 0) > 0.01);
+      if (running || bt < 0.85) ARRIVED.delete(b);
       if (bt < 0.85) {
-        const w = smooth(clamp(bt / 0.4));
+        // Lean before the run. The return leg ('back') turns round from where he
+        // pulled up at the end of the first run, then leans the other way.
+        const w = smooth(clamp(bt / (back ? 0.3 : 0.4)));
         base(p, bt1, 0.8 * w, -0.6 * w, -0.9 * w + charge, 0.9 * w - charge);
+        if (back) {
+          const k = 1 - w;
+          p.armL = mix(p.armL, 0.6, k);
+          p.armR = mix(p.armR, 0.6, k);
+          p.armSpread = 0.7 * k;
+          const pivot = smooth(clamp(bt / 0.3));
+          turn = mix(side * (b.dir ?? 1) * 0.6, 1, pivot);
+        }
         p.lean = 0.45 * w;
         p.squash = 0.08 * w;
         p.head = -0.15 * w;
-      } else {
+      } else if (running) {
         const ph = t * 22;
         const s = Math.sin(ph);
         base(
@@ -373,8 +443,33 @@ export function bossPose(b, hx, t, id) {
         p.head = -0.2 + Math.cos(ph * 2) * 0.03;
         p.hem = 0.7 + Math.sin(ph * 2) * 0.1;
         p.mood = 'effort';
+      } else {
+        // Pulled up at the far side: a braking skid, then he straightens up and tugs
+        // both jacket fronts straight, chin up, eyes back on the hero (no running on
+        // the spot, no bow, no salute).
+        let at = ARRIVED.get(b);
+        if (at === undefined || at > bt) ARRIVED.set(b, (at = bt));
+        const k = clamp((bt - at) / 0.35);
+        const e = backOut(k);
+        const brake = 1 - smooth(k);
+        const g = smooth(clamp((bt - at - 0.25) / 0.3));
+        const tug =
+          Math.max(0, Math.sin((bt - at - 0.3) * 9)) *
+          g *
+          (1 - smooth(clamp((bt - at - 1.1) / 0.3)));
+        base(p, bt1, mix(0.7, 0.12, e), mix(-0.5, -0.12, e), mix(-0.6, 0.45, e), mix(0.6, 0.45, e));
+        p.armSpread = mix(0.3, -0.3, g);
+        p.lean = mix(-0.3, -0.05, e) + settle(bt - at) * 0.06;
+        p.squash = 0.1 * brake;
+        p.head = mix(0.05, -0.15, smooth(k));
+        p.gaze = 0.3 * g;
+        p.hem = -0.5 * brake + 0.1 + tug * 0.15;
+        p.bob = breath * 0.3 + tug * 0.4;
+        p.mood = k < 0.4 ? 'effort' : 'happy';
+        turn = mix(1, side * (b.dir ?? 1) * 0.6, smooth(k));
       }
       break;
+    }
     case 'zones': {
       // Presents the stage like a showman: one arm out level, sweeping slowly over
       // the danger spots, the other open; chin up.
@@ -473,11 +568,12 @@ export function bossPose(b, hx, t, id) {
         p.bob = breath * 0.2 + Math.sin(Math.PI * clamp(bt / 0.4)) * 0.8;
       }
       p.mood = 'happy';
-      turn = 0.3;
+      // Faces the camera, turned a little towards the hero.
+      turn = 0.3 * side;
       break;
     }
     case 'sign':
-      // Signs the envelope, then offers a handshake with a polite bow.
+      // Signs the envelope, then offers a handshake with a satisfied nod (no bow).
       if (bt < 1.2) {
         base(p, bt1, 0, 0, 0.9, 1.2 + Math.sin(t * 16) * 0.12);
         p.head = 0.4 + Math.sin(t * 16) * 0.02;
@@ -487,7 +583,7 @@ export function bossPose(b, hx, t, id) {
         p.mood = 'focus';
       } else {
         const k = clamp((bt - 1.2) / 0.5);
-        const bow = Math.sin(Math.PI * k) * (grand ? 0.24 : 0.14);
+        const nod = Math.sin(Math.PI * k) * (grand ? 0.16 : 0.12);
         base(
           p,
           bt1,
@@ -497,12 +593,14 @@ export function bossPose(b, hx, t, id) {
           mix(1.2, 1.4, smooth(k)) + Math.sin(t * 5) * 0.06 * k,
         );
         p.armSpread = grand ? 0.3 * k : 0;
-        p.head = -0.05 + bow;
-        p.lean = bow;
+        p.head = -0.05 + nod;
+        p.lean = 0.04;
         p.bob = Math.sin(t * 2) * 0.3;
         p.mood = 'happy';
       }
-      turn = bt < 1.2 ? 0.4 : 0.8;
+      // Signs facing his desk side (where the pen sparkles), then turns to the hero to
+      // hand it over and shake on it.
+      turn = bt < 1.2 ? 0.4 : mix(0.4, 0.8 * side, smooth(clamp((bt - 1.2) / 0.35)));
       break;
     default:
       // Waiting: each in character (see bossIdle()).
@@ -548,9 +646,9 @@ function hitPose(p, bt, t, grand) {
       mix(0.45, 0.45, after) - w * 0.2,
     );
     p.armSpread = mix(1.4, -0.35, after);
-    p.lean = -0.4 * jolt + w * 0.1 - 0.04 * after;
+    p.lean = -0.32 * jolt + w * 0.1 - 0.04 * after;
     p.squash = 0.09 * jolt + w * 0.05;
-    p.head = -0.3 * jolt + w * 0.15 - 0.15 * after + Math.max(0, Math.sin(t * 13)) * 0.04 * after;
+    p.head = -0.22 * jolt + w * 0.15 - 0.15 * after + Math.max(0, Math.sin(t * 13)) * 0.04 * after;
     p.bob = Math.max(0, Math.sin(t * 13)) * 0.4 * after;
     p.hem = 0.45 * jolt + w * 0.2;
     p.mood = bt < 0.22 ? 'ouch' : 'happy';
@@ -565,9 +663,9 @@ function hitPose(p, bt, t, grand) {
       mix(0.6, 0.8, after) - w * 0.12,
     );
     p.armSpread = mix(-0.45, -0.1, after);
-    p.lean = -0.28 * jolt + w * 0.08;
+    p.lean = -0.22 * jolt + w * 0.08;
     p.squash = 0.06 * jolt + w * 0.04;
-    p.head = -0.25 * jolt + w * 0.12 + nod * 0.16;
+    p.head = -0.18 * jolt + w * 0.12 + nod * 0.16;
     p.gaze = nod * 0.6;
     p.hem = 0.25 * jolt;
     p.mood = bt < 0.22 ? 'ouch' : 'focus';
@@ -685,11 +783,19 @@ function airPose(p, vy, jump, t, kev) {
  * @returns {Required<Pose>}
  */
 export function heroPose(sim, t, still) {
+  cheering = false;
   const p = heroBody(sim, t, still);
   const h = sim.hero;
-  if (h.state === 'hang' || h.state === 'climb' || sim.won) return p;
+  if (h.state === 'hang' || h.state === 'climb' || sim.won || cheering) return p;
   return lowArms(p);
 }
+
+/** Set by heroBody() when both arms go up in a cheer (allowed above the shoulders). */
+let cheering = false;
+
+/** The level boss, while there is a duel or a signing to react to. @param {Sim} sim */
+const duelBoss = (sim) =>
+  sim.bossActive || sim.bossDone ? sim.things.find((k) => k.kind === 'boss') : undefined;
 
 /** @param {Sim} sim @param {number} t @param {number} still @returns {Required<Pose>} */
 function heroBody(sim, t, still) {
@@ -957,11 +1063,101 @@ function heroBody(sim, t, still) {
     p.hair = -m * 2.5;
     p.hem = -m * 3;
   }
+  const boss = duelBoss(sim);
+  if (boss && (boss.state === 'convinced' || (boss.state === 'sign' && (boss.t ?? 0) < 6))) {
+    const dx = boss.x - (h.x + 0.3);
+    cheering = signingPose(p, t, boss, Math.sign(dx) === h.facing && Math.abs(dx) < 4.5, kev);
+    return p;
+  }
+  // Facing a director: on guard, light on the feet (see duelPose()).
+  if (boss && sim.bossActive && !sim.bossDone && still > 0.5) {
+    duelPose(p, t, still, boss, kev);
+    return p;
+  }
   // Waiting around, each in character: Kévin checks his watch (the planning!),
   // straightens his jacket and taps his foot; Charline checks her phone (a client!),
   // looks up thinking, and stretches her back (arms low: no gesture near the face).
   if (still > 4 && !(sim.bossActive && !sim.bossDone)) heroIdle(p, t, (still - 4) % 7, kev);
   return p;
+}
+
+/**
+ * The director is won over, and the hero shares it: a cheer with both arms up the
+ * moment he is convinced, then hands together watching him sign, then the hand held
+ * out for his handshake (or applause, when not facing him), all smiles. Layered on
+ * the standing pose `p`. Returns whether the arms are up in the cheer.
+ * @param {Required<Pose>} p @param {number} t @param {Thing} b
+ * @param {boolean} facing Whether the hero faces the director, near enough to shake hands.
+ * @param {boolean} kev
+ */
+function signingPose(p, t, b, facing, kev) {
+  const bt = b.t ?? 0;
+  p.mood = 'happy';
+  if (b.state === 'convinced') {
+    // Both arms up in a V, a hop or two, then they come down.
+    const up = backOut(clamp(bt / 0.25)) * (1 - smooth(clamp((bt - 0.95) / 0.4)));
+    const hop = Math.abs(Math.sin(bt * (kev ? 7 : 8.5))) * up;
+    // Nearly straight up and wide open, so both fists read from the side: a cheer.
+    p.armL = mix(p.armL, kev ? 2.85 : 2.9, up);
+    p.armR = p.armL;
+    p.armSpread = mix(p.armSpread, kev ? -0.5 : -0.58, up);
+    p.bob += hop * (kev ? 1.5 : 2.2);
+    p.head = -0.18 * up;
+    p.squash = (1 - hop) ** 4 * 0.06 * up - hop * 0.03;
+    p.hem = 0.3 * hop;
+    p.hair = 0.2 * hop;
+    return up > 0.05;
+  }
+  if (bt < 1.2) {
+    // Hands together in front, a nod down towards the pen.
+    const k = smooth(clamp(bt / 0.3));
+    p.armL = mix(p.armL, 0.55, k);
+    p.armR = mix(p.armR, 0.55, k);
+    p.armSpread = mix(p.armSpread, -0.32, k);
+    p.head = 0.12 * k;
+    p.gaze = -0.3 * k;
+    p.lean = 0.03;
+    return false;
+  }
+  const k = smooth(clamp((bt - 1.25) / 0.3)) * (1 - smooth(clamp((bt - 3.4) / 0.5)));
+  if (facing) {
+    // Takes the handshake: one hand out at chest height, a nod, a happy bounce.
+    p.armR = mix(p.armR, 1.3 + Math.sin(t * 5) * 0.06 * k, k);
+    p.armL = mix(p.armL, 0.15, k);
+    p.head = 0.1 * Math.sin(Math.PI * clamp((bt - 1.3) / 0.6));
+  } else {
+    // Applause: both hands meet in front of the chest.
+    const clap = Math.abs(Math.sin(t * 13));
+    p.armL = mix(p.armL, 1.15, k);
+    p.armR = p.armL;
+    p.armSpread = mix(p.armSpread, -0.45 + clap * 0.22, k);
+    p.head = -0.08 * k;
+  }
+  p.bob += Math.abs(Math.sin(t * 6)) * 0.4 * k;
+  return false;
+}
+
+/**
+ * Standing still in a duel: on guard, weight on the balls of the feet with a light
+ * bounce, hands ready, eyes on the director. Focused while he attacks; a confident
+ * grin when he stops to consult, the opening to land a CR.
+ * @param {Required<Pose>} p @param {number} t @param {number} still @param {Thing} b
+ * @param {boolean} kev
+ */
+function duelPose(p, t, still, b, kev) {
+  const k = smooth(clamp((still - 0.5) / 0.4));
+  const bounce = Math.abs(Math.sin(t * (kev ? 4.2 : 5.2)));
+  p.legL = mix(p.legL, kev ? 0.22 : 0.16, k);
+  p.legR = mix(p.legR, kev ? -0.2 : -0.14, k);
+  p.armL = mix(p.armL, 0.4, k);
+  p.armR = mix(p.armR, 0.5, k);
+  p.armSpread = mix(p.armSpread, kev ? 0.16 : 0.1, k);
+  p.lean = mix(p.lean, 0.07, k);
+  p.bob += bounce * (kev ? 0.35 : 0.55) * k;
+  p.squash += (1 - bounce) ** 4 * 0.02 * k;
+  p.head = mix(p.head, -0.04, k);
+  const opening = b.state === 'consult' || b.state === 'hit';
+  if (k > 0.5) p.mood = opening ? 'happy' : b.state === 'intro' ? 'neutral' : 'focus';
 }
 
 /**

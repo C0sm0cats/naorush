@@ -17,7 +17,8 @@ const field = (id) => /** @type {HTMLInputElement} */ ($(id));
 /** The system asks for less motion: no shake, flashes or camera glides by default. */
 export const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-export const prefs = {
+/** The defaults, before the save: a damaged entry falls back to them. */
+const DEFAULTS = {
   shake: !reducedMotion,
   flash: !reducedMotion,
   contrast: matchMedia('(prefers-contrast: more)').matches,
@@ -30,11 +31,30 @@ export const prefs = {
   assist: false,
   pad: 'm',
   speed: 1,
-  ...load(PREFS_KEY, {}),
 };
 
-// A damaged save must never freeze the game.
-if (![1, 0.8, 0.65].includes(prefs.speed)) prefs.speed = 1;
+/** Allowed values of the settings that are not on/off switches. */
+const CHOICES = { pad: ['s', 'm', 'l'], speed: [1, 0.8, 0.65] };
+
+/**
+ * The saved preferences over the defaults, keeping only well-formed values: a damaged
+ * save must never freeze the game (an unknown speed) nor blank a setting.
+ * @param {Record<string, unknown>} saved
+ * @returns {typeof DEFAULTS}
+ */
+export function readPrefs(saved) {
+  const out = { ...DEFAULTS };
+  for (const [k, v] of Object.entries(saved)) {
+    if (!(k in DEFAULTS)) continue;
+    const key = /** @type {keyof typeof DEFAULTS} */ (k);
+    const allowed = /** @type {Record<string, unknown[]>} */ (CHOICES)[key];
+    if (allowed ? allowed.includes(v) : typeof v === typeof DEFAULTS[key])
+      Object.assign(out, { [key]: v });
+  }
+  return out;
+}
+
+export const prefs = readPrefs(load(PREFS_KEY, {}));
 
 /** Applies the preferences that live in the page (contrast, pad size). */
 export function applyPrefs() {
@@ -199,19 +219,31 @@ export const EVENT_CAPTIONS = /** @type {Record<string, string>} */ ({
   zoneWarn: 'Projecteurs qui s’allument',
   dash: 'Pas de course : la tournée arrive',
   door: 'Porte qui s’ouvre',
+  fan: 'Slides KPI en éventail',
+  slam: 'Onde de choc au sol',
+  teleport: 'Le directeur bascule de côté',
+  consult: 'Le directeur consulte PRIMO',
+  incoming: 'Projectile qui arrive',
+});
+/** Captions of an event with a cause (`type:cause`), over the type's own. */
+export const CAUSE_CAPTIONS = /** @type {Record<string, string>} */ ({
+  'telegraph:tracking': 'La supervision te suit',
+  'telegraph:encore': 'Le public en redemande',
+  'cableWarn:maintenance': 'Maintenance : sol sous tension',
 });
 /** How far (tiles) a warning's source thing can be from the event. */
 const SOURCE_RANGE = 2.5;
 
 /**
  * The caption for a game event, or '' when its sound is not one that warns.
- * @param {{type: string, x: number, y: number}} e
+ * @param {{type: string, x: number, y: number, cause?: string}} e
  * @param {ReadonlyArray<{kind: string, x: number, y: number, alive?: boolean}>} things
  * @param {number} heroX Hero centre: the arrow points from the hero to the sound.
  */
 export function captionFor(e, things, heroX) {
-  let text = EVENT_CAPTIONS[e.type] ?? '';
-  if (e.type === 'telegraph') {
+  const special = e.cause ? CAUSE_CAPTIONS[`${e.type}:${e.cause}`] : undefined;
+  let text = special ?? EVENT_CAPTIONS[e.type] ?? '';
+  if (e.type === 'telegraph' && !special) {
     let best = SOURCE_RANGE;
     text = 'Alerte';
     for (const t of things) {
@@ -235,7 +267,7 @@ const CAPTION_LINES = 3;
 /**
  * Shows the caption of a game event (call it with every event, next to its sound effect).
  * Does nothing unless the player turned captions on.
- * @param {{type: string, x: number, y: number}} e
+ * @param {{type: string, x: number, y: number, cause?: string}} e
  * @param {{things: ReadonlyArray<{kind: string, x: number, y: number, alive?: boolean}>, hero: {x: number}}} sim
  */
 export function caption(e, sim) {

@@ -34,6 +34,9 @@ const C = {
   sun: '#ffd166',
   paper: '#fffaf0',
 };
+/** Mint and teal: the HR posters' own colours, unused elsewhere. */
+const MINT = '#c9f5e4';
+const TEAL = '#2fbf9f';
 const FONT = 'system-ui, "Segoe UI", Roboto, sans-serif';
 const TAU = Math.PI * 2;
 const SKIN = ['#f6d3b3', '#e0a57a', '#b97a52', '#8a5536', '#5e3a26'];
@@ -2576,88 +2579,103 @@ const artCopil = {
   },
 };
 
-/** Heart-shaped curve point. @param {number} t */
-function heartCurve(t) {
-  const s = Math.sin(t);
-  return [
-    16 * s * s * s,
-    -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)),
-  ];
-}
-
 /** @type {Art} */
 const artCarpool = {
   w: 620,
   h: 460,
   draw(ctx) {
-    const cx = 310;
-    const cy = 190;
-    const k = 14;
-    /** @param {number} t */
-    const pt = (t) => {
-      const [x, y] = heartCurve(t);
-      return [cx + x * k, cy + y * k];
-    };
-    const route = () => {
-      ctx.beginPath();
-      for (let i = 0; i <= 120; i++) {
-        const [x, y] = pt((i / 120) * TAU);
-        if (i) ctx.lineTo(x, y);
-        else ctx.moveTo(x, y);
-      }
-      ctx.closePath();
-    };
-    route();
-    ctx.fillStyle = mix(C.lime, C.paper, 0.35);
+    // Car park lane: dark asphalt, a dashed yellow line, the B2 pillar behind.
+    box(ctx, 0, 372, 620, 88, 0, mix(C.navy, C.blue, 0.25));
+    path(ctx, [20, 420, 600, 420], 8, C.sun, [34, 26]);
+    box(ctx, 478, 36, 112, 330, 14, mix(C.paper, C.sky, 0.25));
+    box(ctx, 478, 36, 112, 46, [14, 14, 0, 0], C.sun);
+    for (let i = 0; i < 4; i++) box(ctx, 478 + i * 28, 36, 14, 46, 0, C.navy);
+    box(ctx, 494, 108, 80, 80, 16, C.blue);
+    text(ctx, 'P', 534, 174, 70, C.paper, { align: 'center' });
+    text(ctx, 'B2', 534, 248, 56, C.navy, { align: 'center' });
+    // Speed lines: the car arrives, both seats taken.
+    for (const [y, w] of [
+      [214, 70],
+      [262, 104],
+      [312, 60],
+    ])
+      path(ctx, [14, y, 14 + w, y], 10, C.paper);
+    floorShadow(ctx, 300, 392, 250, 22, 0.35);
+    // Body: a round, friendly hatchback.
+    const body = C.pink;
+    ctx.beginPath();
+    ctx.moveTo(90, 360);
+    ctx.lineTo(80, 300);
+    ctx.quadraticCurveTo(84, 250, 150, 240);
+    ctx.lineTo(196, 150);
+    ctx.quadraticCurveTo(208, 128, 236, 128);
+    ctx.lineTo(392, 128);
+    ctx.quadraticCurveTo(422, 128, 440, 152);
+    ctx.lineTo(498, 236);
+    ctx.quadraticCurveTo(548, 246, 552, 296);
+    ctx.lineTo(548, 360);
+    ctx.closePath();
+    ctx.fillStyle = body;
     ctx.fill();
-    for (const [w, c, dash] of /** @type {[number, string, number[]][]} */ ([
-      [62, C.paper, []],
-      [48, C.navy, []],
-      [5, C.sun, [16, 16]],
-    ])) {
-      route();
-      ctx.lineWidth = w;
-      ctx.lineJoin = 'round';
-      ctx.strokeStyle = c;
-      ctx.setLineDash(dash);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-    // Parking sign in the middle of the heart.
-    box(ctx, cx - 6, cy + 30, 12, 110, 4, C.navy);
-    box(ctx, cx - 62, cy - 70, 124, 124, 24, C.paper);
-    box(ctx, cx - 54, cy - 62, 108, 108, 18, C.blue);
-    text(ctx, 'P', cx, cy + 16, 92, C.paper, { align: 'center' });
-    box(ctx, cx - 40, cy + 64, 80, 40, 12, C.sun);
-    text(ctx, 'B2', cx, cy + 96, 30, C.navy, { align: 'center' });
-    // Two cars sharing the route.
-    /** @param {number} t @param {string} body */
-    const car = (t, body) => {
-      const [x0, y0] = pt(t);
-      const [x1, y1] = pt(t + 0.01);
-      at(ctx, x0, y0, Math.atan2(y1 - y0, x1 - x0), () => {
-        for (const [wx, wy] of [
-          [-20, -22],
-          [20, -22],
-          [-20, 16],
-          [20, 16],
-        ])
-          box(ctx, wx - 9, wy, 18, 6, 3, C.navy);
-        box(ctx, -38, -20, 76, 40, 14, body);
-        box(ctx, 6, -15, 16, 30, 6, mix(C.sky, C.navy, 0.2));
-        box(ctx, -26, -15, 12, 30, 5, mix(C.sky, C.navy, 0.2));
-        box(ctx, -12, -15, 16, 30, 4, mix(body, '#ffffff', 0.3));
-        circle(ctx, 34, -12, 4, C.sun);
-        circle(ctx, 34, 12, 4, C.sun);
-      });
+    // Lower sill and bumpers.
+    box(ctx, 76, 330, 480, 34, 16, mix(body, C.navy, 0.35));
+    box(ctx, 66, 300, 40, 30, 10, C.paper);
+    box(ctx, 526, 296, 34, 30, 10, C.sun);
+    // Windows with the two colleagues, all smiles.
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(176, 236);
+    ctx.lineTo(214, 160);
+    ctx.quadraticCurveTo(220, 148, 236, 148);
+    ctx.lineTo(306, 148);
+    ctx.lineTo(306, 236);
+    ctx.closePath();
+    ctx.moveTo(322, 148);
+    ctx.lineTo(392, 148);
+    ctx.quadraticCurveTo(412, 148, 424, 166);
+    ctx.lineTo(470, 236);
+    ctx.lineTo(322, 236);
+    ctx.closePath();
+    ctx.fillStyle = mix(C.sky, '#ffffff', 0.35);
+    ctx.fill();
+    ctx.clip();
+    /** @param {number} x @param {number} k @param {string} shirt */
+    const rider = (x, k, shirt) => {
+      box(ctx, x - 46, 214, 92, 60, 30, shirt);
+      circle(ctx, x, 186, 34, SKIN[k]);
+      ctx.beginPath();
+      ctx.arc(x, 180, 36, Math.PI * 1.05, Math.PI * 1.95);
+      ctx.closePath();
+      ctx.fillStyle = HAIR[k];
+      ctx.fill();
+      circle(ctx, x - 12, 188, 4.5, C.navy);
+      circle(ctx, x + 12, 188, 4.5, C.navy);
+      arc(ctx, x, 196, 12, 4.5, C.navy, 0.15 * Math.PI, 0.85 * Math.PI);
+      circle(ctx, x - 22, 200, 6, alpha(C.pink, 0.5));
+      circle(ctx, x + 22, 200, 6, alpha(C.pink, 0.5));
     };
-    car(4.75, C.pink);
-    car(1.2, C.sun);
-    // Little hearts floating up.
-    heart(ctx, 560, 70, 20, C.pink);
-    heart(ctx, 60, 60, 14, C.pink);
-    heart(ctx, 588, 140, 10, mix(C.pink, '#ffffff', 0.4));
-    spark(ctx, 70, 400, 16, C.paper);
+    rider(256, 1, C.blue);
+    rider(384, 3, C.sun);
+    // Glass glint.
+    ctx.globalAlpha = 0.35;
+    poly(ctx, [300, 148, 330, 148, 290, 236, 260, 236], '#ffffff');
+    ctx.restore();
+    box(ctx, 306, 140, 16, 100, 4, mix(body, C.navy, 0.2));
+    // Door line and handle.
+    path(ctx, [314, 244, 314, 330], 4, mix(body, C.navy, 0.3));
+    box(ctx, 334, 262, 34, 10, 5, mix(body, '#ffffff', 0.45));
+    box(ctx, 190, 262, 34, 10, 5, mix(body, '#ffffff', 0.45));
+    // Wheels.
+    for (const x of [170, 452]) {
+      circle(ctx, x, 360, 50, C.navy);
+      circle(ctx, x, 360, 24, mix(C.paper, C.sky, 0.3));
+      circle(ctx, x, 360, 8, C.navy);
+    }
+    // One heart above the roof: two colleagues, one car.
+    heart(ctx, 318, 76, 42, C.pink);
+    heart(ctx, 318, 70, 20, mix(C.pink, '#ffffff', 0.45));
+    spark(ctx, 228, 70, 16, C.paper);
+    spark(ctx, 410, 52, 12, C.paper);
   },
 };
 
@@ -2666,66 +2684,51 @@ const artExpenses = {
   w: 620,
   h: 440,
   draw(ctx) {
-    // Trail: receipt → fold → plane.
+    // Receipt, on the left, tilted: the month's expenses, totalled and ticked.
+    at(ctx, 150, 214, -0.12, () => {
+      box(ctx, -110, -196, 220, 380, 8, 'rgba(10,14,30,0.25)');
+      torn(ctx, -116, -204, 104, 160, 7);
+      ctx.fillStyle = C.paper;
+      ctx.fill();
+      text(ctx, 'FRAIS', -6, -150, 44, C.navy, { align: 'center', spacing: 3 });
+      for (let i = 0; i < 3; i++) {
+        box(ctx, -88, -112 + i * 42, 96 - (i % 2) * 30, 14, 7, mix(C.navy, C.paper, 0.6));
+        box(ctx, 34, -112 + i * 42, 50, 14, 7, mix(C.navy, C.paper, 0.45));
+      }
+      path(ctx, [-88, 26, 84, 26], 5, C.navy, [10, 10]);
+      text(ctx, '18,50 €', 84, 90, 52, C.blue, { align: 'right', maxW: 172 });
+      box(ctx, -88, 110, 92, 34, 17, C.lime);
+      check(ctx, -42, 127, 11, 6, C.navy);
+    });
+    // Dashed flight path from the receipt to the calendar.
     ctx.beginPath();
-    ctx.moveTo(190, 230);
-    ctx.bezierCurveTo(250, 340, 360, 330, 380, 240);
-    ctx.bezierCurveTo(400, 150, 430, 130, 480, 120);
-    ctx.setLineDash([12, 14]);
-    ctx.lineWidth = 6;
+    ctx.moveTo(250, 120);
+    ctx.bezierCurveTo(300, 40, 380, 30, 430, 70);
+    ctx.setLineDash([14, 14]);
+    ctx.lineWidth = 7;
     ctx.lineCap = 'round';
     ctx.strokeStyle = C.navy;
     ctx.stroke();
     ctx.setLineDash([]);
-    // Receipt.
-    at(ctx, 110, 220, -0.1, () => {
-      box(ctx, -86, -186, 172, 340, 6, mix(C.navy, C.lime, 0.4));
-      ctx.beginPath();
-      ctx.moveTo(-90, -190);
-      ctx.lineTo(90, -190);
-      ctx.lineTo(90, 170);
-      for (let i = 0; i < 6; i++) {
-        ctx.lineTo(90 - (i + 0.5) * 30, 188);
-        ctx.lineTo(90 - (i + 1) * 30, 170);
-      }
-      ctx.closePath();
-      ctx.fillStyle = C.paper;
-      ctx.fill();
-      text(ctx, 'FRAIS', 0, -142, 34, C.navy, { align: 'center', spacing: 2 });
-      for (let i = 0; i < 4; i++) {
-        box(ctx, -66, -110 + i * 34, 76 - (i % 2) * 24, 10, 5, mix(C.navy, C.paper, 0.6));
-        box(ctx, 30, -110 + i * 34, 36, 10, 5, mix(C.navy, C.paper, 0.45));
-      }
-      path(ctx, [-66, 40, 66, 40], 4, C.navy, [8, 8]);
-      text(ctx, '18,50 €', 66, 100, 38, C.blue, { align: 'right', maxW: 140 });
-      box(ctx, -66, 118, 70, 26, 13, C.lime);
-      check(ctx, -31, 131, 9, 5, C.navy);
+    at(ctx, 452, 84, 0.5, () => {
+      poly(ctx, [56, 0, -56, -38, -18, 4], C.paper);
+      poly(ctx, [56, 0, -18, 4, -40, 30], mix(C.paper, C.navy, 0.25));
     });
-    // Half-folded sheet.
-    at(ctx, 380, 300, 0.25, () => {
-      poly(ctx, [-50, 90, -50, -10, 0, -70, 50, -10, 50, 90], C.paper);
-      poly(ctx, [0, -70, -50, -10, -6, 10], mix(C.paper, C.sky, 0.35));
-      poly(ctx, [0, -70, 50, -10, 6, 10], mix(C.paper, C.navy, 0.15));
-      path(ctx, [0, -70, 0, 90], 3, mix(C.paper, C.navy, 0.3));
+    // The calendar, big: the 5th of the month, done.
+    at(ctx, 430, 282, 0.06, () => {
+      box(ctx, -132 + 8, -122 + 10, 264, 256, 30, 'rgba(10,14,30,0.25)');
+      box(ctx, -132, -122, 264, 256, 30, C.navy);
+      box(ctx, -120, -110, 240, 232, 22, '#ffffff');
+      box(ctx, -120, -110, 240, 60, [22, 22, 0, 0], C.pink);
+      text(ctx, 'AVANT LE', 0, -66, 30, '#ffffff', { align: 'center', spacing: 3 });
+      for (const x of [-64, 64]) box(ctx, x - 10, -142, 20, 50, 10, C.navy);
+      text(ctx, '5', 0, 104, 168, C.navy, { align: 'center' });
     });
-    // Paper plane.
-    at(ctx, 530, 110, -0.3, () => {
-      poly(ctx, [90, 0, -90, -60, -30, 6], C.paper);
-      poly(ctx, [90, 0, -30, 6, -64, 48], mix(C.paper, C.navy, 0.25));
-      poly(ctx, [90, 0, -30, 6, -40, 22], mix(C.paper, C.sky, 0.4));
-    });
-    // Calendar: the 5th, all good.
-    at(ctx, 540, 330, 0.08, () => {
-      box(ctx, -66, -60, 132, 130, 18, C.navy);
-      box(ctx, -60, -54, 120, 118, 14, '#ffffff');
-      box(ctx, -60, -54, 120, 32, [14, 14, 0, 0], C.pink);
-      for (const x of [-30, 30]) box(ctx, x - 5, -70, 10, 26, 5, C.navy);
-      text(ctx, '5', 0, 50, 72, C.navy, { align: 'center' });
-    });
-    circle(ctx, 598, 266, 26, C.lime);
-    check(ctx, 598, 268, 12, 7, C.navy);
-    spark(ctx, 300, 60, 20, C.paper);
-    spark(ctx, 440, 30, 12, C.navy);
+    circle(ctx, 548, 362, 46, C.lime);
+    arc(ctx, 548, 362, 46, 6, C.navy);
+    check(ctx, 548, 364, 20, 11, C.navy);
+    spark(ctx, 300, 380, 20, C.paper);
+    spark(ctx, 330, 190, 12, C.navy);
   },
 };
 
@@ -2950,48 +2953,49 @@ const artAdopt = {
   h: 420,
   draw(ctx) {
     const cx = 310;
-    // Handle, behind the little tools peeking out of the box.
-    arc(ctx, cx, 270, 150, 18, C.navy, Math.PI * 1.12, Math.PI * 1.88);
+    // Handle, behind the app tiles jumping out of the box.
+    arc(ctx, cx, 262, 170, 22, C.navy, Math.PI * 1.12, Math.PI * 1.88);
     /** @type {[number, number, number, string, number][]} */
     const icons = [
-      [150, 190, -0.25, C.sky, 96],
-      [255, 130, 0.1, C.lime, 104],
-      [370, 150, -0.08, C.sun, 100],
-      [470, 205, 0.28, C.paper, 92],
+      [138, 176, -0.25, C.sky, 128],
+      [262, 108, 0.1, C.lime, 140],
+      [392, 128, -0.08, C.sun, 134],
+      [500, 196, 0.28, C.paper, 118],
     ];
-    for (const [x, y, a, c, s] of icons) {
+    for (const [x, y, a, c, sz] of icons) {
       at(ctx, x, y, a, () => {
-        box(ctx, -s / 2, -s / 2 + 6, s, s, s * 0.24, mix(c, C.navy, 0.35));
-        box(ctx, -s / 2, -s / 2, s, s, s * 0.24, c);
-        appFace(ctx, 0, 0, s, C.navy);
+        box(ctx, -sz / 2, -sz / 2 + 8, sz, sz, sz * 0.24, mix(c, C.navy, 0.35));
+        box(ctx, -sz / 2, -sz / 2, sz, sz, sz * 0.24, c);
+        appFace(ctx, 0, 0, sz, C.navy);
       });
     }
+    // Hop lines over the middle tile.
+    for (const dx of [-30, 0, 30]) path(ctx, [262 + dx, 22, 262 + dx * 1.3, 4], 6, C.navy);
     // Body.
-    box(ctx, 90, 252, 440, 150, 30, mix(C.pink, C.navy, 0.35));
-    box(ctx, 90, 244, 440, 150, 30, C.pink);
-    box(ctx, 90, 244, 440, 36, [30, 30, 0, 0], mix(C.pink, '#ffffff', 0.3));
-    box(ctx, cx - 36, 262, 72, 52, 12, C.sun);
-    box(ctx, cx - 14, 276, 28, 24, 6, C.navy);
+    box(ctx, 60, 246, 500, 170, 34, mix(C.pink, C.navy, 0.35));
+    box(ctx, 60, 236, 500, 170, 34, C.pink);
+    box(ctx, 60, 236, 500, 42, [34, 34, 0, 0], mix(C.pink, '#ffffff', 0.3));
+    box(ctx, cx - 44, 256, 88, 62, 14, C.sun);
+    box(ctx, cx - 17, 272, 34, 30, 7, C.navy);
     // Wrench and hammer on the front.
-    at(ctx, 190, 340, -0.5, () => {
-      box(ctx, -8, -44, 16, 88, 8, C.paper);
-      circle(ctx, 0, -48, 20, C.paper);
-      box(ctx, -7, -72, 14, 26, 4, C.pink);
+    at(ctx, 170, 350, -0.5, () => {
+      box(ctx, -10, -50, 20, 100, 10, C.paper);
+      circle(ctx, 0, -54, 24, C.paper);
+      box(ctx, -8, -82, 16, 30, 5, C.pink);
     });
-    at(ctx, 430, 340, 0.5, () => {
-      box(ctx, -8, -34, 16, 84, 8, C.paper);
-      box(ctx, -30, -52, 60, 28, 8, C.paper);
+    at(ctx, 450, 350, 0.5, () => {
+      box(ctx, -10, -40, 20, 96, 10, C.paper);
+      box(ctx, -36, -60, 72, 32, 9, C.paper);
     });
-    // Adoption tag.
-    at(ctx, 90, 110, -0.2, () => {
-      box(ctx, -66, -26, 132, 52, 14, C.paper);
-      circle(ctx, -50, 0, 6, C.sky);
-      text(ctx, 'Adopté !', 8, 10, 30, C.navy, { align: 'center', maxW: 90 });
+    // Adoption tag, tied to the first tile.
+    path(ctx, [96, 120, 120, 150], 4, C.navy);
+    at(ctx, 80, 92, -0.2, () => {
+      box(ctx, -78, -30, 156, 60, 16, C.paper);
+      circle(ctx, -58, 0, 7, C.sky);
+      text(ctx, 'Adopté !', 10, 12, 36, C.navy, { align: 'center', maxW: 110 });
     });
-    heart(ctx, 560, 120, 24, C.pink);
-    heart(ctx, 40, 300, 16, C.sun);
-    spark(ctx, 560, 300, 24, C.sky);
-    spark(ctx, 330, 40, 18, C.paper);
+    heart(ctx, 590, 90, 26, C.pink);
+    spark(ctx, 600, 300, 22, C.sky);
   },
 };
 
@@ -3050,18 +3054,32 @@ const artAiHub = {
         box(ctx, x - 26, y + 6, 52, 16, 8, C.navy);
       }
     });
-    // Friendly robot at the centre.
-    glow(ctx, cx, cy, 170, C.sky, 0.5);
-    path(ctx, [cx, cy - 88, cx, cy - 118], 7, C.paper);
-    circle(ctx, cx, cy - 124, 16, C.pink);
-    box(ctx, cx - 112, cy - 24, 24, 60, 11, C.pink);
-    box(ctx, cx + 88, cy - 24, 24, 60, 11, C.pink);
-    box(ctx, cx - 92, cy - 88, 184, 162, 40, C.paper);
-    box(ctx, cx - 72, cy - 66, 144, 108, 26, C.navy);
-    arc(ctx, cx - 30, cy - 18, 16, 8, C.sky, Math.PI * 1.1, Math.PI * 1.9);
-    arc(ctx, cx + 30, cy - 18, 16, 8, C.sky, Math.PI * 1.1, Math.PI * 1.9);
-    arc(ctx, cx, cy, 16, 6, C.pink, 0.2 * Math.PI, 0.8 * Math.PI);
-    box(ctx, cx - 44, cy + 66, 88, 26, [0, 0, 12, 12], mix(C.paper, C.sky, 0.4));
+    // At the centre, the hub itself: a glowing « AI » chip (Gen AI has the robot).
+    glow(ctx, cx, cy, 175, C.sky, 0.55);
+    for (let k = -2; k <= 2; k++) {
+      for (const side of [-1, 1]) {
+        box(ctx, cx + k * 30 - 6, cy + side * 104 - 14, 12, 28, 4, C.paper);
+        box(ctx, cx + side * 104 - 14, cy + k * 30 - 6, 28, 12, 4, C.paper);
+      }
+    }
+    box(ctx, cx - 96, cy - 90, 192, 192, 30, mix(C.navy, '#000000', 0.3));
+    box(ctx, cx - 96, cy - 96, 192, 192, 30, C.paper);
+    box(
+      ctx,
+      cx - 76,
+      cy - 76,
+      152,
+      152,
+      22,
+      grad(ctx, cx - 76, cy - 76, cx + 76, cy + 76, [C.blue, C.navy]),
+    );
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    for (let k = 0; k < 4; k++)
+      path(ctx, [cx - 60, cy - 52 + k * 34, cx - 30, cy - 52 + k * 34], 4, C.sky);
+    ctx.restore();
+    text(ctx, 'AI', cx, cy + 30, 92, C.sky, { align: 'center' });
+    spark(ctx, cx + 50, cy - 46, 16, C.lime);
     spark(ctx, 40, 90, 22, C.lime);
     spark(ctx, 380, 590, 18, C.pink);
     spark(ctx, 60, 580, 14, C.sky);
@@ -3205,30 +3223,36 @@ const artConcert = {
     note(ctx, 90, 220, 1.1, GOLD);
     note(ctx, 560, 300, 0.9, C.sky);
     note(ctx, 470, 150, 0.8, GOLD);
-    // Golden ticket with its stub.
-    at(ctx, 120, 340, -0.14, () => {
-      const w = 236;
-      const h = 104;
-      box(ctx, -w / 2 + 6, -h / 2 + 8, w, h, 14, 'rgba(0,0,0,0.35)');
-      box(ctx, -w / 2, -h / 2, w, h, 14, GOLD);
-      const sx = w / 2 - 62;
-      path(ctx, [sx, -h / 2 + 10, sx, h / 2 - 10], 3, GOLD_DEEP, [2, 8]);
-      ctx.beginPath();
-      ctx.roundRect(-w / 2 + 14, -h / 2 + 10, sx - (-w / 2 + 14) - 10, h - 20, 8);
-      ctx.lineWidth = 2.5;
-      ctx.strokeStyle = GOLD_DEEP;
-      ctx.stroke();
-      text(ctx, 'Admission', -w / 2 + 14 + (sx + w / 2 - 24) / 2, -4, 28, PLUM, {
-        align: 'center',
-        maxW: sx + w / 2 - 44,
+    // Two golden tickets with their stubs: the pair hidden on the cabinets.
+    /** @param {number} x @param {number} y @param {number} a */
+    const ticket = (x, y, a) =>
+      at(ctx, x, y, a, () => {
+        const w = 236;
+        const h = 104;
+        box(ctx, -w / 2 + 6, -h / 2 + 8, w, h, 14, 'rgba(0,0,0,0.35)');
+        box(ctx, -w / 2, -h / 2, w, h, 14, GOLD);
+        const sx = w / 2 - 62;
+        path(ctx, [sx, -h / 2 + 10, sx, h / 2 - 10], 3, GOLD_DEEP, [2, 8]);
+        ctx.beginPath();
+        ctx.roundRect(-w / 2 + 14, -h / 2 + 10, sx - (-w / 2 + 14) - 10, h - 20, 8);
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = GOLD_DEEP;
+        ctx.stroke();
+        text(ctx, 'Admission', -w / 2 + 14 + (sx + w / 2 - 24) / 2, -4, 28, PLUM, {
+          align: 'center',
+          maxW: sx + w / 2 - 44,
+        });
+        text(ctx, '1 place', -w / 2 + 14 + (sx + w / 2 - 24) / 2, 30, 22, PLUM, {
+          weight: 700,
+          align: 'center',
+          maxW: sx + w / 2 - 44,
+        });
+        heart(ctx, sx + 31, -2, 15, C.pink);
       });
-      text(ctx, '1 place', -w / 2 + 14 + (sx + w / 2 - 24) / 2, 30, 22, PLUM, {
-        weight: 700,
-        align: 'center',
-        maxW: sx + w / 2 - 44,
-      });
-      heart(ctx, sx + 31, -2, 15, C.pink);
-    });
+    glow(ctx, 150, 300, 160, GOLD, 0.35);
+    ticket(176, 236, -0.3);
+    ticket(124, 350, -0.08);
+    spark(ctx, 238, 262, 14, C.paper);
   },
 };
 
@@ -3322,14 +3346,14 @@ const SPECS = {
     shape: 'portrait',
     kicker: 'Documents RH · Bulletins',
     lines: ['MyPeople', 'Doc'],
-    colors: [C.blue, C.pink],
+    colors: [C.navy, C.pink],
     shadow: '#ffffff',
     tagline: 'Zéro classeur, zéro poussière :\nvos papiers RH au chaud.',
-    bg: [mix(C.paper, C.sky, 0.3), mix(C.paper, C.blue, 0.22)],
-    ink: C.blue,
-    accent: C.blue,
-    tagBg: C.blue,
-    tagFg: C.paper,
+    bg: [MINT, mix(MINT, TEAL, 0.75)],
+    ink: C.navy,
+    accent: C.navy,
+    tagBg: C.navy,
+    tagFg: MINT,
     art: artPeopleDoc,
   },
   swile: {
@@ -3445,14 +3469,15 @@ const SPECS = {
     shape: 'portrait',
     kicker: 'Réseau France',
     lines: ['LET’S', 'CONNECT', 'FRANCE'],
-    colors: [C.navy, C.blue, C.pink],
+    colors: [C.paper, C.sky, C.pink],
+    shadow: '#0b1020',
     titleSize: 118,
     tagline: 'Plus proches, plus forts :\nle réseau, c’est nous.',
-    bg: C.paper,
-    ink: C.navy,
+    bg: [C.navy, mix(C.navy, C.blue, 0.85)],
+    ink: C.sky,
     accent: C.sky,
-    tagBg: C.navy,
-    tagFg: C.paper,
+    tagBg: C.sky,
+    tagFg: C.navy,
     art: artConnect,
   },
   'gen-ai': {
@@ -3637,11 +3662,11 @@ const SPECS = {
   covoiturage: {
     title: 'Parking B2 · Covoiturage',
     shape: 'portrait',
-    kicker: 'Parking B2',
+    kicker: 'Parking B2 · Places réservées',
     lines: ['COVOITURAGE'],
     colors: [C.navy],
     shadow: C.paper,
-    titleSize: 150,
+    titleSize: 170,
     tagline: 'Une place,\ndeux sourires.',
     bg: [mix(C.sky, C.paper, 0.4), C.sky],
     ink: C.navy,
@@ -3654,10 +3679,10 @@ const SPECS = {
     title: 'Déclaration des activités et des frais',
     shape: 'portrait',
     kicker: 'Chaque mois',
-    lines: ['Déclaration', 'des activités', 'et des frais'],
+    lines: ['DÉCLARATION', 'DES ACTIVITÉS', 'ET DES FRAIS'],
     colors: [C.navy, C.blue, C.navy],
-    shadow: mix(C.lime, '#ffffff', 0.5),
-    titleSize: 100,
+    shadow: mix(C.lime, '#ffffff', 0.55),
+    titleSize: 120,
     tagline: 'Avant le 5,\ntout va bien.',
     bg: [C.lime, mix(C.lime, C.sky, 0.55)],
     ink: C.navy,

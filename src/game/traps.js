@@ -257,6 +257,97 @@ export function stepDrawer(s, t) {
     hurt(s, s.hero, 'drawer', base);
 }
 
+/** A sprinkler's cycle (see PERIOD): it drips from DRIP, sprays from SPRAY to the end. */
+export const SPRINKLER = Object.freeze({ drip: 1.6, spray: 2.2 });
+
+/**
+ * IN1, wet floor: a puddle ('~' on the map, a yellow « Attention sol glissant » sign
+ * before it) or the floor under a sprinkler, which stays wet `after` seconds once it
+ * stops spraying. On it, the hero keeps `grip` of the usual acceleration and braking
+ * (and no extra bite when turning): the run carries on, a stop slides. Jumps are untouched.
+ * A sprinkler's puddle reaches `reach` either side of its head.
+ */
+export const WET = Object.freeze({ grip: 0.3, after: 1.5, reach: 0.5, slip: 2.5, margin: 3 });
+
+/**
+ * Is the floor under a wet stretch (x0 to x1, top at y) safe to slide on? Solid
+ * all along and for {@link WET}.margin tiles on each side (or up to a wall): no gap,
+ * no live cables, no loose slab. Water on any other floor drains away (no puddle).
+ * @param {Sim} s @param {number} x0 @param {number} x1 @param {number} y
+ */
+export function safeFloor(s, x0, x1, y) {
+  /** @param {number} c */
+  const sound = (c) =>
+    solid(s, c, y - 1) &&
+    tileAt(s, c, y - 1) !== TILE.LOOSE &&
+    tileAt(s, c, y - 1) !== TILE.HAZARD &&
+    tileAt(s, c, y) !== TILE.HAZARD;
+  const c0 = Math.floor(x0),
+    c1 = Math.ceil(x1) - 1;
+  for (let c = c0; c <= c1; c++) if (!sound(c)) return false;
+  for (const [edge, d] of [
+    [c0, -1],
+    [c1, 1],
+  ])
+    for (let k = 1; k <= WET.margin; k++) {
+      const c = edge + d * k;
+      if (solid(s, c, y)) break;
+      if (!sound(c)) return false;
+    }
+  return true;
+}
+
+/**
+ * Seconds since the floor under a sprinkler was last sprayed (0 while it sprays).
+ * Once the water is shut off (state 'dry'), the shut-off set `t.t` to it and it keeps counting.
+ * @param {Sim} s @param {Thing} t
+ */
+export function sinceSpray(s, t) {
+  if (t.state === 'dry') return t.t;
+  const k = phaseOf(s, t, PERIOD.sprinkler);
+  return k >= SPRINKLER.spray ? 0 : k;
+}
+
+/**
+ * Stretch of wet floor (from x0 to x1, top at y) that a thing leaves, if any: a
+ * puddle always, a sprinkler for {@link WET}.after seconds after each spray.
+ * @param {Sim} s @param {Thing} t
+ * @returns {{x0: number, x1: number, y: number} | null}
+ */
+export function wetSpan(s, t) {
+  if (t.kind === 'puddle') return { x0: t.x, x1: t.x + (t.w ?? 1), y: t.y };
+  if (t.kind !== 'sprinkler' || sinceSpray(s, t) >= WET.after) return null;
+  const x0 = t.x - WET.reach,
+    x1 = t.x + WET.reach,
+    y = t.y0 ?? 0;
+  return safeFloor(s, x0, x1, y) ? { x0, x1, y } : null;
+}
+
+/**
+ * The wet floor the hero stands on (feet on the ground, overlapping it by more than
+ * a toe), or null. Lifts are always dry.
+ * @param {Sim} s
+ * @returns {Thing | null}
+ */
+export function wetUnder(s) {
+  const h = s.hero;
+  if (h.state !== 'ground' || s.onLift) return null;
+  for (const t of s.things) {
+    if (t.kind !== 'puddle' && t.kind !== 'sprinkler') continue;
+    // Cheap test first: only a thing right under the feet is checked in full.
+    if (Math.abs(t.x - h.x) > (t.w ?? 1) + 1) continue;
+    const span = wetSpan(s, t);
+    if (
+      span &&
+      Math.abs(h.y - span.y) < 0.02 &&
+      h.x + HERO.w > span.x0 + 0.15 &&
+      h.x < span.x1 - 0.15
+    )
+      return t;
+  }
+  return null;
+}
+
 /**
  * Ceiling sprinkler: drips, then sprays down to the floor below.
  * y0 is the floor top, y1 the ceiling.
@@ -269,7 +360,7 @@ export function stepSprinkler(s, t) {
   t.y0 = floor;
   const k = phaseOf(s, t, PERIOD.sprinkler);
   const prev = t.state;
-  t.state = k < 1.6 ? 'off' : k < 2.2 ? 'drip' : 'on';
+  t.state = k < SPRINKLER.drip ? 'off' : k < SPRINKLER.spray ? 'drip' : 'on';
   if (t.state !== prev && t.state === 'drip') emit(s, 'telegraph', t.x, (t.y1 ?? t.y) - 0.3);
   if (t.state !== prev && t.state === 'on') emit(s, 'sprayOn', t.x, (t.y1 ?? t.y) - 0.3);
   if (t.state === 'on' && overlaps(s, t.x - 0.28, t.y0 ?? 0, t.x + 0.28, t.y1 ?? t.y))

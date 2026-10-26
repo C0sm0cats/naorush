@@ -41,18 +41,25 @@ const HEIGHT = { colleague: 1.75, intern: 1.5, vacuum: 0.18, visio: 1.6 };
 
 /**
  * Walks back and forth around `home` (or between walls when range is 0),
- * turning at walls (as tall as the walker) and floor edges.
- * @param {Sim} s @param {Thing} t @param {number} range
+ * turning at walls (as tall as the walker) and floor edges. Strolling (`careful`),
+ * a walker also turns back before a loose slab: the office knows which slabs are
+ * cracked, so no slab or trapdoor goes before the hero gets there (it takes a rush,
+ * a knock or a fall to put anyone on one).
+ * @param {Sim} s @param {Thing} t @param {number} range @param {boolean} [careful]
  */
-function patrol(s, t, range) {
+function patrol(s, t, range, careful = true) {
   const nx = t.x + t.vx * DT;
   const ahead = Math.floor(nx + Math.sign(t.vx) * 0.4);
   const top = Math.floor(t.y + (HEIGHT[/** @type {keyof HEIGHT} */ (t.kind)] ?? 1) - 0.01);
   let wall = false;
   for (let r = Math.floor(t.y); r <= top; r++) wall ||= solid(s, ahead, r);
+  const below = Math.floor(t.y) - 1;
   if (
     wall ||
-    !solid(s, ahead, Math.floor(t.y) - 1) ||
+    !solid(s, ahead, below) ||
+    (careful &&
+      tileAt(s, ahead, below) === TILE.LOOSE &&
+      tileAt(s, Math.floor(t.x), below) !== TILE.LOOSE) ||
     // Out of range only turns back when the step leads further out, so a rush or a
     // knock that carried it beyond the range walks it home instead of freezing it.
     (range > 0 &&
@@ -229,7 +236,7 @@ export function stepIntern(s, t) {
     if (t.t > 0.4) Object.assign(t, { state: 'rush', t: 0, vx: dir * INTERN_RUSH });
   } else if (t.state === 'rush') {
     const before = t.vx;
-    patrol(s, t, 4.5);
+    patrol(s, t, 4.5, false);
     // The rush ends at a wall, an edge, the end of their beat or out of breath.
     if (t.vx !== before || t.t > 0.9)
       Object.assign(t, { state: 'walk', t: 0, vx: Math.sign(t.vx) * INTERN_WALK });

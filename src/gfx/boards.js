@@ -1774,3 +1774,72 @@ export function renderPlaque(lines) {
   });
   return canvas;
 }
+
+/**
+ * The part of a hero's whiteboard worth a close-up in the reader, in pixels of its
+ * artwork (assets/signage), and what it says, word for word (alt text, tests).
+ * @type {Record<string, {x: number, y: number, w: number, h: number, text: string}>}
+ */
+export const BOARD_ZOOM = {
+  projectDirector: {
+    x: 756,
+    y: 768,
+    w: 620,
+    h: 185,
+    text: 'Congés — il faut privilégier les CP puis RS puis RE car les CP ne peuvent pas être reportés au delà du 31 Mai.',
+  },
+};
+
+/**
+ * Reader page for a phone: the whole board, plus a close-up of its key panel so that
+ * panel reads at phone size. Stacked on an upright screen, side by side otherwise;
+ * the panel is ringed in pink on the board, and the close-up repeats the ring.
+ * @param {CanvasImageSource & {width: number, height: number}} img Board artwork.
+ * @param {{x: number, y: number, w: number, h: number}} zoom Area of `img` to enlarge.
+ * @param {number} aspect Width / height of the space the reader gives the image.
+ * @returns {HTMLCanvasElement | OffscreenCanvas}
+ */
+export function renderReaderPage(img, zoom, aspect) {
+  const PINK = '#ff4f9a';
+  const G = 40;
+  const upright = aspect < 1.2;
+  // Board drawn 1200 wide; the close-up as wide as the board (stacked) or beside it.
+  const bw = 1200;
+  const bh = Math.round((bw * img.height) / img.width);
+  const zw = upright ? bw : 1100;
+  const zh = Math.round((zw * zoom.h) / zoom.w);
+  const W = upright ? bw : bw + G + zw;
+  const H = upright ? bh + G + zh : bh;
+  const { canvas, ctx } = makeCanvas(W, H);
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, 0, 0, bw, bh);
+  const k = bw / img.width;
+  frameRect(ctx, zoom.x * k - 6, zoom.y * k - 6, zoom.w * k + 12, zoom.h * k + 12, 14, 7, PINK);
+  const zx = upright ? 0 : bw + G;
+  const zy = upright ? bh + G : Math.round((bh - zh) / 2);
+  // Link from the ringed panel to its close-up.
+  ctx.beginPath();
+  if (upright) {
+    ctx.moveTo((zoom.x + zoom.w / 2) * k, (zoom.y + zoom.h) * k + 8);
+    ctx.lineTo(zx + zw / 2, zy - 4);
+  } else {
+    ctx.moveTo((zoom.x + zoom.w) * k + 8, (zoom.y + zoom.h / 2) * k);
+    ctx.lineTo(zx - 4, zy + zh / 2);
+  }
+  ctx.lineWidth = 7;
+  ctx.setLineDash([14, 12]);
+  ctx.strokeStyle = PINK;
+  ctx.stroke();
+  ctx.setLineDash([]);
+  box(ctx, zx + 8, zy + 10, zw, zh, 26, 'rgba(10, 14, 30, 0.35)');
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(zx, zy, zw, zh, 26);
+  ctx.clip();
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(zx, zy, zw, zh);
+  ctx.drawImage(img, zoom.x, zoom.y, zoom.w, zoom.h, zx, zy, zw, zh);
+  ctx.restore();
+  frameRect(ctx, zx, zy, zw, zh, 26, 9, PINK);
+  return canvas;
+}

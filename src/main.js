@@ -4,7 +4,8 @@ import { applyTwist, dailyFor, dailyKicker, dailyMet, shareCard } from './app/da
 import { Bubbles, Dialogue } from './app/dialogue.js';
 import { Particles, landPower } from './app/fx.js';
 import { Hud } from './app/hud.js';
-import { Input, tipText } from './app/input.js';
+import { Input, fillKeys, tipText } from './app/input.js';
+import { Interlude, interludeFor } from './app/interlude.js';
 import { Medals, applySansFilet, medalFor, medalTargets, modeOf } from './app/medals.js';
 import {
   autoRoll,
@@ -18,7 +19,7 @@ import {
 } from './app/menus.js';
 import { applyPrefs, caption, prefs, reducedMotion, setupOptions } from './app/options.js';
 import { BEST_KEY, renderResults, secretsFound } from './app/results.js';
-import { load, store } from './app/storage.js';
+import { load, loadCount, store } from './app/storage.js';
 import {
   DynamicResolution,
   PRIMO_PROMPT,
@@ -33,6 +34,7 @@ import { drawPrefs, edgeCue, watchCamera } from './app/draw-things.js';
 import { CREDITS, EPILOGUE, PROLOGUE } from './data/barks.js';
 import { CAST } from './data/cast.js';
 import { CAMPAIGN, LEVELS, ROOM_W } from './data/levels/index.js';
+import { BOARD_ZOOM, renderReaderPage } from './gfx/boards.js';
 import { POSTER_LIST, renderPoster } from './gfx/posters.js';
 import { Renderer } from './gfx/renderer.js';
 import { consultLength } from './game/boss.js';
@@ -43,7 +45,7 @@ import { DT, HERO, TILE, createSim, step, tileAt } from './game/sim.js';
  * play ⇄ pause / options / reading / dialogue / game over → stage won → … → credits.
  * The level keeps rendering behind every screen.
  *
- * @typedef {'loading'|'title'|'play'|'pause'|'options'|'reading'|'talk'|'won'|'gameover'|'credits'|'trophies'|'cast'|'posters'|'chapters'} Screen
+ * @typedef {'loading'|'title'|'play'|'pause'|'options'|'reading'|'talk'|'won'|'gameover'|'credits'|'trophies'|'cast'|'posters'|'chapters'|'interlude'} Screen
  * @typedef {import('./data/levels/index.js').Line} Line
  */
 
@@ -51,15 +53,21 @@ import { DT, HERO, TILE, createSim, step, tileAt } from './game/sim.js';
 const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 const canvas = /** @type {HTMLCanvasElement} */ ($('game'));
 // Without WebGL2 there is no game: say so kindly instead of failing silently.
-if (!document.createElement('canvas').getContext('webgl2')) {
+/** @param {unknown} why @returns {never} */
+function unsupported(why) {
   $('loading').innerHTML =
-    '<p>NAO Rush a besoin de WebGL2.<br />Essaie un navigateur récent (Chrome, Edge, Firefox, Safari 15+).</p>';
-  throw new Error('WebGL2 unavailable');
+    '<p>NAO Rush a besoin de WebGL2.<br />Essaie un navigateur récent (Chrome, Edge, Firefox, Safari 15+), ' +
+    'ou active l’accélération matérielle.</p>';
+  throw why instanceof Error ? why : new Error('WebGL2 unavailable');
 }
-// Phones may drop the GPU context in the background: reload cleanly when it comes back.
-canvas.addEventListener('webglcontextlost', (e) => e.preventDefault());
-canvas.addEventListener('webglcontextrestored', () => location.reload());
-const renderer = new Renderer(canvas);
+if (!document.createElement('canvas').getContext('webgl2')) unsupported(null);
+const renderer = (() => {
+  try {
+    return new Renderer(canvas);
+  } catch (e) {
+    return unsupported(e);
+  }
+})();
 const input = new Input();
 const hud = new Hud();
 const camera = new Camera();
@@ -69,9 +77,18 @@ const panAt = (x) =>
 const particles = new Particles();
 const audio = new Audio();
 const resolution = new DynamicResolution();
+/** Trophies with a sound of their own (the others ring the common bells). */
+const TROPHY_SFX = /** @type {Record<string, string>} */ ({
+  sansFilet: 'tightrope',
+  stars: 'certified',
+});
+/** When the last trophy sound was due (ms): trophies won together ring one after the other. */
+let trophyDue = 0;
 const trophies = new Trophies((t) => {
   hud.trophy(t.name);
-  audio.sfx('trophy');
+  const now = performance.now();
+  trophyDue = Math.max(now, trophyDue + 600);
+  audio.sfx(TROPHY_SFX[t.id] ?? 'trophy', { delay: (trophyDue - now) / 1000 });
 });
 const SAVE_KEY = 'naorush.stage';
 /** Best medal and star per stage and hero (« Sans filet » apart). */
@@ -138,7 +155,14 @@ const OVERLAYS = /** @type {const} */ ([
   'cast',
   'posters',
   'chapters',
+  'interlude',
 ]);
+/** NA-2: the route, the clock and a line between two story stages (builds #interlude). */
+const interlude = new Interlude();
+interlude.onSound = (
+  /** @type {string} */ type,
+  /** @type {{ pitch?: number } | undefined} */ opts,
+) => audio.sfx(type, opts);
 /** Where focus lands when a screen opens, so keyboards, pads and screen readers start there. */
 const FIRST_FOCUS = /** @type {Partial<Record<Screen, string>>} */ ({
   title: 'play',
@@ -151,6 +175,7 @@ const FIRST_FOCUS = /** @type {Partial<Record<Screen, string>>} */ ({
   credits: 'creditsClose',
   reading: 'readerClose',
   talk: 'talkNext',
+  interlude: 'interludeSkip',
 });
 /** @param {Screen} next */
 function show(next) {
@@ -213,7 +238,7 @@ async function loadStage(i) {
   wonTimer = 0;
   hud.clearToast();
   bubbles.clear();
-  bubbles.stage(level);
+  bubbles.stage(level, partnerOf());
   gameOverTimer = 0;
 }
 
@@ -315,7 +340,7 @@ for (const card of heroCards) {
   });
 }
 
-const saved = () => Math.min(CAMPAIGN - 1, Number(load(SAVE_KEY, 0)) || 0);
+const saved = () => Math.min(CAMPAIGN - 1, loadCount(SAVE_KEY));
 function updateContinue() {
   const d = today();
   $('dailyBtn').textContent =
@@ -375,7 +400,14 @@ $('continue').onclick = () => {
   runMode = 'story';
   startFrom(saved());
 };
-$('next').onclick = () => startFrom(stage + 1);
+// NA-2: a short interlude on the way to the next story stage (skippable, never on bonus stages).
+$('next').onclick = () => {
+  const from = stage;
+  const go = () => startFrom(from + 1);
+  if (!interludeFor(LEVELS[from], LEVELS[from + 1], heroId)) return go();
+  show('interlude');
+  interlude.play(LEVELS[from], LEVELS[from + 1], heroId, reducedMotion).then(go);
+};
 // Replaying keeps the daily challenge going.
 $('again').onclick =
   $('restart').onclick =
@@ -446,7 +478,7 @@ const chapters = (mode) =>
   chapterRows({
     levels: LEVELS,
     campaign: CAMPAIGN,
-    progress: Number(load(SAVE_KEY, 0)) || 0,
+    progress: loadCount(SAVE_KEY),
     finished: Boolean(trophies.data.got.nao),
     bests: load(BEST_KEY, {}),
     medals,
@@ -546,12 +578,30 @@ $('optionsClose').onclick = closeOptions;
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     if (screen === 'play') pause();
-    audio.ctx?.suspend();
-  } else audio.ctx?.resume();
+    audio.ctx?.suspend().catch(() => {});
+  } else audio.ctx?.resume().catch(() => {});
 });
+// Phones may drop the GPU context in the background: the game pauses (nothing to see,
+// nothing must hurt the hero), then reloads cleanly when the context comes back.
+canvas.addEventListener('webglcontextlost', (e) => {
+  e.preventDefault();
+  if (screen === 'play') pause();
+});
+canvas.addEventListener('webglcontextrestored', () => location.reload());
 // Browsers only allow sound after a user gesture.
 for (const type of ['pointerdown', 'keydown'])
   addEventListener(type, () => audio.unlock(), { once: true, capture: true });
+// Safari may refuse to resume the sound when the app comes back from the background
+// (or leave it « interrupted » after a call): the next gesture brings it back.
+for (const type of ['pointerdown', 'keydown'])
+  addEventListener(
+    type,
+    () => {
+      const ctx = audio.ctx;
+      if (ctx && ctx.state !== 'running' && !document.hidden) ctx.resume().catch(() => {});
+    },
+    { capture: true },
+  );
 
 /** Whiteboards stay on the wall while a boss fight is on. */
 const fighting = () => sim.bossActive && !sim.bossDone;
@@ -566,7 +616,21 @@ function openBoard() {
   if (fighting()) return false;
   const board = view.boardAt(sim);
   if (!board?.id) return false;
-  /** @type {HTMLImageElement} */ ($('readerImg')).src = boardUrl(board.id);
+  const img = /** @type {HTMLImageElement} */ ($('readerImg'));
+  const url = boardUrl(board.id);
+  const zoom = BOARD_ZOOM[board.id];
+  img.src = url;
+  img.alt = zoom ? `Tableau blanc. ${zoom.text}` : 'Tableau blanc';
+  // On a phone the whole board is too small to read: add a close-up of its key panel.
+  if (zoom && Math.min(innerWidth, innerHeight) < 600) {
+    const art = new Image();
+    art.onload = () => {
+      if (screen !== 'reading') return;
+      const page = renderReaderPage(art, zoom, innerWidth / Math.max(1, innerHeight - 110));
+      img.src = /** @type {HTMLCanvasElement} */ (page).toDataURL('image/webp', 0.9);
+    };
+    art.src = url;
+  }
   audio.sfx('select');
   show('reading');
   return true;
@@ -594,7 +658,7 @@ const STAGE_END = [
   },
   {
     title: 'Badge cafét’ récupéré !',
-    text: 'Échappé aux bonbonnes, et les cafés sont offerts. Une pause bien méritée.',
+    text: 'Bonbonnes évitées, cafés offerts : une pause bien méritée.',
   },
   {
     title: 'Séminaire réussi !',
@@ -628,11 +692,7 @@ function stageWon() {
   if (!bonus && (runMode === 'story' || (runMode === 'chapter' && !finished)))
     store(
       SAVE_KEY,
-      last
-        ? 0
-        : runMode === 'story'
-          ? stage + 1
-          : Math.max(Number(load(SAVE_KEY, 0)) || 0, stage + 1),
+      last ? 0 : runMode === 'story' ? stage + 1 : Math.max(loadCount(SAVE_KEY), stage + 1),
     );
   // Gold and silver against the solver's time, a star without a return to the badge.
   // The daily's medal goes on its card and share, not into the stage's collection.
@@ -959,6 +1019,8 @@ function leaveTitle(go) {
   if (screen !== 'title' || reducedMotion) return go();
   document.body.classList.add('title-out');
   title.leave();
+  // The camera pushes in on the hero; the other one cheers.
+  audio.sfx('titlePush', { who: heroId === 'kevin' ? 'charline' : 'kevin' });
   setTimeout(() => {
     const fade = $('fade');
     fade.classList.remove('on');
@@ -1051,7 +1113,7 @@ function frame(now) {
       } else {
         // The first PRIMO window of each director plays in slow motion for a beat.
         acc += dt * speed() * primoCue.update(sim, dt);
-        if (primoCue.started) hud.toast(PRIMO_PROMPT, 'consult');
+        if (primoCue.started) hud.toast(fillKeys(PRIMO_PROMPT), 'consult');
       }
       if (sim.assist) helped.relaxed = true;
       if (speed() < 1) helped.slow = true;
@@ -1125,6 +1187,11 @@ function frame(now) {
     ) {
       audio.sfx(screen === 'pause' ? 'resume' : 'back');
       show('play');
+    } else if (
+      screen === 'interlude' &&
+      (input.pressed('back') || input.pressed('pause') || input.pressed('jump'))
+    ) {
+      interlude.skip();
     } else if (screen !== 'talk' && menuInput()) {
       /* handled */
     } else if (screen === 'title' && input.pressed('confirm')) newGame();
@@ -1195,6 +1262,7 @@ function frame(now) {
               x: h.x + HERO.w / 2,
               y: h.y - touchLift,
               facing: h.facing,
+              peek: h.peek,
             });
   view.showcase = titleScene();
   if (screen !== 'title') document.body.classList.remove('title-out');
@@ -1213,6 +1281,8 @@ function frame(now) {
   if (edgeCue.fresh) {
     edgeCue.fresh = false;
     audio.sfx('telegraph', { pan: edgeCue.side });
+    // IN6: the off-screen warning gets its caption too, on its side.
+    caption({ type: 'incoming', x: sim.hero.x + edgeCue.side * 30, y: edgeCue.y }, sim);
   }
   // Key, rim and fill lights on the heroes posing behind the title menu.
   const lit = view.showcase

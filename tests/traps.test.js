@@ -8,8 +8,18 @@ import {
   watchCamera,
   zoneSpan,
 } from '../src/app/draw-things.js';
-import { HERO, TILE, tileAt } from '../src/game/sim.js';
-import { PERIOD, phaseOf } from '../src/game/traps.js';
+import { LEVELS } from '../src/data/levels/index.js';
+import { HERO, TILE, createSim, step, tileAt } from '../src/game/sim.js';
+import {
+  PERIOD,
+  SPRINKLER,
+  WET,
+  phaseOf,
+  safeFloor,
+  sinceSpray,
+  wetSpan,
+  wetUnder,
+} from '../src/game/traps.js';
 import { FONT, SIGN_ROWS, SIGN_TEXT } from '../src/gfx/things.js';
 import { IDLE, fill, has, input, room, run, runUntil, sim, throwCr } from './mechanics-kit.js';
 
@@ -646,5 +656,188 @@ describe('arena sign font', () => {
     // Every caption can be lit.
     for (const text of Object.values(SIGN_TEXT))
       for (const ch of text) if (ch !== ' ') expect(FONT[ch], ch).toBeDefined();
+  });
+});
+
+describe('wet floor (IN1)', () => {
+  /**
+   * Runs right from the start until x, lets go, and measures how far the hero slides.
+   * @param {import('./mechanics-kit.js').Mark[]} marks @param {'kevin'|'charline'} hero
+   */
+  function stopping(marks, hero) {
+    const s = sim(room(40, [['S', 2, 3], ...marks]), hero);
+    runUntil(s, input({ right: true }), (k) => k.hero.x > 18);
+    const x0 = s.hero.x;
+    const { events } = runUntil(s, IDLE, (k) => k.hero.vx === 0, 300);
+    return { s, slide: s.hero.x - x0, events };
+  }
+
+  it('reads a run of ~ as one puddle on the floor below it', () => {
+    const s = sim(room(20, [['S', 2, 3], ...fill('~', 6, 9, 3, 3)]));
+    const puddles = s.things.filter((t) => t.kind === 'puddle');
+    expect(puddles.map((p) => [p.x, p.y, p.w])).toEqual([[6, 3, 4]]);
+    // Not solid, not a hazard: just water.
+    expect(tileAt(s, 7, 3)).toBe(TILE.EMPTY);
+  });
+
+  it.each(/** @type {const} */ (['kevin', 'charline']))(
+    '%s slides about three times further on it, without losing the run',
+    (hero) => {
+      const dry = stopping([], hero);
+      const wet = stopping(fill('~', 10, 30, 3, 3), hero);
+      expect(dry.slide).toBeLessThan(0.5);
+      expect(wet.slide).toBeGreaterThan(dry.slide * 3);
+      // Readable and fair: well under two tiles, and the top speed is the same.
+      expect(wet.slide).toBeLessThan(1.8);
+      // Feet in the water once, then one slip as the hero lets go.
+      expect(wet.events.filter((e) => e.type === 'slip').length).toBe(1);
+      expect(wet.s.hero.slip).toBe(false);
+    },
+  );
+
+  it('splashes as the feet first touch it, slips only when braking or turning', () => {
+    const s = sim(room(40, [['S', 2, 3], ...fill('~', 8, 30, 3, 3)]));
+    const run1 = runUntil(s, input({ right: true }), (k) => k.hero.x > 20);
+    expect(run1.events.filter((e) => e.type === 'puddle').length).toBe(1);
+    expect(has(run1.events, 'slip')).toBe(false);
+    expect(s.hero.wet).toBe(true);
+    // Turning around bites no harder than braking: the hero slides on.
+    const turn = run(s, input({ left: true }), 6);
+    expect(has(turn, 'slip')).toBe(true);
+    expect(s.hero.slip).toBe(true);
+    expect(s.hero.vx).toBeGreaterThan(4);
+  });
+
+  it('is slow to get going on, and jumps off it as high and as far', () => {
+    const s = sim(room(40, fill('~', 6, 30, 3, 3)));
+    const d = sim(room(40));
+    for (const k of [s, d]) k.hero.x = 10.2;
+    run(s, input({ right: true }), 6);
+    run(d, input({ right: true }), 6);
+    expect(s.hero.vx).toBeLessThan(d.hero.vx * 0.5);
+    // At full speed, a jump is the same jump.
+    run(s, input({ right: true }), 60);
+    run(d, input({ right: true }), 60);
+    const xs = s.hero.x,
+      xd = d.hero.x;
+    run(s, input({ right: true, jump: true }), 20);
+    run(d, input({ right: true, jump: true }), 20);
+    expect(s.hero.y).toBeCloseTo(d.hero.y, 5);
+    expect(s.hero.x - xs).toBeCloseTo(d.hero.x - xd, 5);
+  });
+
+  it('is dry on a lift', () => {
+    const s = sim(
+      room(20, [['S', 2, 3], ...fill('~', 1, 18, 3, 3)], { lifts: [{ x: 1, y: 3, top: 6 }] }),
+    );
+    run(s, IDLE, 30);
+    expect(s.onLift).not.toBe(null);
+    expect(wetUnder(s)).toBe(null);
+  });
+
+  it('stays wet under a sprinkler for a moment after each spray', () => {
+    const s = sim(
+      room(16, [
+        ['S', 2, 3],
+        ['w', 8, 10],
+      ]),
+    );
+    const sp = s.things.find((t) => t.kind === 'sprinkler');
+    if (!sp) throw new Error('no sprinkler');
+    /** @type {Set<string>} */
+    const states = new Set();
+    for (let i = 0; i < 60 * PERIOD.sprinkler; i++) {
+      step(s, IDLE);
+      const k = phaseOf(s, sp, PERIOD.sprinkler);
+      const wet = wetSpan(s, sp) !== null;
+      expect(wet, `phase ${k.toFixed(2)}`).toBe(k >= SPRINKLER.spray || k < WET.after);
+      if (wet) states.add(sp.state);
+    }
+    // Wet while it sprays and while it is off after it; never while it drips (dry by then).
+    expect([...states].sort()).toEqual(['off', 'on']);
+    expect(WET.after).toBeLessThan(SPRINKLER.drip);
+    // Standing in its puddle (the water hitting the feet aside), the floor slips.
+    Object.assign(s.hero, { x: 8.5 - HERO.w / 2, y: 3, vx: 0, state: 'ground' });
+    s.time += PERIOD.sprinkler - phaseOf(s, sp, PERIOD.sprinkler) + 0.2;
+    expect(wetUnder(s)).toBe(sp);
+  });
+
+  it('dries up for good a moment after the water is shut off', () => {
+    const s = sim(
+      room(16, [
+        ['w', 8, 10],
+        ['k', 4, 3],
+      ]),
+    );
+    const sp = s.things.find((t) => t.kind === 'sprinkler');
+    if (!sp) throw new Error('no sprinkler');
+    // Standing on the valve.
+    s.hero.x = 4.2;
+    // Shut off while it sprays: wet for WET.after more seconds.
+    s.time = PERIOD.sprinkler * 3 - (sp.phase ?? 0) + SPRINKLER.spray + 0.3 - 1 / 60;
+    step(s, IDLE);
+    expect(sp.state).toBe('dry');
+    expect(sinceSpray(s, sp)).toBeLessThan(0.05);
+    const wetFor = runUntil(s, IDLE, () => wetSpan(s, sp) === null, 200).frames / 60;
+    expect(wetFor).toBeCloseTo(WET.after, 1);
+    run(s, IDLE, 600);
+    expect(wetSpan(s, sp)).toBe(null);
+  });
+
+  it('drains away beside a gap, live cables or a loose slab: no puddle there', () => {
+    const base = /** @type {import('./mechanics-kit.js').Mark[]} */ ([['S', 2, 3]]);
+    const safe = sim(room(20, base));
+    expect(safeFloor(safe, 8, 10, 3)).toBe(true);
+    for (const [ch, c] of /** @type {const} */ ([
+      [' ', 12],
+      ['^', 6],
+      ['-', 11],
+    ])) {
+      const s = sim(room(20, [...base, [ch, c, 2]]));
+      expect(safeFloor(s, 8, 10, 3), `${ch} at ${c}`).toBe(false);
+    }
+    // A wall in between holds the slide: the gap behind it does not matter.
+    expect(safeFloor(sim(room(20, [...base, [' ', 12, 2], ['#', 11, 3]])), 8, 10, 3)).toBe(true);
+    // A sprinkler over a gap's edge leaves no wet floor.
+    const s = sim(
+      room(16, [
+        ['S', 2, 3],
+        ['w', 8, 10],
+        [' ', 10, 2],
+        [' ', 10, 1],
+        [' ', 10, 0],
+      ]),
+    );
+    const sp = s.things.find((t) => t.kind === 'sprinkler');
+    if (!sp) throw new Error('no sprinkler');
+    for (let i = 0; i < 60 * PERIOD.sprinkler; i++) {
+      step(s, IDLE);
+      expect(wetSpan(s, sp)).toBe(null);
+    }
+  });
+
+  it('plays the same way twice (deterministic)', () => {
+    const def = room(40, [['S', 2, 3], ['w', 20, 10], ...fill('~', 8, 14, 3, 3)]);
+    /** @param {number} i */
+    const plan = (i) => input({ right: i % 90 < 70, left: i % 90 > 80, jump: i % 120 === 60 });
+    const a = sim(def, 'charline'),
+      b = sim(def, 'charline');
+    for (let i = 0; i < 600; i++) {
+      step(a, plan(i));
+      step(b, plan(i));
+    }
+    expect(b.hero).toEqual(a.hero);
+  });
+
+  it('is never laid by a gap, live cables or a loose slab in any stage', () => {
+    for (const level of LEVELS) {
+      const s = createSim(level, 'kevin');
+      for (const p of s.things.filter((t) => t.kind === 'puddle'))
+        expect(safeFloor(s, p.x, p.x + (p.w ?? 1), p.y), `${level.id} ${p.x}`).toBe(true);
+    }
+    // The tutorial shows one, away from any danger.
+    const parking = LEVELS.find((l) => l.id === 'parking');
+    if (!parking) throw new Error('no parking');
+    expect(createSim(parking, 'kevin').things.some((t) => t.kind === 'puddle')).toBe(true);
   });
 });

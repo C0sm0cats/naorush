@@ -31,19 +31,20 @@ import { load, store } from './storage.js';
 
 /**
  * Time (s) of the solver's route through each stage, per hero: the medal yardstick.
+ * On a boss stage, the route to the arena, a flawless duel and the way out.
  * Computed offline with the same search as tests/level.test.js; tests/medals.test.js
  * re-runs it and fails, printing the new table, when a stage or the physics drift.
  * @type {Record<string, Record<HeroId, number>>}
  */
 export const REFERENCE = {
-  parking: { kevin: 14.3, charline: 12.5 },
-  lcp7: { kevin: 24.5, charline: 21.1 },
-  ts: { kevin: 49.7, charline: 48.1 },
-  copil: { kevin: 29.9, charline: 25.3 },
-  rooftop: { kevin: 57.3, charline: 52.3 },
-  intercontrat: { kevin: 25.4, charline: 24.5 },
-  pause: { kevin: 36, charline: 31.6 },
-  seminaire: { kevin: 26.7, charline: 25.5 },
+  parking: { kevin: 54.1, charline: 46 },
+  lcp7: { kevin: 54, charline: 46.4 },
+  ts: { kevin: 116.8, charline: 106.9 },
+  copil: { kevin: 50.6, charline: 45 },
+  rooftop: { kevin: 123.8, charline: 118.5 },
+  intercontrat: { kevin: 53.3, charline: 41.4 },
+  pause: { kevin: 54.4, charline: 48.4 },
+  seminaire: { kevin: 52.1, charline: 45.6 },
 };
 
 /** Gold and silver: within these multiples of the reference time. */

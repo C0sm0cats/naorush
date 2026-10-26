@@ -178,7 +178,9 @@ export class Input {
     this.keys = new Set();
     /** Custom bindings: action → key code. @type {Record<string, string>} */
     this.custom = {};
-    this.custom = load(BIND_KEY, {});
+    // Only bindings of known actions to key codes: a damaged save keeps the defaults.
+    for (const [a, c] of Object.entries(load(BIND_KEY, {})))
+      if (a in ACTIONS && typeof c === 'string' && c) this.custom[a] = c;
     /** Waiting for a key to bind. @type {((code: string) => void) | null} */
     this.capture = null;
     /** Gamepad buttons held last frame. @type {Set<string>} */

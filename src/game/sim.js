@@ -11,6 +11,8 @@ import {
 } from './enemies.js';
 import {
   PERIOD,
+  WET,
+  sinceSpray,
   stepBeamer,
   stepBottle,
   stepChair,
@@ -21,6 +23,7 @@ import {
   stepPrinter,
   stepSprinkler,
   weigh,
+  wetUnder,
 } from './traps.js';
 import {
   DT,
@@ -66,6 +69,8 @@ const HURT_FALL = 6.5;
 /** Apex hang: near the top of a held jump, gravity eases off for a beat of control. */
 const APEX_BAND = 1.6;
 const APEX_GRAVITY = 0.55;
+/** Holding up or down this long, standing still, makes the camera look that way. */
+export const PEEK_DELAY = 0.45;
 /** « Sans filet »: periodic traps and fuses run this much faster. */
 export const HARDCORE_TRAPS = 1.15;
 /** Traps whose own timers (fuses, wind-ups) speed up in « Sans filet ». */
@@ -143,6 +148,11 @@ export function createSim(def, heroId) {
         // Slides out of the wall it is built into.
         const dir = SOLID_STYLES.includes(at(col - 1, y)) ? 1 : -1;
         thing('drawer', col + 0.5, y, { dir, phase: (col * 0.37) % PERIOD.drawer });
+      } else if (c === '~' && at(col - 1, y) !== '~') {
+        // A puddle on the floor below a run of '~' (IN1), its sign before it.
+        let n = 1;
+        while (at(col + n, y) === '~') n++;
+        thing('puddle', col, y, { w: n, dir: -1 });
       } else if (c === 'w') {
         let r = y;
         while (r > 0 && !SOLID_STYLES.includes(at(col, r - 1))) r--;
@@ -152,11 +162,12 @@ export function createSim(def, heroId) {
           phase: (col * 0.53) % PERIOD.sprinkler,
         });
       } else if (c === 'P') {
-        // Faces the longer stretch of open floor.
+        // Faces the longer stretch of open floor (archive boxes close it off too:
+        // a printer never wastes its paper on a stack of boxes).
         /** @param {number} d */
         const run = (d) => {
           let n = 0;
-          while (n < 12 && !SOLID_STYLES.includes(at(col + d * (n + 1), y))) n++;
+          while (n < 12 && !`${SOLID_STYLES}A`.includes(at(col + d * (n + 1), y))) n++;
           return n;
         };
         thing('printer', col + 0.5, y, {
@@ -185,6 +196,10 @@ export function createSim(def, heroId) {
     invuln: 0,
     ledge: { x: 0, y: 0 },
     run: 0,
+    lookT: 0,
+    peek: 0,
+    wet: false,
+    slip: false,
   };
   return {
     heroId,
@@ -256,6 +271,8 @@ function respawn(s) {
     hearts: s.gameOver ? s.maxHearts : hero.hearts,
     invuln: 1.5,
     fallFrom: s.checkpoint.y,
+    wet: false,
+    slip: false,
   });
   // Rearm the traps so a retry plays the same way.
   for (const t of s.things) {
@@ -353,6 +370,34 @@ function landed(s, hero, y) {
 }
 
 /**
+ * Standing still and holding up or down for PEEK_DELAY: `hero.peek` asks the camera
+ * to look that way (above a ledge, down a shaft), until the key is let go or the hero moves.
+ * @param {Hero} hero @param {Input} input
+ */
+function lookAround(hero, input) {
+  const still = hero.state === 'ground' && !input.left && !input.right && Math.abs(hero.vx) < 0.05;
+  const look = still ? (input.up ? 1 : 0) - (input.down ? 1 : 0) : 0;
+  const t = hero.lookT ?? 0;
+  hero.lookT = look === 0 ? 0 : Math.sign(t) === look ? t + look * DT : look * DT;
+  hero.peek = Math.abs(hero.lookT) >= PEEK_DELAY ? look : 0;
+}
+
+/**
+ * Wet floor under the feet (IN1): a `puddle` event as they first touch it, a `slip`
+ * as a braking or turning hero starts to slide on it (`hero.slip` while it lasts).
+ * @param {Sim} s @param {Hero} hero @param {number} dir Held direction (-1, 0, 1).
+ */
+function footing(s, hero, dir) {
+  const wet = Boolean(wetUnder(s));
+  const x = hero.x + HERO.w / 2;
+  if (wet && !hero.wet) emit(s, 'puddle', x, hero.y);
+  hero.wet = wet;
+  const sliding = wet && Math.abs(hero.vx) > (hero.slip ? 0.5 : WET.slip) && dir * hero.vx <= 0;
+  if (sliding && !hero.slip) emit(s, 'slip', x, hero.y);
+  hero.slip = sliding;
+}
+
+/**
  * @param {Sim} s
  * @param {Input} input
  */
@@ -367,6 +412,7 @@ export function step(s, input) {
   s.jumpHeld = input.jump;
   if (pressed) hero.buffer = BUFFER;
   else hero.buffer = Math.max(0, hero.buffer - DT);
+  lookAround(hero, input);
 
   if (hero.state === 'dead') {
     if (hero.stateTime > 1.3) respawn(s);
@@ -434,13 +480,19 @@ export function step(s, input) {
     emit(s, 'throw', hero.x + HERO.w / 2, hero.y + 1.05);
   } else if (fire) emit(s, 'empty', hero.x + HERO.w / 2, hero.y + 1.4);
 
-  // Horizontal control with momentum.
+  // Horizontal control with momentum. Wet floor (IN1) keeps little grip: slow to
+  // get going, slow to stop, and no extra bite when turning.
   const dir = (input.right ? 1 : 0) - (input.left ? 1 : 0);
   if (dir) hero.facing = dir;
   const target = dir * st.run;
   const turning = dir !== 0 && hero.vx * dir < 0;
+  const wet = Boolean(wetUnder(s));
   const accel =
-    hero.state === 'ground' ? st.accel * (turning ? SKID : 1) : st.accel * (turning ? 0.8 : 0.6);
+    hero.state === 'ground'
+      ? wet
+        ? st.accel * WET.grip
+        : st.accel * (turning ? SKID : 1)
+      : st.accel * (turning ? 0.8 : 0.6);
   if (hero.vx < target) hero.vx = Math.min(target, hero.vx + accel * DT);
   else if (hero.vx > target) hero.vx = Math.max(target, hero.vx - accel * DT);
 
@@ -570,6 +622,8 @@ export function step(s, input) {
     }
   }
 
+  footing(s, hero, dir);
+
   // Standing on loose tiles starts their countdown.
   if (hero.state === 'ground') {
     const r = Math.round(hero.y) - 1;
@@ -673,7 +727,9 @@ function stepThings(s) {
         // The water shut-off valve: every sprinkler in the stage stops.
         if (t.state === 'idle' && alive && standsIn(hero, t, 0.5, 1.5)) {
           t.state = 'on';
-          for (const k of s.things) if (k.kind === 'sprinkler') k.state = 'dry';
+          // The floor under them dries up from their last spray.
+          for (const k of s.things)
+            if (k.kind === 'sprinkler') Object.assign(k, { t: sinceSpray(s, k), state: 'dry' });
           emit(s, 'switch', t.x, t.y + 1);
         }
         break;

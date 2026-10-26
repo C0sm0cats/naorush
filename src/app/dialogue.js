@@ -1,6 +1,7 @@
-import { BARKS, STAGE_BARKS } from '../data/barks.js';
+import { BARKS, HERO_TAKES, STAGE_BARKS } from '../data/barks.js';
 import { CAST } from '../data/cast.js';
 import { project } from '../gfx/mat4.js';
+import { fillKeys } from './input.js';
 
 /**
  * Story dialogue (typewriter box at the bottom) and speech bubbles above heads.
@@ -10,6 +11,16 @@ import { project } from '../gfx/mat4.js';
 
 /** @param {string} id */
 const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
+
+/**
+ * A story line as its speaker says it: their own wording when the line has one
+ * (HERO_TAKES), the player's own controls for `{fire}`, `{jump}`…
+ * @param {string} text @param {string} speaker CAST id ('' for hints and narration).
+ */
+export function lineText(text, speaker) {
+  const take = HERO_TAKES[text]?.[/** @type {'kevin'|'charline'} */ (speaker)];
+  return fillKeys(take ?? text).replace(' (CR)', '');
+}
 
 export class Dialogue {
   /**
@@ -24,6 +35,8 @@ export class Dialogue {
     this.i = 0;
     /** Characters revealed so far. */
     this.shown = 0;
+    /** The current line as its speaker says it. */
+    this.text = '';
     /** @type {() => void} */
     this.done = () => {};
   }
@@ -40,22 +53,23 @@ export class Dialogue {
     const line = this.lines[this.i];
     const id = this.castId(line.who);
     const who = id ? CAST[id] : null;
+    this.text = lineText(line.text, id);
     const name = who?.name ?? (line.who === 'narrator' ? 'NAO Rush' : 'Astuce');
     $('talkName').textContent = name;
     $('talkTitle').textContent = who?.title ?? '';
     $('talkWho').dataset.who = id || line.who;
     $('talkText').textContent = '';
     // Screen readers get the whole line at once, not the typewriter.
-    $('talkLive').textContent = `${name} : ${line.text}`;
+    $('talkLive').textContent = `${name} : ${this.text}`;
   }
 
   /** Completes the current line, or moves to the next one. */
   advance() {
     const line = this.lines[this.i];
     if (!line) return;
-    if (this.shown < line.text.length) {
-      this.shown = line.text.length;
-      $('talkText').textContent = line.text;
+    if (this.shown < this.text.length) {
+      this.shown = this.text.length;
+      $('talkText').textContent = this.text;
       return;
     }
     this.audio.sfx('select');
@@ -72,11 +86,11 @@ export class Dialogue {
     const line = this.lines[this.i];
     if (!line) return;
     const before = Math.floor(this.shown);
-    this.shown = Math.min(line.text.length, this.shown + dt * 55);
+    this.shown = Math.min(this.text.length, this.shown + dt * 55);
     const now = Math.floor(this.shown);
     if (now !== before) {
-      $('talkText').textContent = line.text.slice(0, now);
-      if (now % 3 === 0 && line.text[now - 1] !== ' ')
+      $('talkText').textContent = this.text.slice(0, now);
+      if (now % 3 === 0 && this.text[now - 1] !== ' ')
         this.audio.sfx('talk', { who: this.castId(line.who) || line.who });
     }
   }
@@ -196,13 +210,17 @@ export class Bubbles {
     this.teased = false;
     /** Called when a queued line comes up (for its sound). @type {(who: string) => void} */
     this.onLine = () => {};
+    /** The CAST id of the partner waiting at the exit, once known: lines in their own voice. */
+    this.partner = '';
   }
 
   /**
    * A new stage, or a restart: fresh shuffle bags, the stage's own lines, its teaser.
    * @param {{id: string, map: string[]}} level
+   * @param {string} [partner] CAST id of the partner at the exit (neutral lines otherwise).
    */
-  stage(level) {
+  stage(level, partner = this.partner) {
+    this.partner = partner;
     const own = STAGE_BARKS[level.id];
     this.deck.stage(own?.lines);
     this.teaserX = own?.teaser ? teaserCheckpoint(level.map, own.teaser.at) : null;
@@ -233,14 +251,16 @@ export class Bubbles {
    * @param {string} who CAST id @param {string} moment @param {boolean} [force]
    */
   say(who, moment, force = false) {
-    if (!BARKS[who]?.[moment] && !this.deck.local[who]?.[moment]) return;
+    // The partner at the exit speaks in their own voice when there are lines for it.
+    const voice = who === 'partner' && BARKS[this.partner]?.[moment] ? this.partner : who;
+    if (!BARKS[voice]?.[moment] && !this.deck.local[voice]?.[moment]) return;
     const key = `${who}:${moment}`;
     const now = performance.now() / 1000;
     if (!force && (now - (this.last[key] ?? -99) < 8 || this.time > 0.4 || this.queue.length))
       return;
     this.last[key] = now;
     this.queue = [];
-    this.line(who, this.deck.next(who, moment) ?? '');
+    this.line(who, this.deck.next(voice, moment) ?? '');
   }
 
   /** Longer lines stay up longer. @param {string} who @param {string} text */

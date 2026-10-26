@@ -77,10 +77,15 @@ export const HERO_STATS = {
  * @property {number} invuln
  * @property {{x: number, y: number}} ledge Hang point (ledge corner).
  * @property {number} run Distance run (for the walk cycle).
+ * @property {number} [lookT] How long up (positive) or down (negative) has been held standing still (s).
+ * @property {number} [peek] 1 / -1 once held long enough: the camera looks up / down; 0 otherwise.
+ * @property {boolean} [wet] Feet on wet floor (IN1, see traps.js WET).
+ * @property {boolean} [slip] Sliding on wet floor while braking or turning.
  *
  * @typedef {'ticket'|'checkpoint'|'reader'|'key'|'exit'|'panel'|'bottle'|'colleague'|'loose'
  *   |'ammo'|'cup'|'cr'|'lift'|'boss'|'kpi'|'wave'|'chair'|'drawer'|'sprinkler'|'printer'
- *   |'paper'|'crate'|'secret'|'switch'|'beamer'|'concert'|'intern'|'vacuum'|'visio'|'invite'|'rack'|'zone'} ThingKind
+ *   |'paper'|'crate'|'secret'|'switch'|'beamer'|'concert'|'intern'|'vacuum'|'visio'|'invite'|'rack'|'zone'
+ *   |'puddle'} ThingKind
  *
  * @typedef {Object} Thing
  * @property {ThingKind} kind
@@ -94,7 +99,7 @@ export const HERO_STATS = {
  * @property {number} [home] Patrol centre.
  * @property {number} [y0] Lift bottom.
  * @property {number} [y1] Lift top.
- * @property {number} [w] Width in tiles (lifts, zones).
+ * @property {number} [w] Width in tiles (lifts, zones, puddles).
  * @property {number} [hp] Boss arguments left.
  * @property {number} [dy] Lift motion this step.
  * @property {number} [dir] Facing of fixed traps (+1 right, -1 left).

@@ -7,7 +7,8 @@ import { CAST } from './cast.js';
  * Voices: Kévin is methodical and dry (jalons, Gantt, RAID, REX, CR); Charline is
  * quick and warm (client, closing, forecast, staffing, propale). These shared
  * lines must fit every stage, bonus ones included; a stage's own lines live in
- * STAGE_BARKS. The partner at the exit may be either hero: neutral voice.
+ * STAGE_BARKS. The partner at the exit speaks in their own voice (`waiting`,
+ * `welcome`); `partner` holds neutral lines for when the speaker is unknown.
  * @type {Record<string, Record<string, string[]>>}
  */
 export const BARKS = {
@@ -133,7 +134,7 @@ export const BARKS = {
       'Bonus non planifié, je prends.',
       'Hors périmètre… mais bienvenu.',
       'Celle-là, je la garde pour le REX.',
-      'Gain de temps confirmé.',
+      'Trois minutes de gagnées. Au moins.',
     ],
     // His line, word for word: it is the only one.
     celine: ['Si c’est pour Céline Dion, on va faire le maximum !'],
@@ -154,7 +155,7 @@ export const BARKS = {
       'Batterie rechargée, jalon suivant.',
       'Le café, mon meilleur sponsor.',
       'Café validé, énergie conforme.',
-      'Pause café : jalon atteint.',
+      'Pause café validée en séance.',
       'Recharge complète. On reprend.',
       'Un expresso, zéro dette d’énergie.',
       'Le café, c’est de la gestion des risques.',
@@ -170,7 +171,7 @@ export const BARKS = {
       'Mes temps Chronotime… ce soir.',
       'Je reprends les CR de la semaine…',
       'Prochain jalon : quelque part devant.',
-      'Le chemin critique ne va pas se faire seul.',
+      'Le chemin critique m’appelle.',
       'Une seconde, je recale le planning.',
     ],
     respawn: [
@@ -209,6 +210,31 @@ export const BARKS = {
       'Mauvais timing, bon dossier.',
       'J’attends la bonne fenêtre.',
       'Refusé… pour cette version.',
+    ],
+    // At the exit, as the partner (Charline's run): without the key item, then with it.
+    waiting: [
+      'Livrable manquant. On ne clôture pas sans lui.',
+      'Critère de sortie non rempli : il manque le livrable.',
+      'Je tiens la porte. Le livrable, c’est pour toi.',
+      'Pas de go sans le livrable.',
+      'Check-list de sortie : il manque une ligne.',
+      'Reviens avec le livrable, je valide la sortie.',
+      'Statut : presque. Il manque l’essentiel.',
+      'Pas de clôture sans livrable. C’est la méthode.',
+      'Regarde en hauteur, j’ai un pressentiment documenté.',
+      'Je t’attends ici. Le livrable, lui, n’attend que toi.',
+    ],
+    welcome: [
+      'Bien joué. Étape clôturée.',
+      'Livré dans les temps. Je note.',
+      'Jalon atteint à deux. Suivant.',
+      'Parfait. Je mets à jour le Gantt.',
+      'Étape bouclée, rien à redire.',
+      'Mission accomplie. Le CR suit.',
+      'Quelle exécution. Bravo, binôme.',
+      'Tout est conforme. On enchaîne.',
+      'Pile dans le planning !',
+      'Excellent travail. Je le garde pour le REX.',
     ],
   },
   charline: {
@@ -313,12 +339,12 @@ export const BARKS = {
       'Objection notée, je reviens !',
       'Ça ne passe pas… pour l’instant !',
       'Timing pas encore idéal !',
-      'Je retente au bon moment !',
+      'Je retente dans une seconde !',
       'Je reformule et je reviens !',
       'Patience, j’ai d’autres arguments !',
       'Pas grave, je relance !',
       'J’attends la bonne ouverture !',
-      'Le bon moment arrive !',
+      'Ça viendra, je reste souriante !',
     ],
     vacuumBounce: [
       'Hop ! Merci le robot !',
@@ -404,6 +430,31 @@ export const BARKS = {
       'Une solution clé en main !',
       'Une offre qui tient toutes ses promesses !',
     ],
+    // At the exit, as the partner (Kévin's run): without the key item, then with it.
+    waiting: [
+      'Il nous manque l’essentiel, retourne le chercher !',
+      'Presque ! Sans l’objet de la mission, on ne signe rien.',
+      'Je garde la porte, file le chercher !',
+      'On ne part pas sans le principal !',
+      'Fouille encore, je suis sûre qu’il est là !',
+      'Regarde en hauteur, c’est souvent tout là-haut !',
+      'Les mains vides ? Même mon meilleur pitch ne suffira pas !',
+      'Tu y es presque, va le chercher !',
+      'Je t’attends ici, avec un grand sourire !',
+      'Pas si vite : il manque le plus important !',
+    ],
+    welcome: [
+      'Bravo, binôme !',
+      'Quelle équipe ! On enchaîne !',
+      'Trop fort, on file !',
+      'Deal bouclé, suis-moi !',
+      'Superbe, je savais que tu y arriverais !',
+      'Livré avec le sourire !',
+      'Pile à l’heure, j’adore !',
+      'Tu assures, vraiment !',
+      'Mission accomplie, prochaine étape !',
+      'Équipe de choc, on continue !',
+    ],
   },
   colleague: {
     bump: [
@@ -448,9 +499,9 @@ export const BARKS = {
       'Je t’envoie une invitation !',
       'On se cale un point ?',
       'Tu as reçu mon invit’ ?',
-      'Réunion dans 5 minutes !',
+      'Réunion dans cinq minutes !',
       'J’ai un créneau entre deux créneaux !',
-      'Tu as cinq minutes ?',
+      'Tu as une minute ?',
       'Je t’ajoute au fil de discussion !',
       'Petit point synchro ?',
       'Un call rapide, promis !',
@@ -622,7 +673,7 @@ export const STAGE_BARKS = {
   },
   lcp7: {
     teaser: {
-      at: 62,
+      at: 103,
       lines: {
         kevin: [
           'Coin imprimantes droit devant. Elles tirent en rafale.',
@@ -641,7 +692,7 @@ export const STAGE_BARKS = {
           'Bon de commande localisé : quelque part ici.',
           'Retour au bureau, version parcours.',
         ],
-        checkpoint: ['Jalon atteint, entre deux bureaux.', 'Badgé. Le Gantt est content.'],
+        checkpoint: ['Point de passage entre deux bureaux.', 'Badgé. Le Gantt est content.'],
         idle: ['Mon bureau n’est pas loin…', 'Ce fauteuil roule mieux que mon planning.'],
       },
       charline: {
@@ -692,7 +743,7 @@ export const STAGE_BARKS = {
   },
   copil: {
     teaser: {
-      at: 43,
+      at: 71,
       lines: {
         kevin: [
           'Grande salle du COPIL : le vidéoprojecteur envoie ses KPI.',
@@ -727,7 +778,7 @@ export const STAGE_BARKS = {
   },
   rooftop: {
     teaser: {
-      at: 55,
+      at: 77,
       lines: {
         kevin: [
           'Trois nacelles au-dessus du vide. Je planifie.',
@@ -746,7 +797,7 @@ export const STAGE_BARKS = {
           'Rooftop, 18 h 30. Signature en vue.',
           'Dernière étape du planning.',
         ],
-        checkpoint: ['Jalon atteint, vue imprenable.', 'Badgé sur le toit. Une première.'],
+        checkpoint: ['Point d’étape, vue imprenable.', 'Badgé sur le toit. Une première.'],
         idle: ['J’entends la musique de l’Espace VIP.', 'Le vent ne figure pas au planning.'],
       },
       charline: {
@@ -762,7 +813,7 @@ export const STAGE_BARKS = {
   },
   intercontrat: {
     teaser: {
-      at: 60,
+      at: 86,
       lines: {
         kevin: [
           'L’escalier des étagères : des plateaux mobiles au-dessus de la fosse.',
@@ -797,7 +848,7 @@ export const STAGE_BARKS = {
   },
   pause: {
     teaser: {
-      at: 70,
+      at: 148,
       lines: {
         kevin: [
           'Le badge est là-bas, sous les bonbonnes en équilibre.',
@@ -832,7 +883,7 @@ export const STAGE_BARKS = {
   },
   seminaire: {
     teaser: {
-      at: 44,
+      at: 78,
       lines: {
         kevin: [
           'Sous le vidéoprojecteur : la keynote envoie ses KPI.',
@@ -864,6 +915,168 @@ export const STAGE_BARKS = {
         idle: ['J’entends le cocktail d’ici !', 'La photo de groupe, c’est bientôt !'],
       },
     },
+  },
+};
+
+/**
+ * Each hero's own wording of the story lines. Stage dialogue names a role (hero,
+ * partner) and either hero may hold it: a line written in one voice reads in the
+ * other's when the other one says it. Keyed by the line's text in the stage file,
+ * then by the CAST id actually speaking; a missing entry keeps the text as is.
+ * @type {Record<string, Partial<Record<'kevin'|'charline', string>>>}
+ */
+export const HERO_TAKES = {
+  // Parking B2
+  'Te voilà ! L’enveloppe des NAO s’est perdue en circuit de validation, et elle doit être signée avant jeudi.':
+    {
+      kevin:
+        'Bonjour. Point de situation : l’enveloppe des NAO s’est perdue en circuit de validation. Échéance de signature : jeudi.',
+    },
+  'Alors on monte la chercher. Seul souci : mon badge est resté sur mon bureau.': {
+    kevin:
+      'Alors on monte la chercher. Seul risque identifié : mon badge est resté sur mon bureau.',
+    charline: 'Alors on fonce la chercher ! Seul hic : mon badge est resté sur mon bureau.',
+  },
+  'Un badge visiteur t’attend près des ascenseurs. Toits des voitures, rebords… et pense à badger sur Chronotime !':
+    {
+      kevin:
+        'Un badge visiteur t’attend près des ascenseurs. Itinéraire : toits des voitures, rebords. Et on badge sur Chronotime à chaque borne.',
+    },
+  'Badge récupéré ! Direction l’open space : le bon de commande nous dira où est partie l’enveloppe.':
+    {
+      kevin:
+        'Badge récupéré. Prochaine étape : l’open space. Le bon de commande nous dira où est partie l’enveloppe.',
+    },
+  // Open space LCP7
+  'Open space LCP7. Le bon de commande signé est quelque part par ici.': {
+    charline: 'L’open space LCP7 ! Le bon de commande signé se cache quelque part par ici.',
+  },
+  'Prudence : les fauteuils roulent seuls, les tiroirs claquent, et le stagiaire court avec ses dossiers.':
+    {
+      charline:
+        'Attention : les fauteuils roulent tout seuls, les tiroirs claquent, et le stagiaire court avec ses dossiers !',
+    },
+  'Et regarde bien le sol : certaines dalles ne tiennent qu’à un fil.': {
+    kevin: 'Et surveille le sol : certaines dalles ne tiennent qu’à un fil. C’est noté au RAID.',
+  },
+  'Le bon de commande ! Regarde le circuit de visa : l’enveloppe est partie chez Julien, à Technologies & Services.':
+    {
+      kevin:
+        'Le bon de commande. D’après le circuit de visa, l’enveloppe est chez Julien, à Technologies & Services.',
+    },
+  'Julien ne valide rien sans une architecture solide. Préparons nos arguments.': {
+    charline:
+      'Julien ne valide rien sans une architecture solide. J’ai déjà mes arguments en tête !',
+  },
+  // Technologies & Services
+  'Salle serveurs, 19 °C. Julien a l’enveloppe, et chez lui, rien ne passe sans une architecture irréprochable.':
+    {
+      charline:
+        'Salle serveurs, 19 °C, brr ! Julien a l’enveloppe, et chez lui, rien ne passe sans une architecture irréprochable.',
+    },
+  'Ça tombe bien : nos comptes rendus sont en haute disponibilité.': {
+    charline: 'Ça tombe bien : mes arguments sont en haute disponibilité !',
+  },
+  'Merci, Julien ! Vous ne serez pas déçu.': {
+    kevin: 'Merci, Julien. Le plan de déploiement suit, jalon par jalon.',
+  },
+  // Comité de pilotage
+  'Mercredi, 10 h : comité de pilotage. Sans CR validé, Rodolphe ne pourra pas signer.': {
+    charline: 'Mercredi, 10 h : le COPIL ! Sans CR validé, Rodolphe ne pourra pas signer ce soir.',
+  },
+  'Visios qui sonnent, sprinklers capricieux, imprimantes en rafale… un COPIL classique.': {
+    charline:
+      'Visios qui sonnent, sprinklers capricieux, imprimantes en rafale… un mercredi comme je les aime !',
+  },
+  'Astuce : la vanne de la Régie coupe tous les sprinklers. Et le CR validé attend pile sous l’un d’eux.':
+    {
+      kevin:
+        'Information utile : la vanne de la Régie coupe tous les sprinklers. Le CR validé attend pile sous l’un d’eux.',
+      charline:
+        'Petit tuyau : la vanne de la Régie coupe tous les sprinklers. Et le CR validé attend pile sous l’un d’eux !',
+    },
+  'Compte rendu validé à l’unanimité ! Rodolphe nous attend ce soir au Power UP Tour, sur le toit.':
+    {
+      kevin: 'CR validé à l’unanimité. Rodolphe nous attend ce soir au Power UP Tour, sur le toit.',
+    },
+  'Dernière ligne droite. Cap sur l’Espace VIP !': {
+    kevin: 'Dernier jalon avant jeudi. Cap sur l’Espace VIP.',
+  },
+  // Power UP Tour
+  'Le Power UP Tour… toute la Région Ouest est là !': {
+    kevin: 'Le Power UP Tour. Toute la Région Ouest est là… et moi, j’ai mes slides.',
+  },
+  'Rodolphe ouvre la soirée à l’Espace VIP. Gare aux trous dans la toiture, et prends la nacelle vers la terrasse haute.':
+    {
+      charline:
+        'Rodolphe ouvre la soirée à l’Espace VIP ! Attention aux trous dans la toiture, et prends la nacelle vers la terrasse haute.',
+    },
+  'On l’a fait !': { kevin: 'On l’a fait. Et dans les temps !' },
+  // Intercontrat
+  'Des étagères à escalader, des tickets partout… on appelle ça de la montée en compétences.': {
+    charline: 'Des étagères à escalader, des tickets partout… moi, j’appelle ça du team building !',
+  },
+  'Ramène-le vite : quelqu’un a hâte de repartir en mission, et côté staffing, chaque jour compte !':
+    {
+      kevin:
+        'Ramène-le vite : quelqu’un a hâte de repartir en mission. Le planning de démarrage est prêt.',
+    },
+  'Ordre de mission signé ! Départ lundi chez le client, au bon TJM.': {
+    kevin: 'Ordre de mission signé. Démarrage lundi chez le client, kick-off à 9 h.',
+  },
+  'Fin de l’intercontrat, client ravi. Ça, c’est un staffing réussi.': {
+    kevin: 'Fin de l’intercontrat, client ravi. Je l’ajoute au REX, rubrique réussites.',
+  },
+  // Salle de pause
+  'Je le récupère et je reviens. Qu’est-ce qui pourrait mal tourner ?': {
+    kevin: 'Je le récupère et je reviens. Risque estimé : faible. Très faible. Normalement.',
+  },
+  'Les bonbonnes d’eau tiennent en équilibre… Au retour, cours !': {
+    kevin: 'Les bonbonnes d’eau tiennent en équilibre. Au retour : sprint, sans détour.',
+  },
+  'Un café, et on attaque les comptes rendus de la semaine.': {
+    charline: 'Un café, et j’appelle trois clients avant midi !',
+  },
+  // Séminaire annuel
+  'Attention au vidéoprojecteur : la keynote envoie ses KPI à la volée. Baisse la tête !': {
+    kevin:
+      'Point de vigilance : le vidéoprojecteur. La keynote envoie ses KPI à la volée. Tête baissée.',
+  },
+  'Et pour le buffet. Les petits-fours, eux, n’attendront pas le prochain COPIL.': {
+    charline: 'Et pour le buffet ! Les petits-fours, eux, n’attendront pas le prochain COPIL.',
+  },
+  // Epilogue
+  'Trois jours, deux signatures, et pas une minute de retard.': {
+    charline: 'Trois jours, deux signatures, et le sourire jusqu’au bout !',
+  },
+  'Merci, binôme. On refait équipe l’an prochain ?': {
+    kevin: 'Merci, binôme. Je bloque déjà le créneau pour l’an prochain.',
+    charline: 'Merci, binôme ! On refait équipe l’an prochain ?',
+  },
+};
+
+/**
+ * The interlude between two story stages, keyed by the stage it leads to: the
+ * hero's one line on the way (the clock and the route come from the stages).
+ * @type {Record<string, Record<'kevin'|'charline', string>>}
+ */
+export const INTERLUDES = {
+  lcp7: {
+    kevin: 'Sept minutes d’ascenseur. Je les avais prévues au planning.',
+    charline: 'Ascenseur, miroir, sourire. L’open space ne sait pas ce qui l’attend !',
+  },
+  ts: {
+    kevin: 'Lundi : CR rédigé. Mardi matin : CR relu. Mardi, 14 h : CR prêt pour Julien.',
+    charline: 'Créneau calé avec Julien : mardi, 14 h. On lui apporte un dossier en béton !',
+  },
+  copil: {
+    kevin: 'Une signature sur deux. Mon Gantt n’a jamais été aussi vert.',
+    charline: 'Une signature en poche ! Pitch du COPIL répété trois fois devant la machine à café.',
+  },
+  rooftop: {
+    kevin:
+      'Huit heures et demie avant le Power UP Tour. J’ai prévu une marge… et une chemise propre.',
+    charline: 'Ce soir, le toit ! Tenue prête, arguments prêts, sourire déjà en place.',
   },
 };
 

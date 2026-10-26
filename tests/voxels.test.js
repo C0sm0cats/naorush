@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { LEVELS } from '../src/data/levels/index.js';
 import { TILE, createSim } from '../src/game/sim.js';
 import { MeshBuilder } from '../src/gfx/geometry.js';
-import { PROP_IDS, PROP_VARIANTS, propGeometry } from '../src/gfx/props.js';
+import { PROP_IDS, PROP_VARIANTS, propGeometry, propVariant } from '../src/gfx/props.js';
 import {
   MAT,
   STRIDE,
@@ -193,7 +193,7 @@ describe('set dressing', () => {
       const { vol } = build(l);
       const at = (/** @type {number} */ c, /** @type {number} */ r) =>
         c < 0 || c >= sim.w || r < 0 || r >= sim.h ? TILE.SOLID : sim.tiles[c + r * sim.w];
-      for (let r = 2; r < sim.h - 2; r++)
+      for (let r = 2; r < sim.h - 3; r++)
         for (let c = 1; c < sim.w - 2; c++) {
           // A 2×2 block of plain wall tiles shows panel joints on its front face.
           const block = [0, 1].every((dc) =>
@@ -232,8 +232,19 @@ describe('set dressing', () => {
 
   it('dresses the break room with its table football and vending machines', () => {
     const pause = LEVELS.find((l) => l.id === 'pause');
-    const types = pause?.decor.map((d) => d.type) ?? [];
-    for (const t of ['babyFoot', 'vendingSnack', 'vendingDrink']) expect(types).toContain(t);
+    if (!pause) throw new Error('pause');
+    const types = pause.decor.map((d) => d.type);
+    for (const t of ['vendingSnack', 'vendingDrink']) expect(types).toContain(t);
+    // Its free-standing 2×3 blocks are drawn as vending machines: a lit header on top.
+    const sim = createSim(pause, 'kevin');
+    const { vol } = build(pause);
+    let machines = 0;
+    for (let c = 1; c < sim.w - 2; c++)
+      for (let r = 1; r < sim.h - 3; r++) {
+        const v = vol.get(c * V + 4, (r + 3) * V - 2, vol.sz - 1);
+        if (v >>> 24 === MAT.EMISSIVE && pause.map[sim.h - 1 - r][c] === '#') machines++;
+      }
+    expect(machines).toBeGreaterThan(0);
     for (const id of ['babyFoot', 'vendingSnack', 'vendingDrink'])
       expect(propGeometry(/** @type {any} */ (id)).count).toBeGreaterThan(0);
   });
@@ -244,6 +255,59 @@ describe('set dressing', () => {
     for (const id of PROP_IDS) {
       const g = /** @type {{vertices: number}} */ (/** @type {unknown} */ (propGeometry(id)));
       expect(g.vertices, id).toBeLessThan(6000);
+    }
+  });
+
+  it('stands every decor prop on a floor, clear of the walls', () => {
+    /** Horizontal and vertical extent of a prop model. @param {string} id */
+    const extent = (id) => {
+      const g = propGeometry(/** @type {any} */ (id));
+      const d = new DataView(g.data);
+      const lo = [Infinity, Infinity, Infinity],
+        hi = [-Infinity, -Infinity, -Infinity];
+      for (let i = 0; i < g.data.byteLength / STRIDE; i++)
+        for (let k = 0; k < 3; k++) {
+          const v = d.getFloat32(i * STRIDE + k * 4, true);
+          lo[k] = Math.min(lo[k], v);
+          hi[k] = Math.max(hi[k], v);
+        }
+      return { lo, hi };
+    };
+    const hung = new Set(['projector', 'truss']);
+    for (const l of LEVELS) {
+      const h = l.map.length;
+      const at = (/** @type {number} */ c, /** @type {number} */ r) =>
+        r < 0 || r >= h ? '#' : (l.map[h - 1 - r][c] ?? '#');
+      const props = l.decor.filter(
+        (d) =>
+          !['poster', 'whiteboard', 'desk'].includes(d.type) &&
+          !hung.has(d.type) &&
+          // Spotlights clamped to a truss hang between whole rows.
+          !(d.type === 'spotlight' && d.y % 1),
+      );
+      for (const d of props) {
+        const { lo, hi } = extent(propVariant(/** @type {any} */ (d.type), d.x, d.y));
+        const z1 = (d.z ?? -1.9) + hi[2];
+        const tag = `${l.id} ${d.type} x${d.x} y${d.y}`;
+        // Nothing sinks into a wall (meeting tables and parked cars stand in front).
+        for (let c = Math.floor(d.x + lo[0] + 0.05); c <= Math.floor(d.x + hi[0] - 0.05); c++)
+          for (let r = Math.floor(d.y + 0.05); r <= Math.floor(d.y + hi[1] - 0.05); r++) {
+            const ch = at(c, r);
+            if ((ch === 'Y' && z1 < -1) || (ch === 'Q' && z1 < -1.45)) continue;
+            expect('#MBVHQY'.includes(ch), `${tag}: ${ch} en ${c},${r}`).toBe(false);
+          }
+        // Nothing floats: a floor (or a prop, for a cup) under most of its footprint.
+        const onProp = props.some(
+          (o) => o !== d && o.type !== 'cup' && Math.abs(o.x - d.x) < 0.5 && o.y < d.y,
+        );
+        if (onProp) continue;
+        let n = 0,
+          held = 0;
+        for (let x = d.x + lo[0] + 0.05; x < d.x + hi[0]; x += 0.1, n++)
+          if ('#MBVHQYA'.includes(at(Math.floor(x), Math.round(d.y) - 1))) held++;
+        expect(held / n, tag).toBeGreaterThanOrEqual(0.75);
+        expect(Math.abs(d.y - Math.round(d.y)), tag).toBeLessThan(0.15);
+      }
     }
   });
 

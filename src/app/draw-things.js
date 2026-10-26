@@ -1,9 +1,9 @@
 import { CAST } from '../data/cast.js';
 import { FRESH, poseCharacter, poseOptions } from '../gfx/characters.js';
 import { WARN, consultLength, teleportTarget } from '../game/boss.js';
-import { HERO } from '../game/sim.js';
+import { HERO, TILE, tileAt } from '../game/sim.js';
 import { pileColumn } from '../game/enemies.js';
-import { PERIOD, phaseOf } from '../game/traps.js';
+import { PERIOD, WET, phaseOf, sinceSpray, wetSpan } from '../game/traps.js';
 import { multiply, rotationX, rotationY, rotationZ, scaling, translation } from '../gfx/mat4.js';
 import { blinkAt, idlePose } from './poses.js';
 import { floorX0, floorX1, smoothstep, stageMood } from './staging.js';
@@ -33,6 +33,7 @@ const RING_GLOW = [0.75, 1.5, 0.4];
 const VALVE_SPARK = [0.6, 0.9, 1.6];
 const SPRAY_TINT = [0.75, 0.9, 1.25];
 const DRIP_GLOW = [0.5, 0.8, 1];
+const GLINT = [1.3, 1.45, 1.6];
 const SECRET_GLOW = [1.4, 1.2, 0.5];
 const RACK_GLOW = [1, 0.5, 0.15];
 /** @type {Pose} */
@@ -382,6 +383,27 @@ function projectileCues(view, th, r, y0, y1, t) {
 }
 
 /**
+ * A sprinkler's puddle on the floor at `y`, `r` times the size of its wet stretch.
+ * @param {import('./scene.js').LevelView} view @param {number} x @param {number} y
+ * @param {number} r @param {number} t
+ */
+function wetFloor(view, x, y, r, t) {
+  const it = at(view.props.puddle, x, y + 0.005, -0.3, scaling(r * WET.reach * 2, 1, r * 1.6, E1));
+  it.noShadow = true;
+  wetGlint(view, x - 0.3 * r, x + 0.3 * r, y, t);
+}
+
+/**
+ * The light gliding across wet floor from x0 to x1: what says « it slips » at a glance.
+ * @param {import('./scene.js').LevelView} view @param {number} x0 @param {number} x1
+ * @param {number} y @param {number} t
+ */
+function wetGlint(view, x0, x1, y, t) {
+  const k = 0.5 + 0.5 * Math.sin(t * 1.7 + x0);
+  out.push(view.glow(x0 + (x1 - x0) * k, y + 0.03, 0.05, 0.05, GLINT));
+}
+
+/**
  * @param {import('./scene.js').LevelView} view
  * @param {DrawItem[]} items
  * @param {Sim} sim
@@ -647,20 +669,32 @@ export function drawThing(view, items, sim, th, t) {
         if (cues && sig.state === 'live')
           hatchBox(view, th.x - 0.32, th.y0 ?? 0, th.x + 0.32, top - 0.1, 0.3, t);
       }
-      // A puddle grows on the floor while it drips and dries up after the spray.
-      if (th.state !== 'dry') {
-        const k = phaseOf(sim, th, PERIOD.sprinkler);
-        const r =
-          th.state === 'on'
-            ? 0.95 + Math.sin(t * 30) * 0.04
-            : th.state === 'drip'
-              ? 0.25 + ((k - 1.6) / 0.6) * 0.45
-              : 0.95 * Math.max(0, 1 - k / 0.7);
-        if (r > 0.05) {
-          const it = at(P.puddle, th.x, (th.y0 ?? 0) + 0.005, -0.3, scaling(r, 1, r, E1));
-          it.noShadow = true;
-        }
-      }
+      // IN1: the spray spreads a puddle on the floor, which stays (slippery) for
+      // WET.after seconds and shrinks as it dries; over a gap or cables it drains away.
+      if (th.state === 'on') wetFloor(view, th.x, th.y0 ?? 0, 0.95 + Math.sin(t * 30) * 0.04, t);
+      else if (wetSpan(sim, th))
+        wetFloor(view, th.x, th.y0 ?? 0, 0.95 - 0.25 * (sinceSpray(sim, th) / WET.after), t);
+      break;
+    }
+    case 'puddle': {
+      // IN1: standing water under a drip from the ceiling, and the yellow
+      // « Attention sol glissant » sign before it, behind the hero's path.
+      const w = th.w ?? 1;
+      const cx = th.x + w / 2;
+      let it = at(P.puddle, cx, th.y + 0.004, -0.15, scaling(w + 0.3, 1, 1.9, E1));
+      it.noShadow = true;
+      it = at(P.puddle, cx - w * 0.2, th.y + 0.007, 0.2, scaling(w * 0.55, 1, 1.3, E1));
+      it.noShadow = true;
+      wetGlint(view, th.x + 0.3, th.x + w - 0.3, th.y, t);
+      let top = th.y + 1;
+      while (top < th.y + 8 && tileAt(sim, Math.floor(cx), top) === TILE.EMPTY) top++;
+      const k = (t / 1.3 + th.x * 0.17) % 1;
+      if (k < 0.75) {
+        const f = k / 0.75;
+        items.push(view.glow(cx + 0.35, top - (top - th.y) * f * f, -0.15, 0.06, DRIP_GLOW));
+      } else
+        items.push(view.glow(cx + 0.35, th.y + 0.02, -0.15, 0.08 + (k - 0.75) * 1.2, DRIP_GLOW));
+      at(things.wetSign, (th.dir ?? -1) < 0 ? th.x - 0.5 : th.x + w + 0.5, th.y, -0.75);
       break;
     }
     case 'printer':

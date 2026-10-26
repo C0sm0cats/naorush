@@ -6,23 +6,28 @@ import { DT, GRAVITY, HERO, TILE, emit, hurt, knock, make, solid } from './world
  * conviction drops they move on to new phases with new attacks. Once
  * convinced they sign the NAO envelope: everyone wins.
  *
- * Julien (Technologies & Services) runs his infrastructure: KPI volleys,
- * server racks dropped on the hero's shadow, live cable runs; once he fails
- * over to the backup site, a teleport, a load balancer that lowers racks on
- * every other slot then on the others, and a cable failover where the backup
- * circuit goes live right after the main one.
- * Rodolphe (Région Ouest) puts on a show: fans of slides, stage-shaking leaps
- * and spotlight zones; then the regional tour dash across the stage and an
- * encore where the spotlight comes back to the spot it had spared; and for
- * his last argument a grand finale: the spotlight follows the hero three
- * times, then one last stage-shaking leap.
+ * Julien (Technologies & Services) runs his infrastructure, calm and precise:
+ * KPI volleys, server racks dropped on the hero's shadow, live cable runs, a
+ * supervision that lowers three racks on the hero's spot one after the other,
+ * and a maintenance window where the whole floor goes live but for one spot,
+ * then for another. Once he fails over to the backup site: a teleport, a load
+ * balancer that lowers racks on every other slot then on the others, and a
+ * cable failover where the backup circuit goes live right after the main one.
+ * Rodolphe (Région Ouest) puts on a show: fans of slides (and an encore whose
+ * slides land in the gaps of the first), stage-shaking leaps (two in a row
+ * when the crowd asks for more) and spotlight zones; then the regional tour,
+ * a dash across the stage and back, and an encore where the spotlight comes
+ * back to the spot it had spared; and for his last argument a grand finale:
+ * the spotlight follows the hero, slides rain, the stage shakes twice.
  *
  * Fair by construction: every attack is announced at least 0.6 s before it can
  * hurt, and an attack only ends once everything it threw is spent, so a consult
  * window is always calm; its length is `consult[phase - 1]`. Each sequence
  * holds rounds that end on a consult: after a successful CR the director moves
  * on to the next round, so the fight never repeats itself. A step written
- * 'state:variant' plays the state's pose with a twist (kept in `b.variant`).
+ * 'state:variant' plays the state's pose with a twist (kept in `b.variant`); an
+ * encore plays the state again from the top (variants 'again' and 'back'), so
+ * its wind-up, and its warning, come back with it.
  *
  * The arena changes with the fight: from the second phase two risers come in
  * (Julien's server racks rise out of the raised floor, Rodolphe's trusses come
@@ -45,12 +50,32 @@ export const PATTERNS = {
   techServicesDirector: {
     phases: [2],
     seq: [
-      ['volley', 'rackDrop', 'consult', 'volley', 'cables', 'consult'],
+      [
+        'volley',
+        'rackDrop',
+        'cables',
+        'volley',
+        'consult',
+        'rackDrop:tracking',
+        'cables:maintenance',
+        'volley',
+        'rackDrop',
+        'cables',
+        'consult',
+      ],
       [
         'teleport',
         'volley',
         'rackDrop:balancer',
+        'teleport',
+        'cables:failover',
+        'volley',
+        'rackDrop:tracking',
         'consult',
+        'teleport',
+        'cables:maintenance',
+        'volley',
+        'rackDrop:balancer',
         'teleport',
         'cables:failover',
         'consult',
@@ -61,9 +86,21 @@ export const PATTERNS = {
   regionalDirector: {
     phases: [3, 1],
     seq: [
-      ['fan', 'leap', 'consult', 'zones', 'fan', 'consult'],
-      ['dash', 'zones', 'leap', 'consult', 'dash', 'fan', 'zones:encore', 'consult'],
-      ['zones:follow', 'leap', 'consult'],
+      ['fan', 'leap', 'zones', 'fan', 'consult', 'zones', 'leap:double', 'fan:encore', 'consult'],
+      [
+        'dash',
+        'fan',
+        'zones',
+        'leap',
+        'dash:return',
+        'consult',
+        'dash:return',
+        'zones:encore',
+        'fan:encore',
+        'leap:double',
+        'consult',
+      ],
+      ['zones:follow', 'fan:encore', 'leap:double', 'zones:follow', 'dash:return', 'consult'],
     ],
     consult: [2.6, 2.4, 3],
   },
@@ -74,12 +111,52 @@ export const WARN = 1;
 export const LIVE = 0.65;
 /** When the second wave of an alternating attack is warned: once the first has died down. */
 const SWAP = WARN + LIVE + 0.1;
+/** Julien's supervision: when each of its three racks is warned (s). */
+const TRACK = [DT, 0.75, 1.5];
+/** Julien's maintenance window: its width, and how far from the hero it opens (tiles). */
+const WINDOW = 3;
+const REACH = 4.5;
 
+/** How far from the director the hero keeps clear of his push (tiles, centre to centre). */
+const DODGE = 1.2;
+
+/**
+ * Where the maintenance window opens for the hero (its centre): on his side of
+ * the director (nobody jumps over him), REACH tiles away if there is room for it,
+ * as far as his side allows otherwise.
+ * @param {number} hx @param {number} bx @param {number} x0 @param {number} x1
+ */
+function maintenanceWindow(hx, bx, x0, x1) {
+  const lo = (hx < bx ? x0 : bx + DODGE) + WINDOW / 2;
+  const hi = (hx < bx ? bx - DODGE : x1) - WINDOW / 2;
+  let best = (lo + hi) / 2;
+  let score = -Infinity;
+  for (let c = lo; c <= hi + 1e-6; c += 0.25) {
+    const d = Math.abs(c - hx);
+    const k = Math.min(d, REACH) - Math.max(0, d - REACH) * 0.1;
+    if (k > score) [best, score] = [c, k];
+  }
+  return best;
+}
+
+/**
+ * How much taller than his cast size a director stands in his duel: a head and
+ * shoulders over the heroes, imposing without turning into a giant. The drawing
+ * scales his figure by it (`poseOptions(CAST[id].scale * BOSS_STAGE_SCALE, …)`).
+ */
+export const BOSS_STAGE_SCALE = 1.25;
 /** How tall each director stands (tiles): what walking into him and his CR target measure. */
-export const BOSS_HEIGHT = { techServicesDirector: 2.0, regionalDirector: 2.1 };
+export const BOSS_HEIGHT = { techServicesDirector: 2.5, regionalDirector: 2.6 };
 /** @param {Sim} s */
 export const bossHeight = (s) => BOSS_HEIGHT[s.boss?.id ?? 'techServicesDirector'];
+/**
+ * A point on the director, `k` of his height up (1: the top of his head).
+ * @param {Sim} s @param {Thing} b @param {number} k
+ */
+const up = (s, b, k) => b.y + bossHeight(s) * k;
 
+/** Where his hand lets a slide go, as a share of his height. */
+const HAND = 0.85;
 /** Half the width of a director's footprint (tiles). */
 const BODY = 0.4;
 /** Half the width a leap sweeps (arms out): what must stay clear above him (tiles). */
@@ -103,8 +180,8 @@ export const HARDCORE_CONSULT = 0.4;
  * @type {Record<BossId, {from: number, cols: number[], w: number, rise: boolean}>}
  */
 export const RISERS = {
-  techServicesDirector: { from: 2, cols: [2, 13], w: 2, rise: true },
-  regionalDirector: { from: 2, cols: [2, 13], w: 2, rise: false },
+  techServicesDirector: { from: 2, cols: [2, 8], w: 2, rise: true },
+  regionalDirector: { from: 2, cols: [2, 8], w: 2, rise: false },
 };
 /** Rise and drop speeds of the risers (tiles/s), and the rig height trusses come from. */
 const RISE = 0.9;
@@ -233,6 +310,9 @@ function station(s, b, step) {
   return b.x;
 }
 
+/** Variants that play a step again right away (`leap:again`, `fan:again`, `dash:back`). */
+const ENCORES = new Set(['again', 'back']);
+
 /** @param {Sim} s @param {Thing} b @param {string} step 'state' or 'state:variant'. */
 function enter(s, b, step) {
   const [state, variant] = step.split(':');
@@ -240,9 +320,10 @@ function enter(s, b, step) {
   b.variant = variant;
   b.t = 0;
   b.vx = 0;
-  if (state === 'consult') emit(s, 'consult', b.x, b.y + 2.2);
+  if (state === 'consult') emit(s, 'consult', b.x, up(s, b, 1.1));
   else if (state !== 'hit' && state !== 'phase' && state !== 'walk')
-    emit(s, 'telegraph', b.x, b.y + 2.3);
+    // The encores (a second leap, fan or dash) are announced by the crowd.
+    emit(s, 'telegraph', b.x, up(s, b, 1.15), ENCORES.has(variant) ? 'encore' : undefined);
 }
 
 /** Plays the current step, walking to its station first. @param {Sim} s @param {Thing} b */
@@ -268,8 +349,24 @@ const spent = (s, kind) => !s.things.some((t) => t.alive && t.kind === kind);
 /** @param {Sim} s @param {Thing} b @param {number} vx @param {number} vy */
 function throwKpi(s, b, vx, vy) {
   const face = Math.sign(vx) || 1;
-  s.things.push(make('kpi', b.x + face * 0.5, b.y + 1.7, { vx, vy, state: 'fly' }));
-  emit(s, 'bossThrow', b.x, b.y + 1.8);
+  s.things.push(make('kpi', b.x + face * 0.5, up(s, b, HAND), { vx, vy, state: 'fly' }));
+  emit(s, 'bossThrow', b.x, up(s, b, 0.9));
+}
+
+/**
+ * A volley throw at the hero: lobbed to land just short of him on the floor;
+ * when he has climbed (a step, a balcony), arced to peak where he stands.
+ * @param {Sim} s @param {Thing} b @param {number} hx @param {number} floor
+ */
+function aim(s, b, hx, floor) {
+  const climb = s.hero.y - floor;
+  if (climb < 1.5 || s.hero.state === 'dead') {
+    throwKpi(s, b, hx - b.x, 5.5);
+    return;
+  }
+  const g = GRAVITY * 0.55;
+  const vy = Math.sqrt(2 * g * Math.max(0.5, s.hero.y + 0.9 - up(s, b, HAND)));
+  throwKpi(s, b, (hx - b.x) / (vy / g), vy);
 }
 
 /**
@@ -280,9 +377,15 @@ function throwKpi(s, b, vx, vy) {
 const zone = (s, x, y, w, variant, extra = {}) =>
   s.things.push(make('zone', x, y, { w, state: 'warn', variant, ...extra }));
 
-/** The floor's top at column c: one up where a riser stands. @param {Sim} s @param {number} c @param {number} floor */
-const surface = (s, c, floor) =>
-  solid(s, c, floor) && !solid(s, c, floor + 1) ? floor + 1 : floor;
+/**
+ * The floor's top at column c: up on a riser, a step or a stage, as high as it goes.
+ * @param {Sim} s @param {number} c @param {number} floor
+ */
+function surface(s, c, floor) {
+  let y = floor;
+  while (y < floor + HEADROOM && solid(s, c, y)) y++;
+  return y;
+}
 
 /**
  * A zone over a stretch of the arena floor that also covers the risers'
@@ -437,7 +540,7 @@ export function stepBoss(s, b) {
     }
     case 'volley':
       // Three throws, each released at the end of the arm's wind-up (0.89 s for the first).
-      for (const k of [0.89, 1.44, 1.99]) if (at(b, k)) throwKpi(s, b, hx - b.x, 5.5);
+      for (const k of [0.89, 1.44, 1.99]) if (at(b, k)) aim(s, b, hx, floor);
       if (b.t > 2.4 && spent(s, 'kpi')) nextAttack(s, b);
       break;
     case 'rackDrop':
@@ -452,11 +555,23 @@ export function stepBoss(s, b) {
           for (let x = x0 + 0.5 + off; x <= x1 - 0.5; x += 3)
             if (Math.abs(x - b.x) > 1.2) {
               s.things.push(make('rack', x, floor, { state: 'warn', y0: floor }));
-              underPlatform(s, x, floor);
+              underPlatform(s, x, floor, x0, x1);
             }
-          if (batch) emit(s, 'telegraph', b.x, b.y + 2.3);
+          if (batch) emit(s, 'telegraph', b.x, up(s, b, 1.15));
         }
         if (b.t > 3.3 && spent(s, 'rack')) nextAttack(s, b);
+        break;
+      }
+      if (b.variant === 'tracking') {
+        // Supervision: a rack on the hero's spot, then on wherever he went, three
+        // times. Each shadow warns as long as any other: just keep moving.
+        for (const k of TRACK)
+          if (at(b, k)) {
+            const x = Math.max(x0 + 0.5, Math.min(x1 - 0.5, hx));
+            s.things.push(make('rack', x, floor, { state: 'warn', y0: floor }));
+            if (k > DT) emit(s, 'telegraph', b.x, up(s, b, 1.15), 'tracking');
+          }
+        if (b.t > TRACK[2] + 0.9 && spent(s, 'rack')) nextAttack(s, b);
         break;
       }
       if (at(b, DT)) {
@@ -474,7 +589,7 @@ export function stepBoss(s, b) {
         const x = teleportTarget(s, b);
         if (Math.abs(hx - x) > 2) {
           b.x = x;
-          emit(s, 'teleport', b.x, b.y + 1);
+          emit(s, 'teleport', b.x, up(s, b, 0.5));
         }
       }
       if (b.t > 1) nextAttack(s, b);
@@ -483,6 +598,21 @@ export function stepBoss(s, b) {
       // The floor is cut into two-tile runs; every other run goes live. On
       // failover the backup circuit (the other runs) is warned the moment the
       // main one dies down: step back onto the runs that just went dark.
+      if (b.variant === 'maintenance') {
+        // Maintenance window: the whole floor goes live but for one window on each
+        // side of him, the hero's a few steps away; then again, from where he went.
+        if (at(b, DT) || at(b, SWAP)) {
+          const near = maintenanceWindow(hx, b.x, x0, x1);
+          const far = (hx < b.x ? x1 + b.x + DODGE : x0 + b.x - DODGE) / 2;
+          const [a, c] = near < far ? [near, far] : [far, near];
+          floorZone(s, x0, floor, a - WINDOW / 2 - x0, 'cable');
+          floorZone(s, a + WINDOW / 2, floor, c - a - WINDOW, 'cable');
+          floorZone(s, c + WINDOW / 2, floor, x1 - c - WINDOW / 2, 'cable');
+          emit(s, 'cableWarn', near, floor, 'maintenance');
+        }
+        if (b.t > 2 && spent(s, 'zone')) nextAttack(s, b);
+        break;
+      }
       const failover = b.variant === 'failover';
       /** @param {number} odd */
       const circuit = (odd) => {
@@ -495,13 +625,23 @@ export function stepBoss(s, b) {
       if (b.t > (failover ? 2 : 1) && spent(s, 'zone')) nextAttack(s, b);
       break;
     }
-    case 'fan':
+    case 'fan': {
+      // Five slides fanned out; the encore's land in the gaps the first left.
+      const again = b.variant === 'again';
       if (at(b, 0.6)) {
-        for (let i = 0; i < 5; i++) throwKpi(s, b, face * (2.2 + i * 1.6), 5 + (i % 2) * 2.5);
-        emit(s, 'fan', b.x, b.y + 1.8);
+        for (let i = 0; i < 5; i++)
+          throwKpi(
+            s,
+            b,
+            face * ((again ? 3 : 2.2) + i * 1.6),
+            5 + ((i + (again ? 1 : 0)) % 2) * 2.5,
+          );
+        emit(s, 'fan', b.x, up(s, b, 0.9));
       }
-      if (b.t > 1.6 && spent(s, 'kpi')) nextAttack(s, b);
+      if (b.variant === 'encore' && b.t > 1.3) enter(s, b, 'fan:again');
+      else if (b.t > 1.6 && spent(s, 'kpi')) nextAttack(s, b);
       break;
+    }
     case 'leap':
       // Crouch (telegraph), jump, slam: two shockwaves run outwards.
       if (at(b, DT) && !leapRoom(s, b.x, floor)) {
@@ -514,7 +654,9 @@ export function stepBoss(s, b) {
           s.things.push(make('wave', b.x + dir * 0.6, floor, { vx: dir * 6, state: 'run' }));
         emit(s, 'slam', b.x, floor);
       }
-      if (b.t > 1.6 && spent(s, 'wave')) nextAttack(s, b);
+      // The crowd asks for more: a second leap right after the first slam.
+      if (b.variant === 'double' && b.t > 1.45) enter(s, b, 'leap:again');
+      else if (b.t > 1.6 && spent(s, 'wave')) nextAttack(s, b);
       break;
     case 'dash': {
       // Arrows on the floor cover exactly the stretch he will run through,
@@ -528,12 +670,14 @@ export function stepBoss(s, b) {
         zone(s, from, floor, Math.abs(target - b.x) + 1.2, 'arrow', { dir });
       }
       if (b.t > 0.85 && b.t < 2.4) {
-        if (at(b, 0.85 + DT)) emit(s, 'dash', b.x, b.y + 1);
+        if (at(b, 0.85 + DT)) emit(s, 'dash', b.x, up(s, b, 0.5));
         const nx = b.x + dir * 13 * DT;
         b.x = dir > 0 ? Math.min(target, nx) : Math.max(target, nx);
         b.vx = b.x === target ? 0 : dir * 13;
       }
-      if (b.t > 2.4) nextAttack(s, b);
+      // The return leg: from the far side, back across the stage (new arrows first).
+      if (b.t > 2.4 && b.variant === 'return') enter(s, b, 'dash:back');
+      else if (b.t > 2.4) nextAttack(s, b);
       break;
     }
     case 'zones': {
@@ -551,7 +695,15 @@ export function stepBoss(s, b) {
       // Two thirds of the stage light up; the encore then lights the spared
       // third the moment the others go dark.
       const third = (x1 - x0) / 3;
-      const safe = (b.hp ?? 0) % 3;
+      // The third spared turns with every argument won, never the one the hero
+      // stands in: whoever stays put gets the spotlight.
+      if (at(b, DT)) {
+        const mine = Math.max(0, Math.min(2, Math.floor((hx - x0) / third)));
+        const turn = (b.hp ?? 0) % 3;
+        // When his own third's turn comes, a third next to it: never across the stage.
+        b.dir = turn !== mine ? turn : mine !== 1 ? 1 : flip ? 2 : 0;
+      }
+      const safe = b.dir ?? 0;
       /** @param {number} i */
       const spot = (i) => floorZone(s, x0 + i * third, floor, third, 'spot');
       if (at(b, DT)) {
@@ -562,7 +714,7 @@ export function stepBoss(s, b) {
       if (encore && at(b, SWAP)) {
         // Not 'zoneWarn': its hint says to hide in the dark spot, which is now the target.
         spot(safe);
-        emit(s, 'telegraph', b.x, b.y + 2.3);
+        emit(s, 'telegraph', b.x, up(s, b, 1.15));
       }
       if (b.t > (encore ? 2 : 1) && spent(s, 'zone')) nextAttack(s, b);
       break;
@@ -584,7 +736,7 @@ export function stepBoss(s, b) {
       if (b.t > 1.4) {
         b.state = 'sign';
         b.t = 0;
-        emit(s, 'sign', b.x, b.y + 1.6);
+        emit(s, 'sign', b.x, up(s, b, 0.8));
         s.things.push(make('key', b.x - face * 1.3, floor + 0.6));
       }
       break;
@@ -616,18 +768,19 @@ function landing(s, x, y) {
 /**
  * A load-balancer rack stopped by a platform would leave a shelter under it: the
  * backup current runs under that platform instead, so standing still stays unsafe.
- * @param {Sim} s @param {number} x @param {number} floor
+ * @param {Sim} s @param {number} x @param {number} floor @param {number} x0 @param {number} x1
  */
-function underPlatform(s, x, floor) {
+function underPlatform(s, x, floor, x0, x1) {
   const top = landing(s, x, floor + 7);
-  // Only a platform with room to stand under it makes a shelter.
+  // Only a platform with room to stand under it makes a shelter (not a step or a stage).
   if (top - 1 - floor < HERO.h) return;
   const r = top - 1;
   let c0 = Math.floor(x - 0.45);
   if (!solid(s, c0, r)) c0++;
+  for (let y = floor; y < floor + 2; y++) if (solid(s, c0, y)) return;
   let c1 = c0;
-  while (solid(s, c0 - 1, r)) c0--;
-  while (solid(s, c1 + 1, r)) c1++;
+  while (c0 > x0 && solid(s, c0 - 1, r)) c0--;
+  while (c1 + 1 < x1 && solid(s, c1 + 1, r)) c1++;
   zone(s, c0, floor, c1 - c0 + 1, 'cable');
   emit(s, 'cableWarn', (c0 + c1 + 1) / 2, floor);
 }
@@ -683,7 +836,7 @@ export function stepHazard(s, t) {
  */
 export function hitBoss(s, b) {
   if (b.state !== 'consult') {
-    emit(s, 'block', b.x, b.y + 1.6, 'boss');
+    emit(s, 'block', b.x, up(s, b, 0.8), 'boss');
     return;
   }
   const next = PATTERNS[s.boss?.id ?? 'techServicesDirector'].phases[(b.phase ?? 1) - 1];
@@ -694,7 +847,7 @@ export function hitBoss(s, b) {
     b.vx = 0;
     s.bossDone = true;
     s.things = s.things.filter((k) => !BOSS_DEBRIS.has(k.kind));
-    emit(s, 'bossDone', b.x, b.y + 2);
+    emit(s, 'bossDone', b.x, up(s, b, 1));
   } else if (next !== undefined && b.hp <= next) {
     // A new phase (Rodolphe's third one is his grand finale).
     b.phase = (b.phase ?? 1) + 1;
@@ -703,13 +856,13 @@ export function hitBoss(s, b) {
     b.vx = 0;
     s.things = s.things.filter((k) => !BOSS_DEBRIS.has(k.kind));
     addRisers(s, b);
-    emit(s, 'bossHit', b.x, b.y + 2);
-    emit(s, 'bossPhase', b.x, b.y + 2);
+    emit(s, 'bossHit', b.x, up(s, b, 1));
+    emit(s, 'bossPhase', b.x, up(s, b, 1));
   } else {
     b.state = 'hit';
     b.t = 0;
     b.vx = 0;
-    emit(s, 'bossHit', b.x, b.y + 2);
+    emit(s, 'bossHit', b.x, up(s, b, 1));
   }
 }
 

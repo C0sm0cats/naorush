@@ -121,6 +121,43 @@ export const louder = (/** @type {Voice} */ v, /** @type {number} */ g) =>
         tone: (o) => v.tone({ ...o, v: (o.v ?? 0.3) * g }),
         noise: (o) => v.noise({ ...o, v: (o.v ?? 0.3) * g }),
       };
+/**
+ * The same voice, `dt` seconds later, `k` times higher and `g` times louder: a copy of
+ * an effect that must not land exactly on top of the first one.
+ * @returns {Voice}
+ */
+export const shifted = (
+  /** @type {Voice} */ v,
+  /** @type {number} */ dt,
+  /** @type {number} */ k,
+  /** @type {number} */ g,
+) => {
+  const hz = (/** @type {number | undefined} */ f) => (f === undefined ? f : f * k);
+  return {
+    now: v.now + dt,
+    tone: (o) => v.tone({ ...o, f: o.f * k, to: hz(o.to), from: hz(o.from), v: (o.v ?? 0.3) * g }),
+    noise: (o) => v.noise({ ...o, f: hz(o.f), to: hz(o.to), v: (o.v ?? 0.3) * g }),
+  };
+};
+
+/** Two plays of one effect closer than this (s) are one sound played several times. */
+export const CROWD_WINDOW = 0.04;
+/** @type {Map<string, { t: number, n: number }>} */
+const lastPlay = new Map();
+/**
+ * How many plays of `type` already started at about time `t` (0 for the first): five
+ * racks landing in the same frame must not add up to one sound five times as loud.
+ * @param {string} type @param {number} t
+ */
+export function crowd(type, t) {
+  const last = lastPlay.get(type);
+  const n = last && Math.abs(t - last.t) < CROWD_WINDOW ? last.n + 1 : 0;
+  lastPlay.set(type, { t: n ? (last?.t ?? t) : t, n });
+  return n;
+}
+/** Forgets the recent plays (a new audio context starts its clock again). */
+export const resetCrowd = () => lastPlay.clear();
+
 /** @type {Record<Floor, number>} */
 const FLOOR_GAIN = { carpet: 1, concrete: 1.06, metal: 1, gravel: 1.3, tile: 1.45, wood: 0.84 };
 

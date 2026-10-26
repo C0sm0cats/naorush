@@ -21,6 +21,16 @@ export function load(key, fallback) {
   }
 }
 
+/**
+ * A saved count (the stage reached): a whole number, never negative. Older saves wrote
+ * it with `String()` (`'2'`), later ones with JSON (`2`): both read the same.
+ * @param {string} key
+ */
+export function loadCount(key) {
+  const n = load(key, 0);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
 /** @param {string} key @param {unknown} value */
 export function store(key, value) {
   try {

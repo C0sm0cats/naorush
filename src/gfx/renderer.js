@@ -190,6 +190,7 @@ in float vAO, vMat;
 uniform sampler2DShadow uShadow;
 uniform vec3 uSunDir, uSunColor, uSky, uGround, uFog, uEye;
 uniform float uFogNear, uFogFar, uRim, uFlash, uAO;
+uniform vec2 uInvSize;
 uniform int uLights;
 uniform vec4 uLightPos[8];
 uniform vec3 uLightColor[8];
@@ -241,7 +242,10 @@ void main() {
   }
   float depth = length(vWorld - uEye);
   col = mix(col, uFog, smoothstep(uFogNear, uFogFar, depth));
-  col = mix(col, vec3(1.0, 0.35, 0.3), uFlash);
+  // Damage: a red glow from the edges of the screen, the middle stays clear.
+  vec2 q = abs(gl_FragCoord.xy * uInvSize * 2.0 - 1.0);
+  float edge = clamp(length(max(q - 0.55, 0.0)) * 2.2, 0.0, 1.0);
+  col = mix(col, vec3(1.0, 0.25, 0.2), min(uFlash * 1.8, 0.65) * edge * edge);
   outColor = vec4(pow(aces(col), vec3(1.0 / 2.2)), 1.0);
 }`;
 
@@ -765,6 +769,7 @@ export class Renderer {
     gl.uniform1f(m.u.uFogFar, lit.fogRange[1]);
     gl.uniform3fv(m.u.uEye, camera.eye);
     gl.uniform1f(m.u.uFlash, fx.flash ?? 0);
+    gl.uniform2f(m.u.uInvSize, 1 / this.width, 1 / this.height);
     this.uploadLights(lit.lights, fx0, fy0);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.shadowTex);

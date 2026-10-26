@@ -13,7 +13,7 @@ import {
   consultLength,
 } from '../src/game/boss.js';
 import { HERO, createSim, step } from '../src/game/sim.js';
-import { DT, hurt, make, solid } from '../src/game/world.js';
+import { DT, TILE, hurt, make, solid } from '../src/game/world.js';
 import { IDLE, has, input, room, run, runUntil, sim, throwCr } from './mechanics-kit.js';
 
 /**
@@ -74,6 +74,10 @@ function hitDuringConsult(s, b) {
   expect(b.hp).toBe(hp - 1);
   return events;
 }
+
+/** Gate columns of the real arenas: positions in them are written from there. */
+const TS0 = TS.boss?.arena[0] ?? 0;
+const ROOF0 = ROOFTOP.boss?.arena[0] ?? 0;
 
 /** @param {Sim} s */
 const debris = (s) => s.things.filter((t) => BOSS_DEBRIS.has(t.kind));
@@ -163,6 +167,7 @@ function referee(level) {
   const born = new WeakMap();
   let phase = 1;
   let last = '';
+  let start = -1;
   /** Where the director stood at the start of each step. @type {Set<number>} */
   const spots = new Set();
   /** @param {number} x @param {number} rows Free tiles over a director standing at x. */
@@ -188,6 +193,7 @@ function referee(level) {
             : input({ fire: true });
     step(s, inp);
     const now = s.time;
+    if (start < 0 && s.bossActive) start = now;
     const name = b.variant ? `${b.state}:${b.variant}` : b.state;
     if (name !== last) {
       played.add(name);
@@ -226,7 +232,7 @@ function referee(level) {
       dark = !lit.some((z) => x + HERO.w / 2 > z.x && x - HERO.w / 2 < z.x + (z.w ?? 1));
     if (!dark) unfair.push(`no dark spot at ${tag}`);
   }
-  return { s, b, unfair, played, phase, x0, x1, spots };
+  return { s, b, unfair, played, phase, x0, x1, spots, length: s.time - start };
 }
 
 describe.each([TS, ROOFTOP])('$name duel', (level) => {
@@ -236,6 +242,13 @@ describe.each([TS, ROOFTOP])('$name duel', (level) => {
   it('ends with the director signing', () => {
     expect(fight.s.bossDone).toBe(true);
     expect(fight.phase).toBe(PATTERNS[id].seq.length);
+  });
+
+  it('lasts a minute or more even for a flawless player, on the same conviction', () => {
+    // Richer phases, not more arguments to win: a CR lands on the first frame of every consult.
+    expect(fight.length).toBeGreaterThanOrEqual(60);
+    expect(fight.length).toBeLessThanOrEqual(90);
+    expect(level.boss?.hp).toBe(id === 'techServicesDirector' ? 4 : 5);
   });
 
   it('plays every attack of every phase', () => {
@@ -328,21 +341,32 @@ describe.each([TS, ROOFTOP])('$name arena', (level) => {
     },
   );
 
-  it('lights the risers’ tops with the floor', () => {
+  it('lights the risers’ tops (and any step up) with the floor', () => {
     const { s, b } = toPhase2(level, (level.boss?.arena[0] ?? 0) + 5);
     const floor = b.y0 ?? b.y;
+    /** @param {Thing} z */
+    const onRiser = (z) =>
+      risers(s).some((r) => r.state === 'set' && z.x < r.x + (r.w ?? 2) && z.x + (z.w ?? 1) > r.x);
     runUntil(
       s,
       IDLE,
-      () => s.things.some((t) => t.kind === 'zone' && t.variant !== 'arrow'),
-      60 * 20,
+      () => s.things.some((t) => t.kind === 'zone' && t.variant !== 'arrow' && onRiser(t)),
+      60 * 30,
     );
     const zones = s.things.filter((t) => t.kind === 'zone' && t.variant !== 'arrow');
+    let raisedLit = false;
     for (const z of zones) {
       const c = Math.floor(z.x + 0.01);
       const raised = risers(s).some((r) => c >= r.x && c < r.x + (r.w ?? 2));
-      expect(z.y).toBe(raised ? floor + 1 : floor);
+      raisedLit ||= raised;
+      if (raised) expect(z.y).toBe(floor + 1);
+      // Wherever it lies, on the floor's top: never inside a block, never in the air.
+      for (let x = Math.floor(z.x + 0.01); x < z.x + (z.w ?? 1) - 0.01; x++) {
+        expect(solid(s, x, z.y)).toBe(false);
+        expect(solid(s, x, z.y - 1)).toBe(true);
+      }
     }
+    expect(raisedLit).toBe(true);
   });
 
   it('takes the risers away once he signs, and at once when the duel starts over', () => {
@@ -373,13 +397,11 @@ describe('Rodolphe’s leaps', () => {
     const b = s.things.find((t) => t.kind === 'boss');
     if (!b) throw new Error('no boss');
     const floor = b.y0 ?? b.y;
-    Object.assign(s.hero, { x: 85, y: 3, invuln: 1e9 });
+    Object.assign(s.hero, { x: ROOF0 + 3, y: 3, invuln: 1e9 });
     runUntil(s, IDLE, () => b.state === 'consult', 60 * 30);
-    // Right under the rooftop's HVAC block, about to leap.
-    const low = [...Array(ROOFTOP.map[0].length).keys()].find(
-      (c) => c > 84 && solid(s, c, floor + 2) && !solid(s, c, floor),
-    );
-    expect(low).toBeDefined();
+    // Right under a block two tiles over the stage, about to leap.
+    const low = arenaFloor(s, b)[0] + 5;
+    for (const c of [low, low + 1]) s.tiles[c + (floor + 2) * s.w] = TILE.SOLID;
     Object.assign(b, { x: (low ?? 0) + 0.5, state: 'hit', t: 0.6, step: 0 });
     const leap = runUntil(s, IDLE, () => b.state === 'leap', 60 * 3);
     expect(leap.ok).toBe(true);
@@ -402,15 +424,301 @@ describe('« Sans filet »', () => {
   });
 });
 
+/**
+ * A real stage's director about to play step `name` of `phase`, hero at `x`
+ * (untouchable unless `hit` is set); returns once the step has begun.
+ * @param {import('../src/data/levels/index.js').Level} level @param {number} phase
+ * @param {string} name @param {number} x @param {boolean} [hit]
+ */
+function playing(level, phase, name, x, hit = false) {
+  const s = createSim(level, 'kevin');
+  const b = s.things.find((t) => t.kind === 'boss');
+  if (!b) throw new Error('no boss');
+  Object.assign(s.hero, { x, y: 3, invuln: 1e9 });
+  runUntil(s, IDLE, () => b.state === 'consult', 60 * 30);
+  const at = PATTERNS[s.boss?.id ?? 'techServicesDirector'].seq[phase - 1].indexOf(name);
+  expect(at).toBeGreaterThanOrEqual(0);
+  Object.assign(b, { phase, step: at - 1, state: 'hit', t: 0.6 });
+  s.things = s.things.filter((t) => !BOSS_DEBRIS.has(t.kind));
+  const go = runUntil(s, IDLE, () => `${b.state}:${b.variant}` === name, 60 * 5);
+  expect(go.ok).toBe(true);
+  if (hit) s.hero.invuln = 0;
+  // Its first frame: whatever it lays out on the floor at once is there.
+  return { s, b, events: [...go.events, ...run(s, IDLE, 1)] };
+}
+
+/** Stretches of the arena floor no warned or live zone covers. @param {Sim} s @param {Thing} b */
+function darkSpans(s, b) {
+  const [x0, x1] = arenaFloor(s, b);
+  const lit = s.things.filter((t) => t.alive && t.kind === 'zone' && t.variant !== 'arrow');
+  /** @type {[number, number][]} */
+  const spans = [];
+  for (let i = 0; i < Math.round((x1 - x0) / 0.05); i++) {
+    const x = x0 + i * 0.05;
+    const dark = !lit.some((z) => x + 0.025 > z.x && x + 0.025 < z.x + (z.w ?? 1));
+    const last = spans[spans.length - 1];
+    if (!dark) continue;
+    if (last && Math.abs(last[1] - x) < 0.06) last[1] = x + 0.05;
+    else spans.push([x, x + 0.05]);
+  }
+  return spans;
+}
+
+describe.each([TS, ROOFTOP])('$name: nowhere to hide', (level) => {
+  const id = level.boss?.id ?? 'techServicesDirector';
+  it('hits a hero who stands still, wherever he stands, in every phase', () => {
+    const probe = createSim(level, 'kevin');
+    const pb = probe.things.find((t) => t.kind === 'boss') ?? make('boss', 0, 0);
+    const [x0, x1] = arenaFloor(probe, pb);
+    /** @type {string[]} */
+    const safe = [];
+    for (let phase = 1; phase <= PATTERNS[id].seq.length; phase++)
+      for (let x = x0 + 0.5; x < x1; x += 1) {
+        const { s, b } =
+          phase === 1
+            ? (() => {
+                const s = createSim(level, 'kevin');
+                const b = s.things.find((t) => t.kind === 'boss') ?? make('boss', 0, 0);
+                Object.assign(s.hero, { x: x0 + 2, y: 3 });
+                runUntil(s, IDLE, () => s.bossActive, 60);
+                return { s, b };
+              })()
+            : toPhase2(level, x0 + 2);
+        if (phase === 3) Object.assign(b, { phase: 3, hp: 1, state: 'phase', t: 0 });
+        // Out of the way of the director's first walk: placed once the phase starts.
+        runUntil(s, IDLE, () => b.state !== 'phase' && b.state !== 'intro', 60 * 3);
+        s.things = s.things.filter((t) => !BOSS_DEBRIS.has(t.kind));
+        const c = Math.floor(x);
+        let y = b.y0 ?? b.y;
+        while (solid(s, c, y)) y++;
+        Object.assign(s.hero, { x: x - HERO.w / 2, y, vx: 0, vy: 0, invuln: 0 });
+        s.assist = true;
+        // One whole round of the phase: from here to the end of its last consult.
+        const rounds = PATTERNS[id].seq[phase - 1].filter((a) => a === 'consult').length;
+        let consults = 0;
+        let hits = 0;
+        let was = b.state;
+        runUntil(
+          s,
+          IDLE,
+          (x) => {
+            if (has(x.events, 'hurt')) hits++;
+            if (was === 'consult' && b.state !== 'consult') consults++;
+            was = b.state;
+            return consults > rounds || hits > 0;
+          },
+          60 * 120,
+        );
+        if (!hits) safe.push(`x=${x} phase ${phase}`);
+      }
+    expect(safe).toEqual([]);
+  });
+});
+
+describe('Julien’s new moves', () => {
+  it('supervision: three racks, each on the spot the hero stood on as it was warned', () => {
+    const x = (TS.boss?.arena[0] ?? 0) + 4;
+    const { s, b } = playing(TS, 1, 'rackDrop:tracking', x);
+    /** @type {number[]} */
+    const want = [];
+    const seen = new Set();
+    const done = runUntil(
+      s,
+      input({ right: true }),
+      () => {
+        for (const r of s.things)
+          if (r.kind === 'rack' && !seen.has(r)) {
+            seen.add(r);
+            // Where he stood a frame ago.
+            expect(Math.abs(r.x - (s.hero.x + HERO.w / 2))).toBeLessThan(0.15);
+            want.push(r.x);
+          }
+        return b.state !== 'rackDrop';
+      },
+      60 * 6,
+    );
+    expect(done.ok).toBe(true);
+    expect(want.length).toBe(3);
+    // He kept walking: three different spots.
+    expect(want[1] - want[0]).toBeGreaterThan(2);
+  });
+
+  it('supervision hurts whoever stands still, never whoever keeps moving', () => {
+    const x = (TS.boss?.arena[0] ?? 0) + 4;
+    const still = playing(TS, 1, 'rackDrop:tracking', x, true);
+    runUntil(still.s, IDLE, () => still.b.state !== 'rackDrop', 60 * 6);
+    expect(still.s.hero.hearts).toBeLessThan(still.s.stats.hearts);
+    const moving = playing(TS, 1, 'rackDrop:tracking', x, true);
+    // A step aside after every shadow.
+    /** @type {Set<Thing>} */
+    const seen = new Set();
+    runUntil(
+      moving.s,
+      IDLE,
+      () => {
+        const fresh = moving.s.things.find((r) => r.kind === 'rack' && !seen.has(r));
+        if (fresh) {
+          seen.add(fresh);
+          run(moving.s, input({ right: true }), 18);
+        }
+        return moving.b.state !== 'rackDrop';
+      },
+      60 * 6,
+    );
+    expect(moving.s.hero.hearts).toBe(moving.s.stats.hearts);
+  });
+
+  it('maintenance window: the floor goes live but for a window on each side of him, the hero’s a few steps away', () => {
+    for (const x of [TS0 + 2, TS0 + 14]) {
+      const { s, b } = playing(TS, 1, 'cables:maintenance', x);
+      /** The window on the hero's side, and the hero's distance to it. */
+      const mine = () => {
+        const hx = s.hero.x + HERO.w / 2;
+        const spans = darkSpans(s, b);
+        expect(spans.length).toBe(2);
+        for (const [a0, a1] of spans) expect(a1 - a0).toBeGreaterThanOrEqual(2.9);
+        // One on each side of the director: nobody has to get past him.
+        expect(spans.filter(([, a1]) => a1 < b.x).length).toBe(1);
+        const [a0, a1] = spans.find(([w0]) => w0 < b.x === hx < b.x) ?? [0, 0];
+        return { c: (a0 + a1) / 2, d: Math.abs((a0 + a1) / 2 - hx) };
+      };
+      const first = mine();
+      // A few quick steps away (well within the 1 s warning), not where he stands.
+      expect(first.d).toBeGreaterThan(2);
+      expect(first.d).toBeLessThan(5);
+      // He takes it, and the second window opens elsewhere.
+      Object.assign(s.hero, { x: first.c - HERO.w / 2 });
+      const old = new Set(s.things);
+      const next = runUntil(
+        s,
+        IDLE,
+        () => s.things.some((t) => t.kind === 'zone' && !old.has(t)),
+        150,
+      );
+      expect(next.ok).toBe(true);
+      expect(mine().d).toBeGreaterThan(2);
+    }
+  });
+
+  it('maintenance window: dodged flawlessly by walking into each window', () => {
+    const { s, b } = playing(TS, 1, 'cables:maintenance', TS0 + 6, true);
+    /** @type {Set<Thing>} */
+    const seen = new Set();
+    runUntil(
+      s,
+      IDLE,
+      () => {
+        const fresh = s.things.filter((z) => z.kind === 'zone' && !seen.has(z));
+        if (fresh.length) {
+          for (const z of fresh) seen.add(z);
+          const hx0 = s.hero.x + HERO.w / 2;
+          const [w0, w1] =
+            darkSpans(s, b).find(([a0]) => a0 < b.x === hx0 < b.x) ?? darkSpans(s, b)[0];
+          // Walk there.
+          for (let i = 0; i < 50; i++) {
+            const hx = s.hero.x + HERO.w / 2;
+            if (Math.abs(hx - (w0 + w1) / 2) < 0.3) break;
+            step(s, input(hx < (w0 + w1) / 2 ? { right: true } : { left: true }));
+          }
+        }
+        return b.state !== 'cables';
+      },
+      60 * 6,
+    );
+    expect(s.hero.hearts).toBe(s.stats.hearts);
+  });
+});
+
+describe('Rodolphe’s new moves', () => {
+  it('leaps twice in a row when the crowd asks for more, each leap wound up again', () => {
+    const { s, b } = playing(ROOFTOP, 1, 'leap:double', ROOF0 + 4);
+    /** @type {number[]} */
+    const slams = [];
+    let crouches = 0;
+    runUntil(
+      s,
+      IDLE,
+      (x) => {
+        if (has(x.events, 'slam')) slams.push(x.time);
+        // His own warnings only (the stage's traps have theirs).
+        const own = x.events.filter(
+          (e) => e.type === 'telegraph' && Math.abs(e.x - b.x) < 0.5 && e.y > b.y + 1,
+        );
+        if (own.length && b.state === 'leap') crouches++;
+        return b.state !== 'leap';
+      },
+      60 * 6,
+    );
+    expect(slams.length).toBe(2);
+    expect(slams[1] - slams[0]).toBeGreaterThan(1.2);
+    expect(crouches).toBe(1);
+  });
+
+  it('fans out an encore whose slides land in the gaps of the first', () => {
+    const { s, b } = playing(ROOFTOP, 1, 'fan:encore', ROOF0 + 4);
+    /** @type {number[][]} */
+    const fans = [];
+    /** @type {Set<Thing>} */
+    const seen = new Set();
+    /** @type {number[]} */
+    let throwXs = [];
+    runUntil(
+      s,
+      IDLE,
+      () => {
+        const fresh = s.things.filter((k) => k.kind === 'kpi' && !seen.has(k));
+        if (fresh.length) {
+          for (const k of fresh) seen.add(k);
+          throwXs = fresh.map((k) => Math.abs(k.vx));
+          fans.push(throwXs);
+        }
+        return b.state !== 'fan';
+      },
+      60 * 6,
+    );
+    expect(fans.length).toBe(2);
+    expect(fans[0].length).toBe(5);
+    expect(fans[1].length).toBe(5);
+    // Every encore slide flies between two of the first.
+    for (let i = 0; i < 4; i++) {
+      expect(fans[1][i]).toBeGreaterThan(fans[0][i]);
+      expect(fans[1][i]).toBeLessThan(fans[0][i + 1]);
+    }
+  });
+
+  it('runs the regional tour there and back, with new arrows before the return', () => {
+    const { s, b } = playing(ROOFTOP, 2, 'dash:return', ROOF0 + 4);
+    /** Where each leg started, and its arrows' direction. @type {{x: number, dir: number}[]} */
+    const legs = [];
+    /** @type {Set<Thing>} */
+    const seen = new Set([]);
+    const check = () => {
+      for (const z of s.things)
+        if (z.kind === 'zone' && z.variant === 'arrow' && !seen.has(z)) {
+          seen.add(z);
+          legs.push({ x: b.x, dir: z.dir ?? 0 });
+        }
+      return b.state !== 'dash';
+    };
+    check();
+    runUntil(s, IDLE, check, 60 * 8);
+    expect(legs.length).toBe(2);
+    expect(legs[1].dir).toBe(-legs[0].dir);
+    // Each leg runs a good way across the stage, the way its arrows point.
+    expect((legs[1].x - legs[0].x) * legs[0].dir).toBeGreaterThan(3);
+    expect((b.x - legs[1].x) * legs[1].dir).toBeGreaterThan(3);
+  });
+});
+
 describe('Rodolphe’s grand finale', () => {
   it('starts at his last argument, clears the stage and opens with the spotlight', () => {
     const s = createSim(ROOFTOP, 'charline');
     const b = s.things.find((t) => t.kind === 'boss');
     if (!b) throw new Error('no boss');
-    Object.assign(s.hero, { x: 85, y: 3, invuln: 1e9 });
+    Object.assign(s.hero, { x: ROOF0 + 3, y: 3, invuln: 1e9 });
     runUntil(s, IDLE, () => b.state === 'consult', 60 * 30);
     Object.assign(b, { hp: 2, phase: 2 });
-    s.things.push(make('wave', 90, 3, { state: 'run' }));
+    s.things.push(make('wave', ROOF0 + 8, 3, { state: 'run' }));
     /** @type {SimEvent[]} */
     const events = [];
     while (b.state === 'consult' && b.hp === 2) events.push(...shootAt(s, b));
@@ -428,7 +736,7 @@ describe('Rodolphe’s grand finale', () => {
     const s = createSim(ROOFTOP, 'kevin');
     const b = s.things.find((t) => t.kind === 'boss');
     if (!b) throw new Error('no boss');
-    Object.assign(s.hero, { x: 86, y: 3, invuln: 1e9 });
+    Object.assign(s.hero, { x: ROOF0 + 4, y: 3, invuln: 1e9 });
     runUntil(s, IDLE, () => b.state === 'consult', 60 * 30);
     Object.assign(b, { hp: 1, phase: 3, step: -1, state: 'hit', t: 0.6 });
     runUntil(s, IDLE, () => s.things.some((t) => t.kind === 'zone'), 60);
@@ -452,7 +760,7 @@ describe('fight staging', () => {
   };
 
   it('pulls back as far as the level’s height + 2 on a phone held upright', () => {
-    const { s, b } = duel(84);
+    const { s, b } = duel(TS0 + 2);
     const f = fightFocus(s, 0, 412 / 915);
     expect(f?.visH).toBeCloseTo(s.h + 2);
     // Both fighters framed when they are close enough for that width.
@@ -465,7 +773,7 @@ describe('fight staging', () => {
 
   it('pushes in on the director when an argument lands', () => {
     for (const aspect of [16 / 9, 412 / 915]) {
-      const { s, b } = duel(86);
+      const { s, b } = duel(TS0 + 4);
       const before = fightFocus(s, 0, aspect)?.visH ?? 0;
       Object.assign(b, { state: 'hit', t: 0.1 });
       const hit = fightFocus(s, 0, aspect)?.visH ?? 0;
@@ -476,10 +784,10 @@ describe('fight staging', () => {
   });
 
   it('slows the first PRIMO window of each director down for 0.8 s, once', () => {
-    const { s, b } = duel(86);
+    const { s, b } = duel(TS0 + 4);
     const cue = new PrimoCue();
     expect(cue.update(s, 1 / 60)).toBe(1);
-    runUntil(s, IDLE, () => b.state === 'consult', 60 * 10);
+    runUntil(s, IDLE, () => b.state === 'consult', 60 * 20);
     expect(cue.update(s, 1 / 60)).toBeLessThan(0.5);
     expect(cue.started).toBe(true);
     expect(cue.ring).toBeGreaterThanOrEqual(0);
@@ -496,7 +804,7 @@ describe('fight staging', () => {
   });
 
   it('flashes white on a phase change only with « Flashs » on', () => {
-    const { s, b } = duel(86);
+    const { s, b } = duel(TS0 + 4);
     Object.assign(b, { state: 'phase', phase: 2, t: 0.05 });
     const base = { ...TS.lighting, lights: [] };
     const on = bossLighting(TS, s, 1, base, true).sunColor[0];

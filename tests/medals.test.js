@@ -11,9 +11,9 @@ import {
   recordKey,
 } from '../src/app/medals.js';
 import { chapterRows } from '../src/app/menus.js';
-import { buildResults, heldText, secretHint } from '../src/app/results.js';
+import { buildResults, clock, heldText, secretHint } from '../src/app/results.js';
 import { CAMPAIGN, LEVELS } from '../src/data/levels/index.js';
-import { createSim, step } from '../src/game/sim.js';
+import { HERO, createSim, step } from '../src/game/sim.js';
 import { solve } from '../src/game/solver.js';
 
 /** @type {Record<string, string>} */
@@ -90,7 +90,7 @@ describe('medals', () => {
     );
     const late = medalFor('parking', 'kevin', 999, 1, { relaxed: true, slow: true }).held;
     expect(heldText(/** @type {any} */ (late), targets)).toMatch(
-      /^Mode détente et vitesse réduite : .* Rejoue sans aide : l’argent t’attend sous 0 min \d\d s !$/,
+      /^Mode détente et vitesse réduite : .* Rejoue sans aide : l’argent t’attend sous \d+ min \d\d s !$/,
     );
     // A run without help reads as before, with the seconds still to find.
     const plain = buildResults({
@@ -104,7 +104,7 @@ describe('medals', () => {
     });
     expect([plain.why, plain.next]).toEqual([
       '',
-      `Argent sous 0 min ${targets.silver} s · 3,0 s à gagner`,
+      `Argent sous ${clock(targets.silver)} · 3,0 s à gagner`,
     ]);
   });
 
@@ -229,10 +229,10 @@ describe('chapters', () => {
   it('show each hero’s record, medal and secrets for the chosen mode', () => {
     const medals = new Medals();
     medals.record('parking', 'kevin', medalFor('parking', 'kevin', 10, 0));
-    medals.record('parking', 'kevin', medalFor('parking', 'kevin', 99, 1), 'sansFilet');
+    medals.record('parking', 'kevin', medalFor('parking', 'kevin', 999, 1), 'sansFilet');
     const o = {
       progress: 1,
-      bests: { 'parking:kevin': 10, 'parking:kevin:sansfilet': 99 },
+      bests: { 'parking:kevin': 10, 'parking:kevin:sansfilet': 999 },
       medals,
       secretsOf: (/** @type {string} */ id, /** @type {string} */ h) =>
         id === 'parking' && h === 'kevin' ? 1 : 0,
@@ -243,7 +243,7 @@ describe('chapters', () => {
     expect(normal.heroes.charline).toMatchObject({ best: undefined, medal: undefined });
     expect(normal.heroes.charline.targets).toEqual(medalTargets('parking', 'charline'));
     const hard = rows({ ...o, mode: 'sansFilet' })[0];
-    expect(hard.heroes.kevin).toMatchObject({ best: 99, medal: { tier: 'bronze', star: false } });
+    expect(hard.heroes.kevin).toMatchObject({ best: 999, medal: { tier: 'bronze', star: false } });
   });
 });
 
@@ -254,6 +254,38 @@ describe('chapters', () => {
  * physics move it out of that window, this fails with the new table to paste into
  * src/app/medals.js.
  */
+/**
+ * How long a flawless duel lasts, from the solver's arrival in the arena: a CR on
+ * the first frame of every consult (as tests/boss.test.js referees it).
+ * @param {import('../src/data/levels/index.js').Level} level @param {'kevin'|'charline'} hero
+ * @param {import('../src/game/sim.js').Input[]} inputs The solver's route.
+ */
+function flawlessDuel(level, hero, inputs) {
+  const s = createSim(level, hero);
+  for (let i = 0; i < inputs.length && !s.bossActive; i++) step(s, inputs[i]);
+  const start = s.time;
+  const b = /** @type {import('../src/game/sim.js').Thing} */ (
+    s.things.find((t) => t.kind === 'boss')
+  );
+  const idle = { left: false, right: false, up: false, down: false, jump: false, fire: false };
+  for (let frame = 0; frame < 60 * 240 && !s.bossDone; frame++) {
+    s.ammo = 9;
+    s.hero.invuln = 1e9;
+    const want = Math.sign(b.x - (s.hero.x + HERO.w / 2)) || 1;
+    const flying = s.things.some((t) => t.kind === 'cr' && t.alive);
+    let input = idle;
+    if (b.state === 'consult' && !flying)
+      input =
+        s.hero.facing !== want
+          ? { ...idle, [want > 0 ? 'right' : 'left']: true }
+          : s.fireHeld
+            ? idle
+            : { ...idle, fire: true };
+    step(s, input);
+  }
+  return s.time - start;
+}
+
 describe('reference times', () => {
   /** How far a reference may sit from the solver's route: [stricter, more lenient]. */
   const WINDOW = [0.98, 1.3];
@@ -278,13 +310,25 @@ describe('reference times', () => {
         });
         expect(result.won).toBe(true);
         const sim = createSim(level, hero);
-        for (const input of result.inputs) step(sim, input);
+        let arena = -1;
+        let signed = -1;
+        for (const input of result.inputs) {
+          step(sim, input);
+          if (arena < 0 && sim.bossActive) arena = sim.time;
+          if (signed < 0 && sim.bossDone) signed = sim.time;
+        }
         expect(sim.won).toBe(true);
-        (now[level.id] ??= {})[hero] = Math.round(sim.time * 10) / 10;
+        // The search dawdles through a duel (it only has to survive it): a boss stage's
+        // yardstick is its route to the arena, a flawless duel, and the way out.
+        const time =
+          level.boss && arena >= 0 && signed >= 0
+            ? arena + flawlessDuel(level, hero, result.inputs) + (sim.time - signed)
+            : sim.time;
+        (now[level.id] ??= {})[hero] = Math.round(time * 10) / 10;
         const ref = REFERENCE[level.id]?.[hero] ?? 0;
-        const ok = ref >= sim.time * WINDOW[0] && ref <= sim.time * WINDOW[1];
+        const ok = ref >= time * WINDOW[0] && ref <= time * WINDOW[1];
         if (!ok) drifted = true;
-        const why = `${level.id}/${hero} took ${sim.time.toFixed(1)} s, reference ${ref} s: refresh REFERENCE in src/app/medals.js`;
+        const why = `${level.id}/${hero} took ${time.toFixed(1)} s, reference ${ref} s: refresh REFERENCE in src/app/medals.js`;
         expect(ok, why).toBe(true);
       },
       level.boss ? 900_000 : 300_000,

@@ -1,8 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { BarkDeck, ShuffleBag, teaserCheckpoint } from '../src/app/dialogue.js';
-import { BARKS, CREDITS, EPILOGUE, PROLOGUE, STAGE_BARKS } from '../src/data/barks.js';
+import { BarkDeck, ShuffleBag, lineText, teaserCheckpoint } from '../src/app/dialogue.js';
+import {
+  NAO_AT,
+  clockAt,
+  clockText,
+  countdownText,
+  interludeFor,
+  stageTime,
+} from '../src/app/interlude.js';
+import {
+  BARKS,
+  CREDITS,
+  EPILOGUE,
+  HERO_TAKES,
+  INTERLUDES,
+  PROLOGUE,
+  STAGE_BARKS,
+} from '../src/data/barks.js';
 import { CAST } from '../src/data/cast.js';
-import { LEVELS } from '../src/data/levels/index.js';
+import { CAMPAIGN, LEVELS } from '../src/data/levels/index.js';
+
+/** Every story line the dialogue box can show. */
+const storyLines = [
+  ...PROLOGUE,
+  ...EPILOGUE,
+  ...LEVELS.flatMap((l) => [...l.intro, ...(l.bossIntro ?? []), ...l.outro]),
+];
 
 /** A small deterministic generator so the test does not depend on luck. @param {number} seed */
 const lcg = (seed) => () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
@@ -95,6 +118,8 @@ describe('Story text', () => {
       ...Object.values(s.lines ?? {}).flatMap((m) => Object.values(m).flat()),
     ]),
     ...[...PROLOGUE, ...EPILOGUE].map((l) => l.text),
+    ...Object.values(HERO_TAKES).flatMap((t) => Object.values(t)),
+    ...Object.values(INTERLUDES).flatMap((t) => Object.values(t)),
     ...CREDITS.flatMap((c) => [c.name, c.role, c.line]),
     ...LEVELS.flatMap((l) => [
       l.name,
@@ -123,5 +148,105 @@ describe('Story text', () => {
 
   it('drops the HUD compass hint and never mentions Whispli', () => {
     for (const t of texts) expect(t).not.toMatch(/boussole|whispli/i);
+  });
+});
+
+describe('Each hero’s own voice', () => {
+  it('words every take after a line that is really said', () => {
+    const said = new Set(storyLines.map((l) => l.text));
+    for (const text of Object.keys(HERO_TAKES)) expect(said.has(text), text).toBe(true);
+  });
+
+  it('gives Kévin and Charline different words in every stage they speak', () => {
+    for (const level of LEVELS) {
+      const lines = [...level.intro, ...level.outro].filter((l) => l.who === 'hero');
+      if (!lines.length) continue;
+      const differs = lines.some((l) => lineText(l.text, 'kevin') !== lineText(l.text, 'charline'));
+      expect(differs, level.id).toBe(true);
+    }
+  });
+
+  it('lets the partner at the exit speak in their own voice', () => {
+    for (const moment of ['waiting', 'welcome']) {
+      const k = new Set(BARKS.kevin[moment]);
+      for (const line of BARKS.charline[moment]) expect(k.has(line), line).toBe(false);
+    }
+  });
+
+  it('writes the player’s controls into the hints, never a fixed key', () => {
+    for (const l of storyLines) expect(l.text, l.text).not.toMatch(/\bX\b|\bEspace\b(?! VIP)/);
+    const hint = LEVELS.find((l) => l.id === 'ts')?.bossIntro?.find((l) => l.who === 'hint');
+    expect(lineText(/** @type {{text: string}} */ (hint).text, '')).toMatch(/compte rendu \(X\)/);
+  });
+
+  it('keeps Kévin’s Céline Dion line word for word, whoever plays', () => {
+    expect(BARKS.kevin.celine).toEqual(['Si c’est pour Céline Dion, on va faire le maximum !']);
+    for (const take of Object.values(HERO_TAKES))
+      for (const t of Object.values(take)) expect(t).not.toMatch(/Céline/);
+  });
+});
+
+describe('Interlude between story stages (NA-2)', () => {
+  it('reads each stage’s time from its subtitle and runs forward to Thursday', () => {
+    expect(stageTime('Pays de la Loire · mardi, 14 h 03')).toBe(1440 + 14 * 60 + 3);
+    expect(clockText(1440 + 14 * 60 + 3)).toBe('mardi, 14 h 03');
+    expect(countdownText(NAO_AT - 61)).toBe('1 h 01 min');
+    expect(countdownText(NAO_AT - 2 * 1440 - 5)).toBe('2 j 0 h 05 min');
+    expect(countdownText(NAO_AT)).toBe('C’est l’heure !');
+    expect(clockAt(0, 100, 0)).toBe(0);
+    expect(clockAt(0, 100, 2)).toBe(100);
+  });
+
+  it('has an interlude for every step of the story, in both voices', () => {
+    for (let i = 0; i + 1 < CAMPAIGN; i++) {
+      const [a, b] = [LEVELS[i], LEVELS[i + 1]];
+      const k = interludeFor(a, b, 'kevin');
+      const c = interludeFor(a, b, 'charline');
+      expect(k, `${a.id} → ${b.id}`).toBeTruthy();
+      expect(c?.line).not.toBe(k?.line);
+      expect(/** @type {{to: number}} */ (k).to).toBeLessThan(NAO_AT);
+      expect(k?.stop).toBe(i);
+    }
+  });
+
+  it('stays out of the bonus stages and of any jump back', () => {
+    expect(interludeFor(LEVELS[CAMPAIGN - 1], LEVELS[CAMPAIGN], 'kevin')).toBeNull();
+    expect(interludeFor(LEVELS[2], LEVELS[1], 'kevin')).toBeNull();
+  });
+});
+
+describe('Tips where they are needed', () => {
+  /** What a tip talks about, and the map tiles that show it. */
+  const SUBJECTS = /** @type {Array<[RegExp, string]>} */ ([
+    [/voiture/, 'Q'],
+    [/collègue/, 'n'],
+    [/Câbles/, '^'],
+    [/robot aspirateur/, 'v'],
+    [/Dalle fragile/, '-'],
+    [/stagiaire/, 'i'],
+    [/Sprinkler/, 'w'],
+    [/Vidéoprojecteur/, 'J'],
+    [/vanne/, 'k'],
+    [/bonbonnes/, 'R'],
+  ]);
+
+  it('shows each tip within a few tiles of the thing it names, after every map change', () => {
+    for (const level of LEVELS)
+      for (const tip of level.tips ?? []) {
+        expect(tip.x1, `${level.id}: « ${tip.keys} » past the map`).toBeLessThan(
+          level.map[0].length,
+        );
+        /** @type {number[]} */
+        const xs = [];
+        for (const [re, ch] of SUBJECTS)
+          if (re.test(tip.keys))
+            for (const row of level.map)
+              for (let x = row.indexOf(ch); x >= 0; x = row.indexOf(ch, x + 1)) xs.push(x + 0.5);
+        if (/acelle|Monte-charge/.test(tip.keys))
+          for (const l of level.lifts ?? []) xs.push(l.x + (l.w ?? 2) / 2);
+        if (!xs.length) continue;
+        const gap = Math.min(...xs.map((x) => Math.max(0, tip.x0 - x, x - tip.x1)));
+        expect(gap, `${level.id}: « ${tip.keys} » at ${tip.x0}`).toBeLessThanOrEqual(8);
+      }
   });
 });

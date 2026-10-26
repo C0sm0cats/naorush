@@ -93,6 +93,23 @@ describe('sound captions (IN6)', async () => {
       captionFor({ type: 'telegraph', x: 50, y: 3 }, [{ kind: 'printer', x: 20, y: 3 }], 10),
     ).toBe('[Alerte →]');
   });
+  it('names the directors’ new attacks after their cause, and the off-screen warning', () => {
+    const boss = [{ kind: 'boss', x: 20, y: 3 }];
+    expect(captionFor({ type: 'telegraph', x: 20, y: 4, cause: 'tracking' }, boss, 10)).toBe(
+      '[La supervision te suit →]',
+    );
+    expect(captionFor({ type: 'telegraph', x: 20, y: 4, cause: 'encore' }, boss, 30)).toBe(
+      '[← Le public en redemande]',
+    );
+    expect(captionFor({ type: 'telegraph', x: 20, y: 4 }, boss, 20)).toBe(
+      '[Le directeur prépare son argument]',
+    );
+    expect(captionFor({ type: 'cableWarn', x: 5, y: 1, cause: 'maintenance' }, [], 5)).toBe(
+      '[Maintenance : sol sous tension]',
+    );
+    for (const type of ['fan', 'slam', 'teleport', 'consult', 'incoming'])
+      expect(captionFor({ type, x: 1, y: 1 }, [], 1), type).not.toBe('');
+  });
 });
 
 describe('the device in use (AM-2)', () => {

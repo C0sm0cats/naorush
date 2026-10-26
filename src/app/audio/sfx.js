@@ -14,6 +14,8 @@ import {
   foot,
   gait,
   GAIT,
+  crowd,
+  shifted,
 } from './sfx-kit.js';
 
 /** @typedef {import('./types.js').Voice} Voice */
@@ -57,8 +59,32 @@ const syllable = (
   v.tone({ f: f * pick([2, 2.5, 3]), t, d: d * 0.8, v: g * 0.33 });
 };
 
-/** Effects with four takes (Foley.variant): the engine never plays the same take twice in a row. */
-export const VARIED = new Set(['step', 'jump', 'land', 'touchdown', 'ticket']);
+/**
+ * Effects with four takes (Foley.variant): the engine never plays the same take twice in
+ * a row. Footfalls, and everything that comes in bursts (a volley, a spam of CRs, the
+ * director's encores, a run of hits, the interlude's clock).
+ */
+export const VARIED = new Set([
+  'step',
+  'jump',
+  'land',
+  'touchdown',
+  'ticket',
+  'fire',
+  'bossThrow',
+  'bossHit',
+  'slam',
+  'fan',
+  'dash',
+  'rackLand',
+  'poof',
+  'trophy',
+  'lockOn',
+  'maintenance',
+  'clockTick',
+]);
+/** Pitch of each take, for the varied effects that only shift their pitch. */
+const TAKE_K = [1, 0.93, 1.07, 0.88];
 
 // Takes of the jump: the hop's sweep (from, to, length), the whoosh band, a cloth flick.
 const JUMP_TAKES = [
@@ -82,8 +108,25 @@ const TICKET_TAKES = [
   [988, 1245, 1480],
 ];
 
+// Takes of the trophy: the C major bells in four orders (rising, broken, from the top, wide).
+const TROPHY_TAKES = [
+  [1047, 1319, 1568],
+  [1047, 1568, 1319],
+  [1568, 1319, 2093],
+  [784, 1319, 2093],
+];
+// Takes of the maintenance chime: E, G sharp and B in four orders.
+const CHIME_TAKES = [
+  [659, 831, 988],
+  [988, 831, 659],
+  [659, 988, 831],
+  [831, 659, 988],
+];
+/** A bell arpeggio, one note every 70 ms. @param {Voice} v @param {number} t @param {number[]} fs */
+const bells = (v, t, fs, vol = 0.1) => fs.forEach((f, i) => chime(v, t + i * 0.07, f, 0.5, vol));
+
 /** @type {Record<string, (v: Voice, f: Foley) => void>} */
-export const SFX = {
+const RECIPES = {
   // Springy push-off: scuff, rising triangle "hop", whoosh of air.
   jump: (v, f) => {
     const t = v.now;
@@ -303,20 +346,24 @@ export const SFX = {
     v.tone({ f: 150, t, d: 0.04, type: 'square', v: 0.09, lp: 800 });
     click(v, t + 0.045, 3200, 0.1, 3);
   },
-  // Throw: flick then a whoosh.
-  fire: (v) => {
+  // Throw: flick then a whoosh; the takes change the swing, and two flap the paper.
+  fire: (v, f) => {
     const t = v.now;
-    click(v, t, 2500, 0.15, 2);
+    const k = TAKE_K[f.variant & 3];
+    click(v, t, 2500 * k, 0.15, 2);
     v.noise({
       t,
-      d: 0.18,
+      d: 0.18 * (f.variant & 1 ? 0.85 : 1),
       type: 'bandpass',
-      f: rnd(700, 900),
-      to: rnd(3000, 4000),
+      f: rnd(700, 900) * k,
+      to: rnd(3000, 4000) * k,
       v: 0.26,
       a: 0.03,
     });
-    v.tone({ f: 300, to: 700, t, d: 0.08, type: 'triangle', v: 0.08 });
+    v.tone({ f: 300 * k, to: 700 * k, t, d: 0.08, type: 'triangle', v: 0.08 });
+    if (f.variant >= 2)
+      for (const dt of [0.07, 0.11])
+        v.noise({ t: t + dt, d: 0.03, type: 'bandpass', f: rnd(1800, 2600), q: 2, v: 0.05 });
   },
   // Parry: bright metallic "shing" that rings, with a beating partial.
   parry: (v) => {
@@ -348,20 +395,23 @@ export const SFX = {
     ring(v, t, 196, 1.0, 0.06, [1, 2.4, 4.1]);
     sizzle(v, t, 0.8, 0.03);
   },
-  bossThrow: (v) => {
+  // A KPI slide thrown: a heavy swing, then the slide spinning off (pitch per take).
+  bossThrow: (v, f) => {
     const t = v.now;
-    v.noise({ t, d: 0.22, type: 'bandpass', f: rnd(450, 550), to: 2500, v: 0.27, a: 0.05 });
-    v.tone({ f: 140, to: 320, t, d: 0.16, type: 'triangle', v: 0.12, a: 0.03 });
-    v.noise({ t: t + 0.12, d: 0.12, type: 'bandpass', f: 2500, to: 1200, q: 2, v: 0.07 });
+    const k = TAKE_K[f.variant & 3];
+    v.noise({ t, d: 0.22, type: 'bandpass', f: rnd(450, 550) * k, to: 2500 * k, v: 0.27, a: 0.05 });
+    v.tone({ f: 140 * k, to: 320 * k, t, d: 0.16, type: 'triangle', v: 0.12, a: 0.03 });
+    v.noise({ t: t + 0.12, d: 0.12, type: 'bandpass', f: 2500 * k, to: 1200, q: 2, v: 0.07 });
   },
-  // Boss hit: punchy smack + rewarding upward chirp.
-  bossHit: (v) => {
+  // Boss hit: punchy smack + rewarding upward chirp, reaching a different height per take.
+  bossHit: (v, f) => {
     const t = v.now;
-    thump(v, t, 165, 48, 0.24, 0.52);
+    const up = [2.25, 2, 2.5, 1.9][f.variant & 3];
+    thump(v, t, 165 * TAKE_K[f.variant & 3], 48, 0.24, 0.52);
     v.noise({ t, d: 0.1, f: 900, to: 300, v: 0.36 });
     click(v, t, 2600, 0.24, 1, 0.025);
-    v.tone({ f: 400, to: 900, t: t + 0.1, d: 0.16, type: 'triangle', v: 0.2 });
-    v.tone({ f: 800, to: 1800, t: t + 0.12, d: 0.12, v: 0.05 });
+    v.tone({ f: 400, to: 400 * up, t: t + 0.1, d: 0.16, type: 'triangle', v: 0.2 });
+    v.tone({ f: 800, to: 800 * up, t: t + 0.12, d: 0.12, v: 0.05 });
   },
   // Boss defeated: three brass-and-chip hits with timpani, cymbal on the last.
   bossDone: (v) => {
@@ -384,20 +434,22 @@ export const SFX = {
     chime(v, t, 880, 0.18, 0.24);
     chime(v, t + 0.12, 1175, 0.38, 0.24);
   },
-  // Slam: ground-shaking boom, crack, rubble.
-  slam: (v) => {
+  // Slam: ground-shaking boom, crack, rubble; two takes rattle the stage boards too.
+  slam: (v, f) => {
     const t = v.now;
-    thump(v, t, 90, 35, 0.5, 0.75);
-    v.noise({ t, d: 0.25, f: 320, v: 0.45 });
-    click(v, t, 1400, 0.25, 1, 0.03);
-    for (let i = 0; i < 3; i++) {
+    const k = [1, 0.84, 1.15, 0.76][f.variant & 3];
+    thump(v, t, 90 * k, 35 * k, 0.5, 0.75);
+    v.noise({ t, d: 0.25, f: 320 * k, v: 0.45 });
+    click(v, t, 1400 * k, 0.25, 1, 0.03);
+    for (let i = 0; i < 3 + (f.variant & 2); i++) {
       click(v, t + 0.08 + i * rnd(0.04, 0.07), rnd(500, 1300), 0.1, 3, 0.03);
     }
+    if (f.variant & 1) ring(v, t + 0.02, 200 * k, 0.35, 0.05, [1, 2.3, 3.7]);
   },
   // Poof: soft pop and a puff of air.
-  poof: (v) => {
+  poof: (v, f) => {
     const t = v.now;
-    v.tone({ f: rnd(500, 600), to: 180, t, d: 0.05, v: 0.15 });
+    v.tone({ f: rnd(500, 600) * TAKE_K[f.variant & 3], to: 180, t, d: 0.05, v: 0.15 });
     v.noise({ t, d: 0.14, f: 1600, to: 300, v: 0.22, a: 0.004 });
     v.noise({ t: t + 0.02, d: 0.16, type: 'bandpass', f: 2500, to: 900, q: 0.8, v: 0.06, a: 0.03 });
   },
@@ -816,14 +868,15 @@ export const SFX = {
     v.tone({ f: 2400 * 1.5, to: 900, t, d: 0.5, v: 0.025, a: 0.05 });
     v.noise({ t, d: 0.55, type: 'bandpass', f: 2500, to: 900, q: 4, v: 0.03, a: 0.2 });
   },
-  // Rack landing: boom plus a metal clang.
-  rackLand: (v) => {
+  // Rack landing: boom plus a metal clang, the cabinet ringing at its own pitch per take.
+  rackLand: (v, f) => {
     const t = v.now;
+    const k = TAKE_K[f.variant & 3];
     thump(v, t, 90, 40, 0.4, 0.65);
-    v.noise({ t, d: 0.25, type: 'bandpass', f: 2000, v: 0.26 });
+    v.noise({ t, d: 0.25, type: 'bandpass', f: 2000 * k, v: 0.26 });
     click(v, t, 3500, 0.15, 1, 0.02);
-    for (const f of [523, 1187, 1693, 2311])
-      v.tone({ f: f * rnd(0.98, 1.02), t, d: 0.6, v: 0.042 });
+    for (const p of [523, 1187, 1693, 2311])
+      v.tone({ f: p * k * rnd(0.98, 1.02), t, d: 0.6, v: 0.042 });
   },
   // Boss arena, second phase: a server rack locks in place at the top of its rise
   // (hydraulic sigh, latch clunk, a hollow cabinet ring).
@@ -895,26 +948,35 @@ export const SFX = {
       });
     }
   },
-  fan: (v) => {
+  // Five slides fanned out: three swishes sweeping across, one way or the other per take.
+  fan: (v, f) => {
+    const k = TAKE_K[f.variant & 3];
+    const dir = f.variant & 1 ? -1 : 1;
     for (let i = 0; i < 3; i++) {
       v.noise({
         t: v.now + i * 0.05,
         d: 0.3,
         type: 'bandpass',
-        f: rnd(700, 900),
-        to: 2500,
+        f: rnd(700, 900) * k,
+        to: 2500 * k,
         v: 0.13,
         a: 0.1,
-        pan: (i - 1) * 0.6,
+        pan: (i - 1) * 0.6 * dir,
       });
     }
     v.noise({ t: v.now, d: 0.35, f: 250, v: 0.08, a: 0.1 });
   },
-  dash: (v) => {
+  // The director's run across the stage: a whoosh; the return legs add a shoe squeak.
+  dash: (v, f) => {
     const t = v.now;
+    const k = TAKE_K[f.variant & 3];
     click(v, t, 1800, 0.1, 1.5);
-    v.noise({ t, d: 0.15, type: 'bandpass', f: 2000, to: 500, v: 0.28, a: 0.02 });
-    v.tone({ f: 900, to: 400, t, d: 0.1, v: 0.08 });
+    v.noise({ t, d: 0.15, type: 'bandpass', f: 2000 * k, to: 500 * k, v: 0.28, a: 0.02 });
+    v.tone({ f: 900 * k, to: 400 * k, t, d: 0.1, v: 0.08 });
+    if (f.variant >= 2) {
+      const sq = rnd(1900, 2300);
+      v.tone({ f: sq, to: sq * 1.2, t, d: 0.07, type: 'sawtooth', v: 0.025, lp: 3200, q: 6 });
+    }
   },
   zoneWarn: (v) => {
     for (const at of [0, 0.16]) {
@@ -927,6 +989,64 @@ export const SFX = {
     thump(v, t, 70, 35, 0.3, 0.65);
     click(v, t, 1500, 0.15, 1, 0.025);
     v.noise({ t, d: 0.35, type: 'highpass', f: 5000, v: 0.15 });
+  },
+  // Julien's supervision locks on the hero: two monitor blips and a radar ping that dies
+  // away (the takes move it up or down a little; it comes three times in a row).
+  lockOn: (v, f) => {
+    const t = v.now;
+    const k = TAKE_K[f.variant & 3];
+    for (const at of [0, 0.07]) {
+      v.tone({ f: 2093 * k, t: t + at, d: 0.045, type: 'square', v: 0.05, lp: 3500, a: 0.002 });
+      click(v, t + at, 4200, 0.03, 4, 0.006);
+    }
+    v.tone({ f: 1047 * k, to: 1000 * k, t: t + 0.15, d: 0.4, v: 0.16, a: 0.003 });
+    v.tone({ f: 2094 * k, t: t + 0.15, d: 0.16, v: 0.03, a: 0.003 });
+    v.tone({ f: 1047 * k, t: t + 0.3, d: 0.25, v: 0.04, a: 0.003, pan: 0.3 });
+  },
+  // Maintenance window: the building's three-tone announcement chime, then the mains hum
+  // swells under the whole floor (each take rings the chime in another order).
+  maintenance: (v, f) => {
+    const t = v.now;
+    const tones = CHIME_TAKES[f.variant & 3];
+    tones.forEach((p, i) => {
+      chime(v, t + i * 0.14, p, 0.45, 0.1);
+      v.tone({ f: p, t: t + i * 0.14, d: 0.3, type: 'triangle', v: 0.05, a: 0.01 });
+    });
+    const at = t + 0.38;
+    v.tone({ f: 50, to: 100, t: at, d: 0.6, type: 'sawtooth', v: 0.1, lp: 900, a: 0.35 });
+    v.tone({ f: 100, to: 200, t: at, d: 0.6, type: 'square', v: 0.03, lp: 700, a: 0.35 });
+    for (let i = 0; i < 4; i++) {
+      v.noise({
+        t: at + 0.3 + rnd(0, 0.28),
+        d: 0.02,
+        type: 'bandpass',
+        f: rnd(2000, 3500),
+        v: 0.08,
+      });
+    }
+  },
+  // The crowd asks for more (an encore: a second leap, a second fan, the return dash):
+  // two rounds of applause, a cheerful whistle and an « ooh » that rises.
+  encore: (v) => {
+    const t = v.now;
+    for (const at of [0, 0.2]) {
+      for (let i = 0; i < 9; i++) {
+        v.noise({
+          t: t + at + rnd(0, 0.04),
+          d: 0.025,
+          type: 'bandpass',
+          f: rnd(1000, 2400),
+          q: 1.2,
+          v: 0.12,
+          a: 0.001,
+          pan: rnd(-0.6, 0.6),
+        });
+      }
+    }
+    v.tone({ f: 1700, to: 2500, t: t + 0.36, d: 0.1, v: 0.06, a: 0.01 });
+    v.tone({ f: 2500, to: 2100, t: t + 0.47, d: 0.16, v: 0.06, a: 0.01 });
+    v.noise({ t: t + 0.1, d: 0.7, type: 'bandpass', f: 450, to: 800, q: 3, v: 0.14, a: 0.35 });
+    v.noise({ t: t + 0.1, d: 0.6, type: 'bandpass', f: 1100, to: 1500, q: 4, v: 0.05, a: 0.35 });
   },
   // Spotlight: heavy switch clunk and an electrical hum swelling in.
   spot: (v) => {
@@ -969,6 +1089,62 @@ export const SFX = {
     chime(v, top, 1568, 0.5, 0.04);
   },
 
+  // --- between stages ---
+  // The interlude's clock running: a watch tick or a lower tock, by take;
+  // the interlude raises the pitch as the hours fly by.
+  clockTick: (v, f) => {
+    const t = v.now;
+    const k = [1, 0.78, 1.06, 0.82][f.variant & 3];
+    click(v, t, 3800 * k, 0.07, 6, 0.006);
+    v.tone({ f: 1760 * k, t, d: 0.035, type: 'triangle', v: 0.09, a: 0.001 });
+    v.tone({ f: 3520 * k, t, d: 0.015, v: 0.015, a: 0.001 });
+  },
+  // The dot reaches the next stop on the route: a pin drops in, two bright bells.
+  arrive: (v) => {
+    const t = v.now;
+    v.tone({ f: 880, to: 520, t, d: 0.06, type: 'triangle', v: 0.16 });
+    click(v, t, 2600, 0.06, 2, 0.01);
+    chime(v, t + 0.07, 1319, 0.45, 0.1);
+    chime(v, t + 0.16, 1760, 0.6, 0.09);
+    v.noise({ t: t + 0.16, d: 0.45, type: 'bandpass', f: 6000, to: 8500, q: 2, v: 0.02, a: 0.08 });
+  },
+  // Jouer: the camera pushes in on the hero (a rising whoosh) while the other one cheers.
+  titlePush: (v, f) => {
+    const t = v.now;
+    v.noise({ t, d: 0.36, type: 'bandpass', f: 300, to: 2800, q: 0.8, v: 0.2, a: 0.26 });
+    v.tone({ f: 70, to: 110, t, d: 0.36, type: 'triangle', v: 0.12, a: 0.25 });
+    for (const [i, at] of [0.14, 0.22].entries()) syllable(v, t + at, f.who, 0.07 + i * 0.04, 0.08);
+  },
+
+  // --- wet floor (IN1) ---
+  // A foot in a puddle: a light splash and two droplets.
+  puddle: (v) => {
+    const t = v.now;
+    v.noise({ t, d: 0.12, type: 'bandpass', f: 1400, to: 3200, q: 1.2, v: 0.18, a: 0.004 });
+    v.tone({ f: rnd(280, 340), to: 750, t, d: 0.05, v: 0.08 });
+    for (const dt of [0.06, 0.1])
+      v.tone({ f: rnd(900, 1500), to: 2000, t: t + dt, d: 0.03, v: 0.04 });
+  },
+  // Slipping on the wet floor: a sneaker squeak, then the slide and a slosh.
+  slip: (v) => {
+    const t = v.now;
+    const sq = rnd(1600, 1900);
+    v.tone({
+      f: sq,
+      to: sq * 1.45,
+      t,
+      d: 0.13,
+      type: 'sawtooth',
+      v: 0.05,
+      lp: 3200,
+      q: 7,
+      vib: [32, 50],
+    });
+    v.noise({ t: t + 0.05, d: 0.3, type: 'bandpass', f: 2200, to: 700, q: 1, v: 0.14, a: 0.04 });
+    v.noise({ t: t + 0.1, d: 0.16, f: 800, v: 0.1, a: 0.02 });
+    v.tone({ f: 380, to: 820, t: t + 0.12, d: 0.05, v: 0.05 });
+  },
+
   // --- UI ---
   pause: (v) => {
     note(v, v.now, 1047, 0.06, 0.09);
@@ -1008,10 +1184,11 @@ export const SFX = {
     v.tone({ f: 880, t: t + 0.1, d: 0.03, type: 'triangle', v: 0.05 });
   },
   // Trophy unlocked: a pop, a warm bell arpeggio and a shimmer (the 'secret' jingle is chip).
-  trophy: (v) => {
+  // Each take turns the C major arpeggio another way, so two trophies never ring alike.
+  trophy: (v, f) => {
     const t = v.now;
     v.tone({ f: 300, to: 600, t, d: 0.06, type: 'triangle', v: 0.15 });
-    for (const [i, f] of [1047, 1319, 1568].entries()) chime(v, t + 0.06 + i * 0.07, f, 0.5, 0.1);
+    bells(v, t + 0.06, TROPHY_TAKES[f.variant & 3]);
     v.tone({ f: 523, t: t + 0.06, d: 0.6, type: 'triangle', v: 0.06, a: 0.03 });
     v.noise({ t: t + 0.2, d: 0.5, type: 'bandpass', f: 6000, to: 9000, q: 2, v: 0.025, a: 0.1 });
   },
@@ -1031,6 +1208,33 @@ export const SFX = {
     for (const [i, f] of [2093, 2637, 3136].entries()) chime(v, top + 0.05 + i * 0.1, f, 0.8, 0.04);
     sizzle(v, top, 1.0, 0.04);
   },
+  // « Funambule » (a stage cleared without a net): a slide whistle wobbles for balance,
+  // finds it, and the trophy bells ring.
+  tightrope: (v) => {
+    const t = v.now;
+    for (const [at, a, b, d] of [
+      [0, 820, 1240, 0.13],
+      [0.13, 1240, 980, 0.12],
+      [0.25, 980, 1480, 0.16],
+    ])
+      v.tone({ f: a, to: b, t: t + at, d, type: 'triangle', v: 0.13, a: 0.01, vib: [9, 25] });
+    v.noise({ t, d: 0.4, type: 'bandpass', f: 1800, to: 2600, q: 4, v: 0.02, a: 0.05 });
+    bells(v, t + 0.42, [1319, 1568, 2093]);
+    v.noise({ t: t + 0.55, d: 0.5, type: 'bandpass', f: 6000, to: 9000, q: 2, v: 0.025, a: 0.1 });
+  },
+  // « Qualité certifiée » (a star on every stage of the story): the rubber stamp comes
+  // down, then a bright seal of bells over a held fifth.
+  certified: (v) => {
+    const t = v.now;
+    v.noise({ t, d: 0.06, type: 'bandpass', f: 900, to: 2400, q: 1, v: 0.05, a: 0.04 });
+    thump(v, t + 0.07, 150, 60, 0.15, 0.32);
+    v.noise({ t: t + 0.07, d: 0.06, f: 650, v: 0.2 });
+    click(v, t + 0.07, 950, 0.12, 4, 0.02);
+    bells(v, t + 0.22, [1047, 1319, 1568, 2093], 0.09);
+    v.tone({ f: 523, t: t + 0.22, d: 0.9, type: 'triangle', v: 0.06, a: 0.04 });
+    v.tone({ f: 784, t: t + 0.22, d: 0.9, type: 'triangle', v: 0.04, a: 0.04 });
+    sizzle(v, t + 0.43, 0.6, 0.02);
+  },
   // Another gold line on the results (all secrets, no return to the badge): a golden ding.
   gold: (v) => {
     const t = v.now;
@@ -1039,6 +1243,25 @@ export const SFX = {
     v.noise({ t: t + 0.08, d: 0.4, type: 'bandpass', f: 7000, to: 9500, q: 2, v: 0.02, a: 0.08 });
   },
 };
+
+/**
+ * Every effect, by name. When one effect is asked again within a few milliseconds (five
+ * racks landing in one frame, four live cables, three trophies), the copies come in a
+ * touch later, higher or lower and much softer: one rich sound, not one sound five
+ * times as loud.
+ * @type {Record<string, (v: Voice, f: Foley) => void>}
+ */
+export const SFX = Object.fromEntries(
+  Object.entries(RECIPES).map(([type, play]) => [
+    type,
+    (/** @type {Voice} */ v, /** @type {Foley} */ f) => {
+      const n = crowd(type, v.now);
+      if (!n) return play(v, f);
+      const dt = Math.min(0.09, n * 0.018 + rnd(0, 0.012));
+      play(shifted(v, dt, n % 2 ? 1.04 : 0.96, 0.4 / Math.sqrt(n)), f);
+    },
+  ]),
+);
 
 /** Every speaking voice. */
 export const VOICE_IDS = Object.keys(VOICES);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LEVELS } from '../src/data/levels/index.js';
+import { LEVELS, ROOM_W } from '../src/data/levels/index.js';
 import { LCP7 } from '../src/data/levels/lcp7.js';
 import { HERO, TILE, createSim, step, tileAt } from '../src/game/sim.js';
 import { solve } from '../src/game/solver.js';
@@ -64,6 +64,8 @@ describe.each(LEVELS)('$name', (level) => {
       const x = (level.boss?.arena[0] ?? 0) - 3;
       Object.assign(sim.hero, { x, y: 3 });
       sim.checkpoint = { x, y: 3 };
+      // Dropped at the arena's door: any badge reader on the way has been read.
+      sim.doorOpen = true;
       expect(solve(sim, { maxNodes: 300000 }).won).toBe(true);
     },
     BOSS_SEARCH,
@@ -127,8 +129,26 @@ describe.each(LEVELS)('$name', (level) => {
   });
 
   it('keeps every row the same width', () => {
-    expect(level.map.length).toBe(12);
+    // Twelve rows at least: an open stage may rise higher (the rooftop's stairwell tower).
+    expect(level.map.length).toBeGreaterThanOrEqual(12);
+    expect(level.map.length === 12 || Boolean(level.open)).toBe(true);
     expect(new Set(level.map.map((r) => r.length)).size).toBe(1);
+  });
+
+  it('names every room, and is long enough to tell a story', () => {
+    // One name per 20 tiles (the HUD shows it); seven rooms at least, each with its idea.
+    expect(level.rooms.length).toBe(Math.ceil(level.map[0].length / ROOM_W));
+    expect(level.rooms.length).toBeGreaterThanOrEqual(7);
+  });
+
+  it('spaces its Chronotime badges out', () => {
+    // A badge before each lethal passage, not one per room: never two within a room's width.
+    const xs = createSim(level, 'kevin')
+      .things.filter((t) => t.kind === 'checkpoint')
+      .map((t) => t.x)
+      .sort((a, b) => a - b);
+    for (let i = 1; i < xs.length; i++)
+      expect(xs[i] - xs[i - 1], `badge at ${xs[i]}`).toBeGreaterThanOrEqual(ROOM_W);
   });
 });
 

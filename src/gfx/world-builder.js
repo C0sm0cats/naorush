@@ -359,6 +359,31 @@ export function buildOffice(sim, decor, map = [], theme = 'office', moodName) {
   /** Visual style of a solid tile, from the level's ASCII map. */
   /** @param {number} c @param {number} r */
   const styleAt = (c, r) => map[sim.h - 1 - r]?.[c] ?? '#';
+  /**
+   * Bottom-left tile of the free-standing block (two tiles wide, three tall, on a
+   * floor, open on both sides and above) a tile belongs to, or null.
+   * @param {number} c @param {number} r
+   * @returns {[number, number] | null}
+   */
+  const vendingAt = (c, r) => {
+    /** @param {number} cc @param {number} rr */
+    const solidAt = (cc, rr) => sim.tiles[cc + rr * sim.w] === TILE.SOLID;
+    /** @param {number} cc @param {number} rr */
+    const empty = (cc, rr) => cc >= 0 && cc < sim.w && !solidAt(cc, rr);
+    for (let c0 = c - 1; c0 <= c; c0++)
+      for (let r0 = r - 2; r0 <= r; r0++) {
+        if (c0 < 1 || r0 < 1 || c0 + 2 >= sim.w || r0 + 3 >= sim.h) continue;
+        let ok = true;
+        for (let k = 0; k < 2 && ok; k++) {
+          if (!solidAt(c0 + k, r0 - 1) || !empty(c0 + k, r0 + 3)) ok = false;
+          for (let j = 0; j < 3; j++) if (styleAt(c0 + k, r0 + j) !== '#') ok = false;
+        }
+        for (let j = 0; j < 3 && ok; j++)
+          if (!empty(c0 - 1, r0 + j) || !empty(c0 + 2, r0 + j)) ok = false;
+        if (ok) return [c0, r0];
+      }
+    return null;
+  };
   const sx = sim.w * V;
   const sy = sim.h * V;
   const sz = Math.round((Z_FRONT - Z_BACK) * V);
@@ -630,6 +655,14 @@ export function buildOffice(sim, decor, map = [], theme = 'office', moodName) {
         );
         vol.box(x0 + 1, y0 + V, zv(-1.6), x0 + V - 1, y0 + V + 0, zv(0.6), rgb('#fbfbf6'));
         continue;
+      }
+      if (style === '#' && mood === 'lounge') {
+        // Break room: a free-standing block two tiles wide and three tall is a vending machine.
+        const vb = vendingAt(c, r);
+        if (vb) {
+          if (vb[0] === c && vb[1] === r) vendingMachine(vol, x0, y0, zv(-2.3), sz, c);
+          continue;
+        }
       }
       if (t === TILE.SOLID) {
         /** @param {number} dc @param {number} dr */
@@ -1540,6 +1573,63 @@ function floatModule(vol, mood, x0, y0, z0, sz, c, r, floorTop) {
 }
 
 /**
+ * A vending machine filling a block of 2×3 tiles (its top is a floor): a lit header,
+ * a glass front over rows of snacks or cans, the keypad, a card reader and the
+ * pick-up flap. Red for drinks, navy for snacks, alternating along the room.
+ * @param {Volume} vol
+ * @param {number} x0 @param {number} y0 Voxel corner of the bottom-left tile.
+ * @param {number} z0 Back voxel z. @param {number} sz Front voxel z.
+ * @param {number} c Tile column (picks the kind).
+ */
+function vendingMachine(vol, x0, y0, z0, sz, c) {
+  const drinks = c % 4 < 2;
+  const body = drinks ? rgb('#d8343c') : PALETTE.fascia;
+  const edge = lerpColor(body, 0, 0.3);
+  const W = 2 * V,
+    H = 3 * V,
+    f = sz - 1;
+  vol.box(x0, y0, z0, x0 + W, y0 + H, f, body);
+  vol.box(x0, y0 + H - 1, z0, x0 + W, y0 + H, sz, rgb('#2b2f36'));
+  const goods = drinks
+    ? [rgb('#ff8a3d'), rgb('#58d5ff'), rgb('#c6f432'), rgb('#f4f1ea'), rgb('#ffd166')]
+    : [rgb('#ffd166'), rgb('#ff4f9a'), rgb('#e0a83a'), rgb('#9b7bff'), rgb('#e8735a')];
+  vol.box(x0, y0, f, x0 + W, y0 + H - 1, sz, (x, y) => {
+    const px = x - x0,
+      py = y - y0;
+    if (px === 0 || px === W - 1) return edge;
+    // Lit header with the house stripe.
+    if (py >= H - 4)
+      return py === H - 4 ? (drinks ? rgb('#f4f1ea') : PALETTE.accent) : rgb('#fff1e8');
+    // Glass front: rows of products on spiral shelves, a sheen across it.
+    if (px >= 2 && px <= 10 && py >= 6 && py <= H - 6) {
+      if (px + py === 22 || px + py === 23) return rgb('#4a6078');
+      const row = (py - 6) % 4;
+      if (row === 0) return rgb('#8a94a3');
+      if (row === 3 || px % 2 === 0) return rgb('#141b28');
+      return goods[(Math.floor((py - 6) / 4) * 3 + (px >> 1) + c) % goods.length];
+    }
+    // Keypad side: display, keys, card reader, coin return.
+    if (px >= 12 && px <= 14) {
+      if (py === H - 7) return rgb('#46ff9b');
+      if (py >= 11 && py <= 15) return (px + py) % 2 ? rgb('#e2e7ec') : edge;
+      if (py === 9) return rgb('#ff4f9a');
+      if (py === 6) return rgb('#1b1d22');
+    }
+    // Pick-up flap.
+    if (px >= 2 && px <= 10 && py >= 2 && py <= 4)
+      return py === 4 ? rgb('#4a5160') : rgb('#1b1d22');
+    return body;
+  });
+  const lit = [
+    [x0 + 1, y0 + H - 3, x0 + W - 1, y0 + H - 1],
+    [x0 + 12, y0 + H - 7, x0 + 15, y0 + H - 6],
+  ];
+  for (const [a, b, c1, d] of lit)
+    vol.box(a, b, f, c1, d, sz, drinks ? rgb('#fff1e8') : rgb('#e6f5ff'), MAT.EMISSIVE);
+  vol.box(x0 + 12, y0 + H - 7, f, x0 + 15, y0 + H - 6, sz, rgb('#46ff9b'), MAT.EMISSIVE);
+}
+
+/**
  * Front face of a wall or pillar tile, so a tall block never reads as a blank grey
  * slab: cladding panels two tiles square with shadow joints (form-tie holes on
  * car-park concrete, block courses in the server hall), a skirting where it meets
@@ -1565,7 +1655,7 @@ function wallFace(vol, theme, mood, paint, x0, y0, sz, c, r, open) {
     if ((open.left && x === x0) || (open.right && x === x0 + V - 1)) return lit;
     if (park) {
       // Shuttered concrete: board marks and the holes of the form ties.
-      if (x % 4 === 2 && y % 8 === 4) return rgb('#4a4f58');
+      if (x % 4 === 2 && y % 8 === 4) return lerpColor(face, 0, 0.3);
       return (y >> 1) % 4 === 0 ? lerpColor(face, 0, 0.05) : vary(face, 0.05, 8)(x, y, 0);
     }
     if (dc) {

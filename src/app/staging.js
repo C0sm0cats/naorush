@@ -1,5 +1,6 @@
-import { teleportTarget } from '../game/boss.js';
+import { bossHeight, teleportTarget } from '../game/boss.js';
 import { HERO } from '../game/sim.js';
+import { cameraTarget } from './camera.js';
 
 /**
  * Staging: boss-fight lighting and framing, and the dynamic resolution that
@@ -176,6 +177,8 @@ function stage(level, sim, b, t, flashes) {
   const state = b.state;
   const mood = stageMood(sim, b);
   const julien = level.boss?.id === 'techServicesDirector';
+  /** The top of his head: lights find his face and hang over him whatever his size. */
+  const head = b.y + bossHeight(sim);
 
   // Signed: warm light on both of them, then the stage's own lamps take over.
   if (sim.bossDone) {
@@ -199,12 +202,12 @@ function stage(level, sim, b, t, flashes) {
   // A hit or a phase change: a white flash on the director first.
   if (mood.beat > 0.3 && flashes) {
     const k = mood.beat;
-    add(b.x, b.y + 2.2, 1.6, state === 'phase' ? 14 : 6, 3.2 * k, 3 * k, 2.8 * k);
+    add(b.x, head - 0.3, 1.6, state === 'phase' ? 14 : 6, 3.2 * k, 3 * k, 2.8 * k);
   }
   // The consult window: the PRIMO tablet lights up his face, lime like an open door.
   if (state === 'consult') {
     const k = 0.85 + Math.sin(t * 9) * 0.15;
-    add(b.x + face * 0.35, b.y + 1.5, 1, 3.4, 0.95 * k, 2.1 * k, 0.45 * k);
+    add(b.x + face * 0.35, head - 0.85, 1, 3.4, 0.95 * k, 2.1 * k, 0.45 * k);
   }
   // Entrance: the key light starts strong (the house lights are down), then settles.
   const intro = state === 'intro' || state === 'idle';
@@ -229,13 +232,14 @@ function stage(level, sim, b, t, flashes) {
       }
     }
     if (state === 'teleport') {
-      // Failover: a cyan glow gathers where he stands and where he will appear.
+      // Failover: a cyan glow rises from the floor where he stands (from below and
+      // behind, so his face keeps its colours) and gathers where he will appear.
       const k = bt < 0.55 ? smoothstep(0, 0.55, bt) : 1 - smoothstep(0.55, 0.9, bt);
       const to = bt < 0.55 ? teleportTarget(sim, b) : b.x;
-      add(b.x, b.y + 1.2, 0.8, 4.5, 0.4 * k * 2, 1.4 * k * 2, 1.9 * k * 2);
+      add(b.x, floor + 0.3, -0.6, 3.6, 0.3 * k, 1.1 * k, 1.5 * k);
       if (bt < 0.55) add(to, floor + 1, 0.8, 3.5, 0.3 * k * 2, 1.2 * k * 2, 1.6 * k * 2);
     }
-    add(b.x, b.y + 4.2, 2.4, 7, 1.1 * key, 1.35 * key, 1.8 * key);
+    add(b.x, head + 1.7, 2.4, 7, 1.1 * key, 1.35 * key, 1.8 * key);
     if (mood.phase >= 2) {
       // Backup site: two alarm beacons turning in turn.
       const a = 0.25 + 0.75 * Math.max(0, Math.sin(t * 6));
@@ -271,7 +275,7 @@ function stage(level, sim, b, t, flashes) {
     const k = 1 - (bt - 1.1) / 0.3;
     add(b.x, floor + 0.6, 1, 7, 3 * k, 2.6 * k, 1.8 * k);
   }
-  add(b.x, b.y + 4.5, 2.6, 6.5, 2 * key, 1.6 * key, 1.2 * key);
+  add(b.x, head + 1.9, 2.6, 6.5, 2 * key, 1.6 * key, 1.2 * key);
   // Three coloured spots sweep the stage, faster on the regional tour, gold in the finale.
   // During the entrance they gather on him for his opening line.
   const speed = mood.phase >= 2 ? 1.35 : 0.9;
@@ -469,6 +473,93 @@ function focus(x, y, facing, visH) {
 
 /** Room kept between a framed character and the edge of the screen (tiles). */
 const MARGIN = 1;
+/**
+ * How far the duel's wide shot sits above the floor (tiles): the boss bar of the
+ * HUD covers the top of the screen, so the arena's top (its signs and posters)
+ * comes down under it, and the stage's front edge gives the room.
+ */
+const RAISE = 0.8;
+/**
+ * NA-1 / GP-4: what the signing shot must show besides the two of them, as points
+ * (height above the floor, depth) that must stay on screen: the top of Julien's
+ * display (« JULIEN » up to floor + 5.6, hung at the back) down to the feet; for
+ * Rodolphe, his head down to the marquee on the front of his stage (under the
+ * floor and near the camera). `half`: half the sign's width, from the arena's middle.
+ */
+const SIGN_SHOT = {
+  techServicesDirector: { half: 3.2, top: [5.65, -2.25], bottom: [-0.25, 0] },
+  regionalDirector: { half: 4.6, top: [3.1, 0], bottom: [-0.95, 1.39] },
+};
+/** The HUD's height in CSS pixels (style.css: 56 px under the safe area), and some air. */
+const HUD_PX = 64;
+/** Screen heights the HUD share is taken for: a short landscape phone, a PC. */
+const SHORT_SCREEN = 360;
+const TALL_SCREEN = 720;
+
+/** Camera geometry as in camera.js: field of view, eye above the target, target depth. */
+const TAN_HALF = Math.tan((15 * Math.PI) / 180);
+const EYE_UP = 1.4;
+const TARGET_Z = -0.8;
+
+/**
+ * Where a point lands on screen, from the top (0) to the bottom (1), for the camera
+ * camera.js builds on a target at height `ty` with `visH` tiles of visible height.
+ * @param {number} ty @param {number} visH @param {number} y @param {number} z
+ */
+export function screenRow(ty, visH, y, z) {
+  const dist = visH / 2 / TAN_HALF;
+  // Looking from (ty + EYE_UP, dist) at (ty, TARGET_Z): forward and up, in the y–z plane.
+  const fy = -EYE_UP,
+    fz = TARGET_Z - dist;
+  const n = Math.hypot(fy, fz);
+  const [dy, dz] = [fy / n, fz / n];
+  const [uy, uz] = [-dz, dy];
+  const vy = y - (ty + EYE_UP),
+    vz = z - dist;
+  const ndc = (vy * uy + vz * uz) / (vy * dy + vz * dz) / TAN_HALF;
+  return (1 - ndc) / 2;
+}
+
+/**
+ * The signing: the director, the hero and the sign that says it, whole and clear
+ * of the HUD (and of the touch pads at the bottom); null when the screen is too
+ * narrow for all three (an upright phone), where the shot keeps the two of them.
+ * @param {Sim} sim @param {Thing} b @param {number} hx @param {number} baseH
+ * @param {number} aspect @param {number} lift Tiles the touch pads cover at the bottom.
+ */
+function signShot(sim, b, hx, baseH, aspect, lift) {
+  const s =
+    SIGN_SHOT[sim.boss?.id === 'regionalDirector' ? 'regionalDirector' : 'techServicesDirector'];
+  const mid = (floorX0(sim, b) + floorX1(sim, b)) / 2;
+  const floor = b.y0 ?? b.y;
+  const left = Math.min(hx, b.x, mid - s.half) - MARGIN;
+  const right = Math.max(hx, b.x, mid + s.half) + MARGIN;
+  const x = (left + right) / 2;
+  const maxH = aspect >= 1 ? 10.5 : Math.max(12.5, sim.h + 2);
+  // The HUD keeps its size in pixels: a bigger share of a short (wide) phone screen.
+  const hudTop = HUD_PX / (aspect > 2 ? SHORT_SCREEN : TALL_SCREEN);
+  const bounds = { w: sim.w, h: sim.h };
+  for (let visH = Math.max(baseH, (right - left) / aspect); visH <= maxH; visH += 0.25) {
+    // The target height that puts the top point just under the HUD: raising the
+    // camera moves every point down the screen.
+    let lo = floor - 6,
+      hi = floor + 16;
+    for (let i = 0; i < 40; i++) {
+      const ty = (lo + hi) / 2;
+      if (screenRow(ty, visH, floor + s.top[0], s.top[1]) < hudTop) lo = ty;
+      else hi = ty;
+    }
+    // What the camera really does with it (its floor and ceiling stops).
+    const [, ty] = cameraTarget(aspect, visH, { x, y: lo - 2.2, facing: 0 }, bounds);
+    const top = screenRow(ty, visH, floor + s.top[0], s.top[1]);
+    const bottom = screenRow(ty, visH, floor + s.bottom[0] - lift, s.bottom[1]);
+    if (top >= hudTop - 0.005 && bottom <= 0.98) return focus(x, ty - 2.2, 0, visH);
+  }
+  return null;
+}
+
+/** The directors' height the close-ups were first framed for (tiles). */
+const FRAMED_FOR = 2.05;
 
 /**
  * Frames `keep` (always in the shot, MARGIN from the edge) and `other` as well when
@@ -526,11 +617,15 @@ export function fightFocus(sim, lift, aspect) {
   const wide = known && a >= 1;
   // The follow camera's own framing (see camera.js): a little closer when upright.
   const baseH = known && a < 1 ? 7.4 : 8.2;
+  // Close-ups widen with the director's size, so an imposing director still fits.
+  const tall = bossHeight(sim) / FRAMED_FOR;
   if (sim.bossDone) {
     // The signing: the two of them in one shot, until the envelope is in hand.
     if (sim.hasKey || Math.abs(hx - b.x) > 7 || (b.state === 'sign' && bt > 6)) return null;
-    const y = floor - 0.7 - lift;
-    return known ? frame(b.x, hx, y, 6.4, a, sim.h) : focus((hx + b.x) / 2, y, 0, 6.4);
+    const y = floor - 0.7 + (tall - 1) * 2 - lift;
+    const h = 6.4 * tall;
+    if (!known) return focus((hx + b.x) / 2, y, 0, h);
+    return signShot(sim, b, hx, h, a, lift) ?? frame(b.x, hx, y, h, a, sim.h);
   }
   const x0 = floorX0(sim, b),
     x1 = floorX1(sim, b);
@@ -540,30 +635,33 @@ export function fightFocus(sim, lift, aspect) {
   if (b.state === 'idle' || (b.state === 'intro' && bt < 0.7)) {
     // The entrance: close on the director, a little to the hero's side on a wide
     // screen. Rodolphe's shot is wider and lower, down to his name on the stage.
-    // A low angle: the camera looks up at him.
+    // A low angle: the camera looks up at him, his head clear of the boss bar
+    // (a little more room on a very wide screen, where the bar takes more of it).
     const side = wide ? Math.sign(hx - b.x) * 0.5 : 0;
+    const up = (tall - 1) * 2.4 + (a > 2 ? 0.5 : 0);
     const f =
       sim.boss?.id === 'regionalDirector'
-        ? focus(b.x + side, floor - 1.4 - lift, 0, 6.4)
-        : focus(b.x + side, b.y - 1 - lift, 0, 5.2);
+        ? focus(b.x + side, floor - 1.4 + up - lift, 0, 6.4 * tall)
+        : focus(b.x + side, b.y - 1 + up - lift, 0, 5.2 * tall);
     f.low = 1;
     return f;
   }
   if (b.state === 'intro') {
     // The reveal: the whole arena, or the director and as much of the way to the hero as fits.
-    if (arenaH <= 10.5) return focus(mid, floor + 0.4 - lift, 0, Math.max(9.2, arenaH));
+    if (arenaH <= 10.5) return focus(mid, floor + 0.4 + RAISE - lift, 0, Math.max(9.2, arenaH));
     return known
       ? frame(b.x, hx, floor - lift, baseH, a, sim.h)
       : focus(b.x, floor - lift, 0, baseH);
   }
   if (b.state === 'phase' && bt < 1.3 && Math.abs(hx - b.x) < 6) {
     // A new phase: lean in on him, with the hero still in the shot.
-    if (wide) return focus((hx + b.x * 2) / 3, floor - 0.5 - lift, 0, 6.6);
-    if (known) return frame(hx, b.x, floor - 0.5 - lift, 6.6, a, sim.h);
+    const y = floor - 0.5 + (tall - 1) * 2 - lift;
+    if (wide) return focus((hx + b.x * 2) / 3, y, 0, 6.6 * tall);
+    if (known) return frame(hx, b.x, y, 6.6 * tall, a, sim.h);
   }
   if (arenaH <= 10.5) {
     // The duel on a wide screen: the whole arena, rising a little with the hero.
-    const y = floor + Math.max(0, hy - floor) * 0.5;
+    const y = floor + RAISE + Math.max(0, hy - floor) * 0.5;
     return pushIn(focus(mid, y - lift, 0, arenaH), b, hx, true);
   }
   // Narrower screens: the hero always in the shot, the director too when he fits.
@@ -575,8 +673,8 @@ export function fightFocus(sim, lift, aspect) {
 /** How long the first PRIMO window of a director plays in slow motion (real seconds), and how slow. */
 export const PRIMO_SLOW = 0.8;
 const PRIMO_SCALE = 0.35;
-/** What the HUD says as it starts. */
-export const PRIMO_PROMPT = 'X / CR : maintenant !';
+/** What the HUD says as it starts, in the player's own controls (fillKeys). */
+export const PRIMO_PROMPT = '{fire} : maintenant !';
 
 /**
  * The first time each director consults PRIMO, time slows down for 0.8 s, a

@@ -16,6 +16,7 @@ import { chain, multiply, scaling, translation } from '../gfx/mat4.js';
 import { Mesh, Sprite, perfStats } from '../gfx/renderer.js';
 import { buildThings } from '../gfx/things.js';
 import { MAT, Volume, meshVolume } from '../gfx/voxels.js';
+import { BOSS_STAGE_SCALE } from '../game/boss.js';
 import { HERO, TILE } from '../game/sim.js';
 import { assetUrl, crop, loadImage } from './assets.js';
 import { buildStage } from './build-worker.js';
@@ -277,7 +278,17 @@ export class LevelView {
     level.map.forEach((row, i) => {
       const y = sim.h - 1 - i;
       for (let c = 0; c < row.length; c++) {
-        if (row[c] === 'Y')
+        if (row[c] === 'Y' && level.mood === 'lounge') {
+          // Break room: a run of 'Y' tiles is one table football, its rim the tile top.
+          if (row[c - 1] !== 'Y') {
+            let n = 0;
+            while (row[c + n] === 'Y') n++;
+            this.furniture.push({
+              mesh: this.props.babyFoot,
+              model: chain(translation(c + n / 2, y, -0.55), scaling(n / 1.34, 1 / 0.88, 1)),
+            });
+          }
+        } else if (row[c] === 'Y')
           this.furniture.push({
             mesh: this.props.copilTable,
             model: chain(translation(c + 0.5, y + 0.1, -0.5), scaling(1, 1, 1.6)),
@@ -315,8 +326,9 @@ export class LevelView {
     /** What the stage's key item looks like. */
     this.keyMesh = this.things[level.keyModel ?? 'key'];
     const exit = sim.things.find((t) => t.kind === 'exit');
-    /** Where the stage ends, for the exit sign. */
-    this.exitAt = exit ? { x: exit.x, y: exit.y } : null;
+    /** Where the stage ends, for the exit sign: over the way out, but kept clear of
+     * the end walls so the camera, which stops at the level's edge, shows it whole. */
+    this.exitAt = exit ? { x: Math.max(2.6, Math.min(sim.w - 2.6, exit.x)), y: exit.y } : null;
     /** Milliseconds the main thread spent on this build (the constructor's added below). */
     let main = 0;
     const diorama = built.then((b) => {
@@ -650,7 +662,9 @@ export class LevelView {
           items.push(it);
         }
     }
-    const o = poseOptions(CAST[id].scale, turn, b.state === 'consult' ? 0.9 : 0.45, tint);
+    // Imposing in their duel: a head and shoulders over the heroes (boss.js BOSS_HEIGHT).
+    const scale = CAST[id].scale * BOSS_STAGE_SCALE;
+    const o = poseOptions(scale, turn, b.state === 'consult' ? 0.9 : 0.45, tint);
     poseCharacter(this.cast[id], b.x, y, -0.1, facing, pose, o, items, this.pool);
   }
 

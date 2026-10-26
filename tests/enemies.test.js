@@ -344,6 +344,39 @@ describe('walkers on loose floor', () => {
   });
 });
 
+describe('walkers and cracked slabs', () => {
+  it('turn back before a loose slab or a trapdoor while strolling: it is still there for the hero', () => {
+    for (const [ch, slab] of /** @type {const} */ ([
+      ['n', '-'],
+      ['i', 'L'],
+      ['v', '-'],
+    ])) {
+      // Hero far away and out of sight: the walker strolls on its own for 30 s.
+      const s = sim(
+        room(30, [['S', 26, 3], ...fill('#', 22, 23, 3, 6), [slab, 13, 2], [ch, 10, 3]]),
+      );
+      const walker = s.things.find((t) => t.kind !== 'loose' && t.kind !== 'lift' && t.x === 10.5);
+      if (!walker) throw new Error(ch);
+      const r = run(s, IDLE, 60 * 30);
+      expect(has(r, 'crack') || has(r, 'trapdoor'), ch).toBe(false);
+      expect(tileAt(s, 13, 2), ch).toBe(TILE.LOOSE);
+      expect([walker.alive, walker.y], ch).toEqual([true, 3]);
+      expect(walker.x, ch).toBeLessThan(13);
+    }
+  });
+
+  it('but a rushing intern runs onto it, the same way on every try', () => {
+    const s = sim(
+      room(20, [['S', 13, 3], ['i', 8, 3], ...fill('-', 10, 12, 2, 2), ...fill('^', 10, 12, 1, 1)]),
+    );
+    const intern = find(s, 'intern');
+    Object.assign(intern, { vx: 2.2, t: 2 });
+    const r = runUntil(s, IDLE, () => !intern.alive, 240);
+    expect(r.ok).toBe(true);
+    expect(has(r.events, 'crack')).toBe(true);
+  });
+});
+
 describe("a stunned intern's pile of files", () => {
   /** A stunned intern at column 10 (x = 10.5), floor top at y = 3, facing right. */
   const setup = (/** @type {import('./mechanics-kit.js').Mark[]} */ marks = [], hero = 3) => {

@@ -131,7 +131,7 @@ describe('daily challenge', () => {
     expect(dailyMet(c, { secrets: 0, time: silver - 0.1 })).toBe(true);
     expect(dailyMet(c, { secrets: 0, time: silver })).toBe(false);
     expect(dailyKicker(c, { secrets: 0, time: silver + 5 })).toMatch(
-      /^Défi du jour · chrono à battre : 0 min \d\d s$/,
+      /^Défi du jour · chrono à battre : \d+ min \d\d s$/,
     );
     // The title button, the card and the share say the time.
     const year = Array.from({ length: 21 }, (_, i) =>
