@@ -26,8 +26,14 @@ const FRONT_Z = 1.4;
 const CEILING_SHOW = 0.45;
 /** Falls faster than any jump's own landing (tiles/s) make the camera look down. */
 const FALL_LOOK = 12;
-/** How far the camera looks up or down when the hero asks (holding up / down, standing still). */
-const PEEK = 2.4;
+/**
+ * Holding up or down, standing still: the camera pulls back by PEEK_ZOOM (so even
+ * pinned under the ceiling or on the ground floor, more of the room shows) and looks
+ * PEEK_UP tiles up or PEEK_DOWN tiles down (down to the bottom of a shaft).
+ */
+const PEEK_ZOOM = 1.25;
+const PEEK_UP = 2.4;
+const PEEK_DOWN = 4.5;
 
 /**
  * Visible height (tiles) for the follow camera. A phone held upright gets its own
@@ -158,17 +164,20 @@ export class Camera {
    *   hero standing on the highest ledge still jumps in full view below the HUD.
    */
   update(dt, aspect, focus, bounds) {
-    const visH = viewHeight(aspect, bounds.h + (bounds.sky ?? 0), focus);
-    const dist = visH / 2 / TAN;
     // Falls are measured on the followed hero only; a cut (respawn, a new framing) resets it.
     const follow = focus.visH === undefined && focus.facing !== 0;
+    const peek = follow ? Math.sign(focus.peek ?? 0) : 0;
+    const levelH = bounds.h + (bounds.sky ?? 0);
+    const baseH = viewHeight(aspect, levelH, focus);
+    const visH = peek ? Math.max(baseH, Math.min(baseH * PEEK_ZOOM, levelH + 1)) : baseH;
+    const dist = visH / 2 / TAN;
     if (dt > 0) {
       const dy = focus.y - this.fy;
       if (!follow || !(Math.abs(dy) < 1.5)) this.vy = 0;
       else this.vy += (dy / dt - this.vy) * (1 - Math.exp(-dt / 0.3));
       this.fy = follow ? focus.y : NaN;
     }
-    const look = fallLook(this.vy) + (follow ? (focus.peek ?? 0) * PEEK : 0);
+    const look = fallLook(this.vy) + (peek > 0 ? PEEK_UP : peek < 0 ? -PEEK_DOWN : 0);
     const [tx, ty] = cameraTarget(aspect, visH, focus, bounds, look);
     const k = 1 - Math.exp(-dt * 6);
     // On a long fall the camera also catches up faster, so the hero never sinks off the bottom.

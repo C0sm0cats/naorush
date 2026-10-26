@@ -182,6 +182,20 @@ describe('vertical anticipation', () => {
     expect(cam.y + topReach(cam.dist)).toBeLessThanOrEqual(bounds.h - 0.3);
   });
 
+  it('still shows more when pinned under the ceiling, and down to the bottom of a shaft (QA)', () => {
+    // Parking top floor (x 72, y 8): the view already touches the ceiling.
+    const plain = settle(16 / 9, { x: 40, y: 8, facing: 1 }).cam;
+    const up = settle(16 / 9, { x: 40, y: 8, facing: 1, peek: 1 }).cam;
+    expect(visible(up)).toBeGreaterThan(visible(plain) * 1.2);
+    expect(up.y + topReach(up.dist)).toBeLessThanOrEqual(LEVEL.h - 0.3);
+    // A shaft: standing at y 15 of a tall level, the floor 6 tiles down comes into view.
+    const tall = { w: 100, h: 30 };
+    for (const aspect of [16 / 9, 863 / 360, 412 / 915]) {
+      const { cam } = settle(aspect, { x: 40, y: 15, facing: 1, peek: -1 }, tall);
+      expect(cam.y - visible(cam) / 2).toBeLessThan(15 - 6);
+    }
+  });
+
   it('ignores cuts (respawn, teleport)', () => {
     const cam = new Camera();
     cam.snap(40, 20);

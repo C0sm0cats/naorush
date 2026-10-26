@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DT, HARDCORE_TRAPS, HERO_STATS, PEEK_DELAY, setHardcore, step } from '../src/game/sim.js';
+import { HERO, blocked } from '../src/game/world.js';
 import { IDLE, fill, has, input, room, run, runUntil, sim } from './mechanics-kit.js';
 
 /** @typedef {import('./mechanics-kit.js').Sim} Sim */
@@ -369,6 +370,43 @@ describe('lifts', () => {
     }
     expect(tries).toBeGreaterThan(20);
     expect(through).toBe(0);
+  });
+
+  /**
+   * A lift (x 4–6, y 3 to 8) beside a rack (x 6–9, top at 6) and a ledge level with
+   * its top stop (x 6–9 at row 7, `ledge`). The hero stands with one foot over the
+   * deck at its top stop, the other over the rack or the ledge, for two round trips.
+   * @param {boolean} ledge
+   */
+  function besideLift(ledge) {
+    const marks = ledge ? fill('#', 6, 9, 7, 7) : fill('#', 6, 9, 3, 5);
+    const s = sim(
+      room(16, [['S', 2, 3], ...marks], { lifts: [{ x: 4, y: 3, top: 8, w: 2, period: 2 }] }),
+    );
+    const lift = s.things.find((t) => t.kind === 'lift');
+    if (!lift) throw new Error('no lift');
+    runUntil(s, IDLE, () => lift.y > 7.9, 240);
+    Object.assign(s.hero, { x: 5.6, y: lift.y + 0.2, vx: 0, vy: 0, state: 'air', invuln: 1e9 });
+    let inside = 0;
+    for (let i = 0; i < 240; i++) {
+      run(s, IDLE, 1);
+      if (blocked(s, s.hero.x, s.hero.y, HERO.w, HERO.h)) inside++;
+    }
+    return { s, inside };
+  }
+
+  it('never carry a rider down into the rack beside the shaft (QA: T&S x 44)', () => {
+    const { s, inside } = besideLift(false);
+    expect(inside).toBe(0);
+    // Stepped off onto the rack top (and maybe picked up again on the way back up).
+    expect(s.hero.y).toBeGreaterThan(6 - 1e-6);
+  });
+
+  it('leave a rider on the ledge they half stand on as the deck goes down', () => {
+    const { s, inside } = besideLift(true);
+    expect(inside).toBe(0);
+    expect(s.hero.y).toBeCloseTo(8, 5);
+    expect(s.hero.state).toBe('ground');
   });
 });
 

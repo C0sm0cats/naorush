@@ -710,6 +710,70 @@ describe('Rodolphe’s new moves', () => {
   });
 });
 
+describe('Julien’s phase change and signing (QA)', () => {
+  /** Julien at his last phase-1 consult, standing at `bx`, the hero at `hx`. @param {number} bx @param {number} hx */
+  const atConsult = (bx, hx) => {
+    const s = createSim(TS, 'kevin');
+    const b = s.things.find((t) => t.kind === 'boss');
+    if (!b) throw new Error('no boss');
+    Object.assign(s.hero, { x: hx, y: 3, invuln: 1e9 });
+    runUntil(s, IDLE, () => b.state === 'consult', 60 * 30);
+    Object.assign(b, { x: bx, hp: PATTERNS.techServicesDirector.phases[0] + 1, t: 0 });
+    return { s, b };
+  };
+
+  it('steps off a server rack rising under him, which waits until he has', () => {
+    const [x0] = arenaFloor(
+      s0(TS),
+      s0(TS).things.find((t) => t.kind === 'boss') ?? make('boss', 0, 0),
+    );
+    for (const bx of [x0 + 8.5, x0 + 9.2, x0 + 2.6]) {
+      const { s, b } = atConsult(bx, TS0 + 4);
+      const floor = b.y0 ?? b.y;
+      while (b.state === 'consult' && b.phase === 1) shootAt(s, b);
+      expect(b.state).toBe('phase');
+      for (let f = 0; f < 60 * 4; f++) {
+        step(s, IDLE);
+        // Never inside a rack: his footprint stays clear of solid tiles and rising racks.
+        for (const c of [Math.floor(b.x - 0.4), Math.floor(b.x + 0.4)]) {
+          expect(solid(s, c, floor), `x=${b.x.toFixed(2)}`).toBe(false);
+          for (const r of risers(s))
+            if (c >= r.x && c < r.x + (r.w ?? 2))
+              expect(r.y, `rack at ${c}`).toBeLessThan(floor + 0.05);
+        }
+      }
+      expect(risers(s).every((r) => r.state === 'set')).toBe(true);
+    }
+  });
+
+  it('drops the signed envelope on a free tile of the floor, never in the rack stairs', () => {
+    const [x0, x1] = arenaFloor(
+      s0(TS),
+      s0(TS).things.find((t) => t.kind === 'boss') ?? make('boss', 0, 0),
+    );
+    for (const [bx, hx] of [
+      [x1 - 4.5, x0 + 3],
+      [x1 - 3.6, x0 + 3],
+      [x0 + 1.5, x1 - 6],
+      [x0 + 8, x0 + 3],
+    ]) {
+      const { s, b } = atConsult(bx, hx);
+      b.hp = 1;
+      while (!s.bossDone) shootAt(s, b);
+      const sign = runUntil(s, IDLE, (x) => x.things.some((t) => t.kind === 'key'), 300);
+      expect(sign.ok).toBe(true);
+      const key = s.things.find((t) => t.kind === 'key');
+      const floor = b.y0 ?? b.y;
+      const c = Math.floor(key?.x ?? 0);
+      expect(solid(s, c, floor), `envelope at ${key?.x}`).toBe(false);
+      expect(solid(s, c, floor - 1)).toBe(true);
+      expect(c).toBeGreaterThanOrEqual(x0);
+      expect(c).toBeLessThan(x1);
+      expect(Math.abs((key?.x ?? 0) - b.x)).toBeLessThan(4);
+    }
+  });
+});
+
 describe('Rodolphe’s grand finale', () => {
   it('starts at his last argument, clears the stage and opens with the spotlight', () => {
     const s = createSim(ROOFTOP, 'charline');

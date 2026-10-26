@@ -565,7 +565,9 @@ export function step(s, input) {
         hero.x < l.x + (l.w ?? 2) - 0.05 &&
         // The lift moves after the hero: a deck that rose past the feet this step still catches them.
         hero.y >= l.y - Math.max(0, l.dy ?? 0) - 0.02 &&
-        ny <= l.y
+        ny <= l.y &&
+        // Never caught into a wall (a foot over the deck beside a rack).
+        !blocked(s, hero.x, l.y, HERO.w, HERO.h)
       ) {
         if (hero.state !== 'ground') landed(s, hero, l.y);
         s.onLift = l;
@@ -746,7 +748,15 @@ function stepThings(s) {
         const ny = (t.y0 ?? t.y) + ((t.y1 ?? t.y) - (t.y0 ?? t.y)) * k;
         t.dy = ny - t.y;
         t.y = ny;
-        if (s.onLift === t) hero.y = t.y;
+        if (s.onLift === t) {
+          // A rider the deck would carry into a wall, a shelf or a ceiling steps off instead
+          // (a foot left on the next ledge keeps them there).
+          if (blocked(s, hero.x, t.y, HERO.w, HERO.h)) {
+            s.onLift = null;
+            hero.state = 'air';
+            hero.fallFrom = hero.y;
+          } else hero.y = t.y;
+        }
         break;
       }
       case 'loose':

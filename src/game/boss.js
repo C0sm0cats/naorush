@@ -457,7 +457,10 @@ function stepRisers(s, floor) {
     const up = (t.dir ?? 1) > 0;
     let y = t.y;
     if (t.state === 'moving') {
-      if (up) y = Math.min(top, y + RISE * DT);
+      // Never up through the director: it waits under him while he steps off.
+      const boss = s.things.find((k) => k.kind === 'boss');
+      const under = boss !== undefined && boss.x + BODY > t.x && boss.x - BODY < t.x + (t.w ?? 2);
+      if (up) y = under ? y : Math.min(top, y + RISE * DT);
       else {
         y = Math.max(top, y - DROP * DT);
         const h = s.hero;
@@ -468,7 +471,7 @@ function stepRisers(s, floor) {
       const h = s.hero;
       const inside =
         h.x + HERO.w > t.x && h.x < t.x + (t.w ?? 2) && h.y < top - 0.01 && h.y + HERO.h > floor;
-      if (y === top && !inside) {
+      if (y === top && !inside && !under) {
         riserTiles(s, t, floor, true);
         Object.assign(t, { state: 'set', t: 0 });
         emit(s, up ? 'riserUp' : 'riserDown', t.x + (t.w ?? 2) / 2, top);
@@ -726,18 +729,27 @@ export function stepBoss(s, b) {
       // Picks up at the next round of the sequence.
       if (b.t > 0.6) nextAttack(s, b);
       break;
-    case 'phase':
+    case 'phase': {
+      // The new risers come in where he stands? He steps off them first.
+      const clear = roomAt(s, b.x, floor, PASS);
+      const to = clear ? b.x : (spotNear(s, b, b.x, b.x, true) ?? spotNear(s, b, b.x));
+      if (to !== undefined && Math.abs(to - b.x) > 0.01) {
+        const d = to - b.x;
+        b.vx = Math.sign(d) * WALK;
+        b.x = Math.abs(d) <= WALK * DT ? to : b.x + b.vx * DT;
+      } else b.vx = 0;
       if (b.t > 1.8) {
         b.step = -1;
         nextAttack(s, b);
       }
       break;
+    }
     case 'convinced':
       if (b.t > 1.4) {
         b.state = 'sign';
         b.t = 0;
         emit(s, 'sign', b.x, up(s, b, 0.8));
-        s.things.push(make('key', b.x - face * 1.3, floor + 0.6));
+        s.things.push(make('key', envelopeSpot(s, b, b.x - face * 1.3, floor), floor + 0.6));
       }
       break;
     default:
@@ -750,6 +762,20 @@ export function stepBoss(s, b) {
     if (s.onLift) s.onLift = null;
     knock(s, hero, b.x, 'boss');
   }
+}
+
+/**
+ * Where the signed envelope lands: the free tile of the arena floor nearest to
+ * `x` (never inside a step, a riser or a wall), its centre.
+ * @param {Sim} s @param {Thing} b @param {number} x @param {number} floor
+ */
+function envelopeSpot(s, b, x, floor) {
+  const [x0, x1] = arenaFloor(s, b);
+  const free = (/** @type {number} */ c) =>
+    c >= x0 && c < x1 && !solid(s, c, floor) && !riserOver(s, c) && solid(s, c, floor - 1);
+  for (let d = 0; d <= x1 - x0; d++)
+    for (const c of [Math.floor(x) + d, Math.floor(x) - d]) if (free(c)) return c + 0.5;
+  return x;
 }
 
 /**
