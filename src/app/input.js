@@ -50,12 +50,18 @@ if (typeof navigator !== 'undefined')
   /** @type {any} */ (navigator).keyboard
     ?.getLayoutMap?.()
     .then((/** @type {Map<string, string>} */ map) => {
-      for (const [code, key] of map) if (!layout.has(code)) layout.set(code, key);
+      // The browser's map is the reference: it wins over keys learned from presses.
+      for (const [code, key] of map) layout.set(code, key);
     })
     .catch(() => {});
 
-/** Learns what a key prints from a key press. @param {KeyboardEvent} e */
+/**
+ * Learns what a key prints from a key press, when the layout map did not say. A press with
+ * Maj, AltGr, Ctrl or Meta prints something else (« 1 » for « & », « € » for « E »): ignored.
+ * @param {Pick<KeyboardEvent, 'key' | 'code' | 'shiftKey' | 'altKey' | 'ctrlKey' | 'metaKey'>} e
+ */
 export function learnKey(e) {
+  if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey || layout.has(e.code)) return;
   if (e.key && [...e.key].length === 1 && e.key !== ' ') layout.set(e.code, e.key);
 }
 

@@ -8,6 +8,7 @@ import {
   keyLabel,
   keyName,
   layout,
+  learnKey,
   padKind,
   tipText,
 } from '../src/app/input.js';
@@ -36,6 +37,28 @@ describe('control names (AM-2)', () => {
     layout.delete('KeyQ');
     expect(keyName('Numpad5')).toBe('Pavé 5');
     expect(keyName('ShiftLeft')).toBe('Maj');
+  });
+
+  it('learns a key from a plain press only, and never over a known one', () => {
+    const press = (/** @type {Partial<KeyboardEvent>} */ e) =>
+      learnKey({
+        shiftKey: false,
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        ...e,
+        code: e.code ?? '',
+        key: e.key ?? '',
+      });
+    press({ code: 'Digit1', key: '1', shiftKey: true });
+    press({ code: 'KeyE', key: '€', altKey: true, ctrlKey: true });
+    expect(layout.has('Digit1')).toBe(false);
+    expect(layout.has('KeyE')).toBe(false);
+    press({ code: 'Digit1', key: '&' });
+    expect(keyName('Digit1')).toBe('&');
+    press({ code: 'Digit1', key: '1' });
+    expect(keyName('Digit1')).toBe('&');
+    layout.delete('Digit1');
   });
 
   it('tells a PlayStation pad from the others', () => {
