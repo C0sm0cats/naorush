@@ -2,7 +2,7 @@ import { CAST } from '../data/cast.js';
 import { FRESH, poseCharacter, poseOptions } from '../gfx/characters.js';
 import { WARN, consultLength, teleportTarget } from '../game/boss.js';
 import { HERO, TILE, tileAt } from '../game/sim.js';
-import { pileColumn } from '../game/enemies.js';
+import { SPRING_STOP, pileColumn } from '../game/enemies.js';
 import { PERIOD, WET, phaseOf, sinceSpray, wetSpan } from '../game/traps.js';
 import { multiply, rotationX, rotationY, rotationZ, scaling, translation } from '../gfx/mat4.js';
 import { blinkAt, idlePose } from './poses.js';
@@ -827,9 +827,19 @@ export function drawThing(view, items, sim, th, t) {
       }
       break;
     }
-    case 'vacuum':
-      at(P.vacuum, th.x, th.y, 0, rotationY(th.t * 3, E1));
+    case 'vacuum': {
+      // Springboard: the lid squashes under the feet (0.08 s), then a coil shoots
+      // its pad up and settles back in with a wobble while the vacuum waits.
+      const k = th.state === 'spring' ? th.t / SPRING_STOP : 1;
+      const squash = k < 0.2 ? 1 - 0.45 * Math.sin((k / 0.2) * Math.PI * 0.5) : 1;
+      const coil = k < 0.2 ? 0 : Math.max(0, Math.sin(((k - 0.2) / 0.8) * Math.PI)) * 0.55;
+      at(P.vacuum, th.x, th.y, 0, scaling(1, squash, 1, E1), rotationY(th.t * 3, E2));
+      if (coil > 0.02) {
+        const wob = 1 + Math.sin(th.t * 60) * 0.06 * (1 - k);
+        at(things.vacuumSpring, th.x, th.y + 0.17, 0, scaling(1, coil * wob, 1, E1));
+      }
       break;
+    }
     case 'visio': {
       const dir = th.dir ?? -1;
       const muted = th.state === 'muted';

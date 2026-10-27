@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HERO, HERO_STATS, TILE, tileAt } from '../src/game/sim.js';
-import { pileColumn } from '../src/game/enemies.js';
+import { SPRING, SPRING_STOP, pileColumn } from '../src/game/enemies.js';
 import { IDLE, fill, has, input, room, run, runUntil, sim, throwCr } from './mechanics-kit.js';
 
 /** @typedef {import('./mechanics-kit.js').Sim} Sim */
@@ -103,13 +103,14 @@ describe('intern', () => {
 });
 
 describe('robot vacuum', () => {
-  /** Kévin dropped from y = 5.5 right above a parked vacuum. */
-  function dropOnVacuum() {
+  /** A hero dropped from y = 5.5 right above a parked vacuum. */
+  function dropOnVacuum(hero = /** @type {'kevin'|'charline'} */ ('kevin')) {
     const s = sim(
       room(16, [
         ['S', 2, 3],
         ['v', 8, 3],
       ]),
+      hero,
     );
     const vacuum = find(s, 'vacuum');
     vacuum.vx = 0;
@@ -117,19 +118,52 @@ describe('robot vacuum', () => {
     return s;
   }
 
-  it('bounces a hero landing on its lid higher than a jump', () => {
-    const s = dropOnVacuum();
-    const r = runUntil(s, IDLE, (x) => has(x.events, 'vacuumBounce'), 120);
-    expect(r.ok).toBe(true);
-    expect(s.hero.vy).toBeCloseTo(HERO_STATS.kevin.jump * 1.12, 5);
-    expect(s.hero.state).toBe('air');
-    let top = s.hero.y;
-    for (let i = 0; i < 40; i++) {
-      run(s, input({ jump: true }), 1);
-      top = Math.max(top, s.hero.y);
-    }
-    // A standing jump peaks around y = 4.6.
-    expect(top).toBeGreaterThan(5);
+  it('is a real springboard: about 4.4 tiles up for Kévin, 4.7 for Charline, jump held or not', () => {
+    for (const hero of /** @type {const} */ (['kevin', 'charline']))
+      for (const held of [false, true]) {
+        const s = dropOnVacuum(hero);
+        const r = runUntil(s, IDLE, (x) => has(x.events, 'vacuumBounce'), 120);
+        expect(r.ok).toBe(true);
+        expect(s.hero.vy).toBe(SPRING[hero]);
+        expect(s.hero.state).toBe('air');
+        let top = s.hero.y;
+        for (let i = 0; i < 90; i++) {
+          run(s, input({ jump: held }), 1);
+          top = Math.max(top, s.hero.y);
+        }
+        // The floor top is y = 3; a standing jump rises about 1.6.
+        const rise = top - 3;
+        expect(rise, `${hero} ${held}`).toBeGreaterThan(hero === 'kevin' ? 4.2 : 4.55);
+        expect(rise, `${hero} ${held}`).toBeLessThan(hero === 'kevin' ? 4.5 : 4.85);
+        expect(s.hero.hearts).toBe(HERO_STATS[hero].hearts);
+      }
+  });
+
+  it('keeps air control and Charline’s double jump on the way up', () => {
+    const s = dropOnVacuum('charline');
+    runUntil(s, IDLE, (x) => has(x.events, 'vacuumBounce'), 120);
+    // A jump pressed on the lid is not spent slowing the launch down.
+    run(s, input({ jump: true }), 1);
+    expect(s.hero.vy).toBeGreaterThan(HERO_STATS.charline.jump);
+    expect(s.hero.airJumps).toBe(1);
+    const x0 = s.hero.x;
+    run(s, input({ right: true }), 20);
+    expect(s.hero.x - x0).toBeGreaterThan(1);
+  });
+
+  it('stops dead while its lid springs back, then rolls on: no knock from below', () => {
+    const s = dropOnVacuum('kevin');
+    const vacuum = find(s, 'vacuum');
+    expect(runUntil(s, IDLE, (x) => has(x.events, 'vacuumBounce'), 120).ok).toBe(true);
+    // Rolling on as it was: it waits for its lid first.
+    vacuum.vx = 3;
+    const x = vacuum.x;
+    expect(vacuum.state).toBe('spring');
+    run(s, IDLE, Math.floor(SPRING_STOP * 60) - 1);
+    expect(vacuum.x).toBe(x);
+    run(s, IDLE, 10);
+    expect(vacuum.state).toBe('walk');
+    expect(vacuum.x).not.toBe(x);
     expect(s.hero.hearts).toBe(4);
   });
 

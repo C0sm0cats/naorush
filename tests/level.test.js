@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LEVELS, ROOM_W } from '../src/data/levels/index.js';
 import { LCP7 } from '../src/data/levels/lcp7.js';
-import { HERO, TILE, createSim, step, tileAt } from '../src/game/sim.js';
+import { HERO, TILE, createSim, setHardcore, step, tileAt } from '../src/game/sim.js';
 import { solve } from '../src/game/solver.js';
 
 const HEROES = /** @type {const} */ (['kevin', 'charline']);
@@ -44,7 +44,8 @@ describe.each(LEVELS)('$name', (level) => {
     (hero) => {
       const result = solve(createSim(level, hero), {
         // A boss stage adds the duel (its phases and risers) to the search.
-        maxNodes: level.boss ? 300000 : 200000,
+        // Rodolphe's 70-second duel alone takes most of a boss stage's search.
+        maxNodes: level.boss ? 500000 : 200000,
         allowDamage: Boolean(level.boss),
       });
       expect(result.won).toBe(true);
@@ -149,6 +150,48 @@ describe.each(LEVELS)('$name', (level) => {
       .sort((a, b) => a - b);
     for (let i = 1; i < xs.length; i++)
       expect(xs[i] - xs[i - 1], `badge at ${xs[i]}`).toBeGreaterThanOrEqual(ROOM_W);
+  });
+
+  it('lets a hero back at a badge (or the start) stand still safely', () => {
+    // Out of reach of a printer's paper, a video call's invites, an intern's rush or a
+    // vacuum's round: idle for 4 s after coming back (1.5 s of invulnerability), with
+    // the traps at any phase, also in « Sans filet ».
+    const IDLE = { left: false, right: false, up: false, down: false, jump: false, fire: false };
+    const first = createSim(level, 'kevin');
+    const spots = [
+      { x: first.hero.x, y: first.hero.y, name: 'start' },
+      ...first.things
+        .filter((t) => t.kind === 'checkpoint')
+        .map((t) => ({ x: t.x - HERO.w / 2, y: t.y, name: `badge at ${t.x}` })),
+    ];
+    for (const hero of HEROES)
+      for (const hard of [false, true])
+        for (const spot of spots)
+          for (let delay = 0; delay < 3.2; delay += 0.8) {
+            const sim = createSim(level, hero);
+            if (hard) setHardcore(sim);
+            sim.doorOpen = true;
+            for (let i = 0; i < delay * 60; i++) step(sim, IDLE);
+            Object.assign(sim.hero, { x: spot.x, y: spot.y, vx: 0, vy: 0, state: 'ground' });
+            sim.hero.invuln = 1.5;
+            const hearts = sim.hero.hearts;
+            for (let i = 0; i < 240; i++) step(sim, IDLE);
+            const why = `${hero}${hard ? ' (Sans filet)' : ''}, ${spot.name}, after ${delay} s`;
+            expect(sim.hero.hearts, why).toBe(hearts);
+            expect(sim.hero.state, why).not.toBe('dead');
+          }
+  });
+
+  it('makes the first steps safe', () => {
+    // Walking on from the start for a second never ends in a fall or a hit.
+    for (const hero of HEROES) {
+      const sim = createSim(level, hero);
+      const hearts = sim.hero.hearts;
+      for (let i = 0; i < 60; i++)
+        step(sim, { left: false, right: true, up: false, down: false, jump: false, fire: false });
+      expect(sim.hero.state, hero).not.toBe('dead');
+      expect(sim.hero.hearts, hero).toBe(hearts);
+    }
   });
 });
 

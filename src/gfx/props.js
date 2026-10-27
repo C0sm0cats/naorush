@@ -98,11 +98,6 @@ function place(b, start, m, t = [0, 0, 0]) {
   }
 }
 
-/** @param {MeshBuilder} b @param {number} start */
-function flipNormals(b, start) {
-  for (let i = start * 3; i < b.nrm.length; i++) b.nrm[i] = -b.nrm[i];
-}
-
 /**
  * Sharp-edged box (12 triangles) for small details: LEDs, screens, bars.
  * @param {MeshBuilder} b @param {number[]} c @param {number[]} h @param {string} color
@@ -719,7 +714,7 @@ function officeChair(b, fabric, cushion, seam, accent) {
 }
 
 /**
- * @typedef {'plant'|'plantSnake'|'plantMonstera'|'plantFicus'|'plantPalm'|'plantSmall'|'cactus'|'plantPothos'|'cooler'|'printer'|'coffee'|'chair'|'chairTeal'|'chairGrey'|'rack'|'hvac'|'antenna'|'parasol'|'bistro'|'speaker'|'lampPost'|'monitor'|'monitorCode'|'monitorCall'|'kpi'|'wave'|'lift'|'gate'|'carBlue'|'carRed'|'carWhite'|'barrier'|'pillarSign'|'drawer'|'sprinkler'|'spray'|'paper'|'binders'|'vacuum'|'laptopStand'|'invite'|'cup'|'archive'|'copilTable'|'projector'|'truss'|'spotlight'|'curtain'|'shadow'|'puddle'|'warn'|'arrow'|'rackFall'|'confetti'|'babyFoot'|'vendingSnack'|'vendingDrink'|'evCharger'|'solarPanel'|'microwave'|'beanBag'|'coatRack'|'mailboxes'|'phoneBooth'} PropId
+ * @typedef {'plant'|'plantSnake'|'plantMonstera'|'plantFicus'|'plantPalm'|'plantSmall'|'cactus'|'plantPothos'|'cooler'|'printer'|'coffee'|'chair'|'chairTeal'|'chairGrey'|'rack'|'hvac'|'antenna'|'parasol'|'bistro'|'speaker'|'lampPost'|'monitor'|'monitorCode'|'monitorCall'|'kpi'|'wave'|'lift'|'gate'|'carBlue'|'carRed'|'carWhite'|'barrier'|'pillarSign'|'drawer'|'sprinkler'|'spray'|'paper'|'binders'|'vacuum'|'laptopStand'|'invite'|'cup'|'archive'|'copilTable'|'projector'|'truss'|'spotlight'|'curtain'|'shadow'|'puddle'|'warn'|'arrow'|'rackFall'|'confetti'|'babyFoot'|'vendingSnack'|'vendingDrink'|'evCharger'|'solarPanel'|'microwave'|'beanBag'|'coatRack'|'mailboxes'|'phoneBooth'|'waterTower'|'helipad'|'windsock'|'screenWall'|'cvBoard'} PropId
  */
 
 /**
@@ -1375,19 +1370,19 @@ const BUILDERS = {
 
   solarPanel(b) {
     // Two photovoltaic modules tilted to the sky on a galvanised frame.
-    for (const x of [-0.95, 0, 0.95]) {
+    for (const x of [-0.82, 0, 0.82]) {
       rod(b, [x, 0, 0.28], [x, 0.3, 0.28], 0.02, '#aeb5be', { seg: 6 });
       rod(b, [x, 0, -0.3], [x, 0.78, -0.3], 0.02, '#aeb5be', { seg: 6 });
       flatBox(b, [x, 0.015, 0], [0.04, 0.015, 0.36], '#7d8592');
     }
     const s = mark(b);
-    for (const x of [-0.49, 0.49]) {
-      flatBox(b, [x, 0, 0], [0.47, 0.018, 0.4], '#d8dde3', GLOSSY);
-      flatBox(b, [x, 0.019, 0], [0.45, 0.002, 0.38], '#1f3a6e', GLOSSY);
+    for (const x of [-0.43, 0.43]) {
+      flatBox(b, [x, 0, 0], [0.41, 0.018, 0.4], '#d8dde3', GLOSSY);
+      flatBox(b, [x, 0.019, 0], [0.39, 0.002, 0.38], '#1f3a6e', GLOSSY);
       for (let i = 1; i < 6; i++)
-        flatBox(b, [x - 0.45 + i * 0.15, 0.022, 0], [0.003, 0.001, 0.38], '#8fa6c4');
-      for (const z of [-0.19, 0, 0.19]) flatBox(b, [x, 0.022, z], [0.45, 0.001, 0.003], '#8fa6c4');
-      flatBox(b, [x - 0.3, 0.023, -0.25], [0.08, 0.001, 0.02], '#9fd8ff', GLOSSY);
+        flatBox(b, [x - 0.39 + i * 0.13, 0.022, 0], [0.003, 0.001, 0.38], '#8fa6c4');
+      for (const z of [-0.19, 0, 0.19]) flatBox(b, [x, 0.022, z], [0.39, 0.001, 0.003], '#8fa6c4');
+      flatBox(b, [x - 0.25, 0.023, -0.25], [0.08, 0.001, 0.02], '#9fd8ff', GLOSSY);
     }
     place(b, s, rotX(0.62), [0, 0.54, -0.01]);
   },
@@ -1790,36 +1785,222 @@ const BUILDERS = {
   },
 
   antenna(b) {
-    b.roundedBox([0, 0.03, 0], [0.22, 0.03, 0.22], 0.02, '#5b6270', { seg: 4 });
-    cyl(b, [0, 0.06, 0], 0.06, 0.06, '#7c8592', { mat: GLOSSY });
-    cyl(b, [0, 0.1, 0], 0.03, 2.15, ALU, { mat: GLOSSY, seg: 16 });
-    for (let i = 0; i < 3; i++) {
-      const a = (i / 3) * TAU;
-      rod(b, [0, 0.6, 0], [Math.sin(a) * 0.2, 0.06, Math.cos(a) * 0.2], 0.01, ALU, { seg: 6 });
+    // Cell relay mast: a three-legged lattice tower, three white sector panels on
+    // a head frame, a small link dish below them and the red beacon on top.
+    b.roundedBox([0, 0.03, 0], [0.3, 0.03, 0.3], 0.02, '#5b6270', { seg: 3 });
+    const legs = [0, 1, 2].map((i) => (i / 3) * TAU + 0.5);
+    const at = (/** @type {number} */ a, /** @type {number} */ y) => {
+      const r = 0.24 - y * 0.06;
+      return [Math.sin(a) * r, y, Math.cos(a) * r];
+    };
+    for (const a of legs) rod(b, at(a, 0.05), at(a, 2.2), 0.014, ALU, { mat: GLOSSY, seg: 6 });
+    for (let k = 0; k < 6; k++) {
+      const ya = 0.1 + k * 0.35,
+        yb = ya + 0.35;
+      for (let i = 0; i < 3; i++) {
+        const a = legs[i],
+          c = legs[(i + 1) % 3];
+        rod(b, at(a, ya), at(c, yb), 0.006, '#9aa3ad', { seg: 4 });
+        rod(b, at(a, yb), at(c, yb), 0.006, '#9aa3ad', { seg: 4 });
+      }
     }
-    // Dish (concave side towards +z, tilted up).
+    // Head: three sector antennas facing out, on short arms.
+    for (let i = 0; i < 3; i++) {
+      const a = legs[i] + Math.PI / 3;
+      const s = mark(b);
+      b.roundedBox([0, 0, 0.22], [0.07, 0.28, 0.03], 0.02, '#eef1f4', { mat: GLOSSY, seg: 3 });
+      flatBox(b, [0, 0.2, 0.252], [0.04, 0.012, 0.002], LIME);
+      rod(b, [0, 0.1, 0], [0, 0.1, 0.19], 0.01, '#7c8592', { seg: 4 });
+      rod(b, [0, -0.1, 0], [0, -0.1, 0.19], 0.01, '#7c8592', { seg: 4 });
+      place(b, s, rotY(a), [0, 2.05, 0]);
+    }
+    // Link dish, half way up.
     const s = mark(b);
     /** @type {number[][]} */
-    const back = [];
-    /** @type {number[][]} */
-    const front = [];
-    for (let i = 0; i <= 10; i++) {
-      const r = (i / 10) * 0.3;
-      back.push([r, (r * r) / 0.6]);
-      front.push([r, (r * r) / 0.6 + 0.012]);
+    const dish = [];
+    for (let i = 0; i <= 6; i++) {
+      const r = (i / 6) * 0.15;
+      dish.push([r, (r * r) / 0.3]);
     }
-    b.lathe([0, 0, 0], back, '#c9d0d8', { mat: GLOSSY, seg: 32 });
-    const f = mark(b);
-    b.lathe([0, 0, 0], front, '#eef1f4', { mat: GLOSSY, seg: 32 });
-    flipNormals(b, f);
-    ring(b, [0, 0.156, 0], 0.3, 0.008, '#c9d0d8', { seg: 32 });
-    rod(b, [0, 0.012, 0], [0, 0.22, 0], 0.008, '#7c8592', { seg: 6 });
-    b.ellipsoid([0, 0.24, 0], [0.025, 0.035, 0.025], '#3e4550', { mat: GLOSSY, seg: 10 });
-    place(b, s, rotX(1.15), [0, 1.75, 0.07]);
-    b.roundedBox([0, 1.75, 0.04], [0.05, 0.05, 0.04], 0.02, '#7c8592', { seg: 3 });
-    // Beacon.
-    cyl(b, [0, 2.25, 0], 0.035, 0.04, '#3e4550', { mat: GLOSSY });
-    b.ellipsoid([0, 2.32, 0], [0.035, 0.05, 0.035], '#ff4040', { mat: EMISSIVE, seg: 12 });
+    b.lathe([0, 0, 0], dish, '#e2e7ec', { mat: GLOSSY, seg: 16 });
+    place(b, s, rotX(Math.PI / 2), [0, 1.2, 0.2]);
+    rod(b, [0, 2.2, 0], [0, 2.42, 0], 0.012, '#3e4550', { seg: 6 });
+    b.ellipsoid([0, 2.46, 0], [0.035, 0.05, 0.035], '#ff4040', { mat: EMISSIVE, seg: 8 });
+  },
+
+  waterTower(b) {
+    // Rooftop water tank: a riveted steel drum with a cone roof on four legs, a
+    // ladder up the side and the house lime band.
+    for (const [x, z] of [
+      [-0.6, -0.4],
+      [0.6, -0.4],
+      [-0.6, 0.4],
+      [0.6, 0.4],
+    ]) {
+      rod(b, [x, 0, z], [x * 0.8, 1.2, z * 0.8], 0.035, '#7c8592', { seg: 6 });
+      b.roundedBox([x, 0.03, z], [0.08, 0.03, 0.08], 0.02, '#5b6270', { seg: 2 });
+    }
+    rod(b, [-0.6, 0.6, -0.4], [0.6, 0.6, 0.4], 0.012, '#9aa3ad', { seg: 4 });
+    rod(b, [0.6, 0.6, -0.4], [-0.6, 0.6, 0.4], 0.012, '#9aa3ad', { seg: 4 });
+    b.lathe(
+      [0, 1.2, 0],
+      [
+        [0, 0],
+        [0.68, 0],
+        [0.72, 0.05],
+        [0.72, 1.35],
+        [0.68, 1.4],
+        [0.36, 1.66],
+        [0.06, 1.72],
+        [0, 1.72],
+      ],
+      '#b9c0c9',
+      { mat: GLOSSY, seg: 20, scaleZ: 0.62 },
+    );
+    for (const y of [1.5, 1.95, 2.4])
+      b.lathe(
+        [0, 0, 0],
+        [
+          [0.725, y],
+          [0.725, y + 0.03],
+        ],
+        '#8a94a3',
+        { seg: 20, scaleZ: 0.62 },
+      );
+    b.lathe(
+      [0, 0, 0],
+      [
+        [0.726, 2.05],
+        [0.726, 2.2],
+      ],
+      LIME,
+      { seg: 20, scaleZ: 0.62 },
+    );
+    // Ladder on the front and a vent cap.
+    for (const x of [-0.12, 0.12])
+      rod(b, [x, 0.1, 0.46], [x, 2.6, 0.46], 0.012, GRAPHITE, { seg: 4 });
+    for (let y = 0.25; y < 2.6; y += 0.22)
+      rod(b, [-0.12, y, 0.46], [0.12, y, 0.46], 0.008, GRAPHITE, { seg: 4 });
+    cyl(b, [0, 2.9, 0], 0.06, 0.12, '#7c8592', { seg: 8 });
+    b.ellipsoid([0, 3.03, 0], [0.1, 0.03, 0.1], '#5b6270', { seg: 8 });
+  },
+
+  helipad(b) {
+    // Helipad marking laid on the roof: a dark disc, a white ring and a big H.
+    cyl(b, [0, 0, 0], 1.25, 0.02, '#3a3f48', { seg: 28, scaleZ: 0.5 });
+    cyl(b, [0, 0.02, 0], 1.12, 0.002, WHITE, { seg: 28, scaleZ: 0.5 });
+    cyl(b, [0, 0.022, 0], 1.02, 0.002, '#3a3f48', { seg: 28, scaleZ: 0.5 });
+    for (const x of [-0.42, 0.42]) flatBox(b, [x, 0.026, 0], [0.09, 0.003, 0.36], WHITE);
+    flatBox(b, [0, 0.026, 0], [0.42, 0.003, 0.07], WHITE);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * TAU;
+      flatBox(
+        b,
+        [Math.sin(a) * 1.18, 0.03, Math.cos(a) * 0.59],
+        [0.04, 0.02, 0.04],
+        '#ffcf6a',
+        EMISSIVE,
+      );
+    }
+  },
+
+  windsock(b) {
+    // Windsock on a pole: orange and white stripes, filled by the breeze.
+    b.roundedBox([0, 0.04, 0], [0.12, 0.04, 0.12], 0.02, '#5b6270', { seg: 3 });
+    rod(b, [0, 0.08, 0], [0, 1.9, 0], 0.025, '#d8dde3', { mat: GLOSSY, seg: 8 });
+    ring(b, [0, 0, 0], 0.11, 0.012, '#9aa3ad', { seg: 12, sides: 3 });
+    for (let k = 0; k < 4; k++) {
+      const s = mark(b);
+      const r0 = 0.11 - k * 0.018,
+        r1 = r0 - 0.018;
+      b.lathe(
+        [0, 0, 0],
+        [
+          [r0, k * 0.16],
+          [r1, k * 0.16 + 0.16],
+        ],
+        k % 2 ? WHITE : '#ff7a2f',
+        { seg: 12 },
+      );
+      place(b, s, mul(rotY(0.5), rotZ(-1.35)), [0.02, 1.86, 0]);
+    }
+    b.ellipsoid([0, 1.93, 0], [0.03, 0.03, 0.03], '#ff4040', { mat: EMISSIVE, seg: 6 });
+  },
+
+  screenWall(b) {
+    // Video wall: six screens in a black frame on two posts, a KPI dashboard
+    // split across them, the house lime under the bottom row.
+    for (const x of [-0.9, 0.9]) {
+      b.roundedBox([x, 0.04, 0], [0.14, 0.04, 0.2], 0.02, GRAPHITE, { seg: 2 });
+      rod(b, [x, 0.08, 0], [x, 0.7, 0], 0.035, '#3e4550', { seg: 8 });
+    }
+    b.roundedBox([0, 1.35, 0], [1.22, 0.68, 0.05], 0.02, BLACK, { seg: 2 });
+    flatBox(b, [0, 0.66, 0.05], [1.2, 0.012, 0.004], LIME);
+    const tiles = ['#0f2a4a', '#13253d', '#0f2a4a'];
+    for (let i = 0; i < 3; i++)
+      for (let j = 0; j < 2; j++) {
+        const x = -0.8 + i * 0.8,
+          y = 1.02 + j * 0.66;
+        flatBox(b, [x, y, 0.052], [0.38, 0.31, 0.002], tiles[(i + j) % 3], EMISSIVE);
+        if ((i + j) % 2 === 0)
+          for (let k = 0; k < 4; k++) {
+            const hgt = 0.06 + ((k * 7 + i * 3 + j) % 5) * 0.04;
+            flatBox(
+              b,
+              [x - 0.22 + k * 0.14, y - 0.24 + hgt, 0.055],
+              [0.04, hgt, 0.001],
+              k % 2 ? LIME : '#58d5ff',
+              EMISSIVE,
+            );
+          }
+        else {
+          flatBox(b, [x, y + 0.18, 0.055], [0.3, 0.02, 0.001], '#e6f5ff', EMISSIVE);
+          flatBox(b, [x - 0.05, y + 0.08, 0.055], [0.25, 0.015, 0.001], '#9fd8ff', EMISSIVE);
+          for (let k = 0; k < 5; k++)
+            flatBox(
+              b,
+              [x - 0.24 + k * 0.12, y - 0.1 + (k % 3) * 0.05, 0.055],
+              [0.05, 0.012, 0.001],
+              PINK,
+              EMISSIVE,
+            );
+        }
+      }
+  },
+
+  cvBoard(b) {
+    // Cork board on an easel covered with CVs, photos and coloured pins.
+    for (const x of [-0.55, 0.55])
+      rod(b, [x, 0, 0.1], [x * 0.9, 1.6, 0], 0.02, '#8a5f3c', { seg: 6 });
+    rod(b, [0, 0, -0.35], [0, 1.4, 0], 0.018, '#8a5f3c', { seg: 6 });
+    b.roundedBox([0, 1.05, 0.02], [0.62, 0.45, 0.025], 0.01, '#8a5f3c', { seg: 2 });
+    flatBox(b, [0, 1.05, 0.046], [0.58, 0.41, 0.002], '#c9a06a');
+    const r = rng(71);
+    const pins = [PINK, LIME, '#3d8bfd', '#ffd166'];
+    for (let i = 0; i < 4; i++)
+      for (let j = 0; j < 2; j++) {
+        const x = -0.42 + i * 0.28 + (r() - 0.5) * 0.04,
+          y = 0.84 + j * 0.42 + (r() - 0.5) * 0.04;
+        const s = mark(b);
+        flatBox(b, [0, 0, 0], [0.1, 0.14, 0.002], WHITE);
+        flatBox(
+          b,
+          [-0.04, 0.08, 0.002],
+          [0.035, 0.035, 0.001],
+          ['#e8c26e', '#9fc3a8', '#c9a4d6', '#7fb4d9'][(i + j) % 4],
+        );
+        for (let k = 0; k < 4; k++)
+          flatBox(
+            b,
+            [0.02, 0.06 - k * 0.04, 0.002],
+            [0.06 - (k % 2) * 0.02, 0.006, 0.001],
+            '#5a6372',
+          );
+        b.ellipsoid([0, 0.13, 0.006], [0.014, 0.014, 0.01], pins[(i * 2 + j) % 4], { seg: 4 });
+        place(b, s, rotZ((r() - 0.5) * 0.2), [x, y, 0.05]);
+      }
+    flatBox(b, [0, 1.56, 0.03], [0.3, 0.05, 0.004], NAVY);
+    flatBox(b, [0, 1.56, 0.035], [0.2, 0.012, 0.001], WHITE);
   },
 
   parasol(b) {
@@ -2733,11 +2914,15 @@ const BUILDERS = {
       for (const y of [y0, y1])
         rod(b, [xa, y, -zz], [xb, y, zz], 0.008, ALU, { mat: GLOSSY, seg: 6 });
     }
-    // Clamp and hanging spotlight (upside down, beam towards +z and down).
-    b.roundedBox([0, -0.31, 0], [0.05, 0.03, 0.05], 0.015, BLACK, { mat: GLOSSY, seg: 3 });
-    const s = mark(b);
-    spot(b);
-    place(b, s, rotZ(Math.PI), [0, -0.33, 0]);
+    // Steel cables up to the ceiling grid (they vanish into the slab above).
+    for (const x of [-0.85, 0.85]) rod(b, [x, y0, 0], [x, 2.6, 0], 0.006, '#3e4550', { seg: 4 });
+    // Clamps and three hanging spotlights (upside down, beams towards +z and down).
+    for (const x of [-0.6, 0, 0.6]) {
+      b.roundedBox([x, -0.31, 0], [0.05, 0.03, 0.05], 0.015, BLACK, { mat: GLOSSY, seg: 3 });
+      const s = mark(b);
+      spot(b);
+      place(b, s, mul(rotZ(Math.PI), rotX(x * 0.25)), [x, -0.33, 0]);
+    }
   },
 
   spotlight(b) {
@@ -2991,6 +3176,11 @@ export const PROP_IDS = [
   'coatRack',
   'mailboxes',
   'phoneBooth',
+  'waterTower',
+  'helipad',
+  'windsock',
+  'screenWall',
+  'cvBoard',
 ];
 
 /**

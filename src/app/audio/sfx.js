@@ -738,12 +738,14 @@ const RECIPES = {
       v.tone({ f: i % 2 ? 2637 : 2349, t: at, d: 0.05, v: 0.025 });
     }
   },
-  // Robot vacuum: rubber bump, boing, motor whir.
+  // Robot vacuum springboard: rubber bump, a coil « sproing » that climbs with the
+  // hero, then the motor whir.
   vacuumBounce: (v) => {
     const t = v.now;
     click(v, t, 600, 0.15, 2, 0.02);
     v.tone({ f: 160, to: 620, t, d: 0.09, v: 0.33 });
     v.tone({ f: 620, to: 230, t: t + 0.09, d: 0.26, v: 0.28, vib: [18, 25] });
+    v.tone({ f: 330, to: 1320, t: t + 0.05, d: 0.42, type: 'triangle', v: 0.16, vib: [22, 60] });
     v.tone({ f: 110, t, d: 0.45, type: 'sawtooth', v: 0.05, lp: 600, a: 0.05, vib: [5, 30] });
     v.noise({ t, d: 0.45, type: 'bandpass', f: 900, q: 5, v: 0.08, a: 0.05 });
   },

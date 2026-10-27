@@ -947,6 +947,52 @@ function bolts() {
 }
 
 /**
+ * The robot vacuum's springboard: a chrome coil one unit tall (scaled in y by the
+ * renderer as it squashes and springs back) under a lime pad the size of its lid.
+ * Origin at the bottom of the coil, on the vacuum's top.
+ */
+function vacuumSpring() {
+  const b = new MeshBuilder();
+  const TURNS = 4,
+    N = 48;
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * TURNS * Math.PI * 2;
+    b.ellipsoid(
+      [Math.cos(a) * 0.13, (i / N) * 0.92 + 0.02, Math.sin(a) * 0.13],
+      [0.03, 0.03, 0.03],
+      ALU,
+      {
+        mat: GLOSSY,
+        seg: 4,
+      },
+    );
+  }
+  // The pad the hero lands on: lime, with a white ring that reads from afar.
+  b.lathe(
+    [0, 0.94, 0],
+    [
+      [0, 0],
+      [0.22, 0],
+      [0.24, 0.03],
+      [0.22, 0.06],
+      [0, 0.06],
+    ],
+    LIME,
+    { mat: GLOSSY, seg: 24 },
+  );
+  b.lathe(
+    [0, 1.0, 0],
+    [
+      [0.16, 0.002],
+      [0.1, 0.002],
+    ],
+    WHITE,
+    { mat: EMISSIVE, seg: 24 },
+  );
+  return b;
+}
+
+/**
  * IN1: the yellow « Attention sol glissant » A-frame that stands before a puddle.
  * Origin on the floor, 0.9 high, 0.5 wide: a black-framed yellow board facing the
  * camera with a black band for the words and the slipping-figure pictogram, a plain
@@ -1206,6 +1252,7 @@ export function buildThings(gl) {
     valve: mesh(valve(false)),
     valveOn: mesh(valve(true)),
     wetSign: mesh(wetSign()),
+    vacuumSpring: mesh(vacuumSpring()),
     pile: mesh(filePile()),
     boss: bossModels(gl),
   };

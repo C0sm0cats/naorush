@@ -174,7 +174,8 @@ const EFFECTS = {
     size: 0.1,
   },
   internStun: { n: 18, colors: [WHITE], speed: 3, up: 3, life: 0.9, gravity: 6, size: 0.1 },
-  vacuumBounce: { n: 12, colors: [LIME, WHITE], speed: 3, up: 1, life: 0.4 },
+  // The springboard: lime sparks up and a ring of dust kicked flat off the floor.
+  vacuumBounce: { n: 18, colors: [LIME, WHITE], speed: 3.5, up: 3, life: 0.5, with: 'hardRing' },
   invite: { n: 6, colors: [[0.7, 0.5, 1], WHITE], speed: 1.5, up: 1.5, life: 0.4, gravity: 0 },
   visioMute: { n: 14, colors: [[0.7, 0.5, 1], WHITE], speed: 2.5, up: 2, life: 0.6 },
   heart: { n: 18, colors: [[1, 0.35, 0.45], WHITE], speed: 2.5, up: 3, life: 0.8 },

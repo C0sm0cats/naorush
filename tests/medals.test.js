@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   GOLD,
@@ -305,7 +306,7 @@ describe('reference times', () => {
       (hero) => {
         // The same search as the level proofs (a boss stage adds the duel to it).
         const result = solve(createSim(level, hero), {
-          maxNodes: level.boss ? 300000 : 200000,
+          maxNodes: level.boss ? 500000 : 200000,
           allowDamage: Boolean(level.boss),
         });
         expect(result.won).toBe(true);
@@ -336,11 +337,14 @@ describe('reference times', () => {
   });
 
   afterAll(() => {
-    if (!drifted) return;
+    // NAO_REF=<file> writes the measured table there even when every reference is in its window.
+    const out = process.env.NAO_REF;
+    if (!drifted && !out) return;
     const table = LEVELS.map((l) => {
       const t = { ...REFERENCE[l.id], ...now[l.id] };
       return `  ${l.id}: { kevin: ${t.kevin}, charline: ${t.charline} },`;
     }).join('\n');
     console.info(`New REFERENCE for src/app/medals.js:\n{\n${table}\n}`);
+    if (out) writeFileSync(out, `{\n${table}\n}\n`);
   });
 });

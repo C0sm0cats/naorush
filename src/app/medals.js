@@ -37,14 +37,14 @@ import { load, store } from './storage.js';
  * @type {Record<string, Record<HeroId, number>>}
  */
 export const REFERENCE = {
-  parking: { kevin: 54.1, charline: 46 },
-  lcp7: { kevin: 54, charline: 46.4 },
-  ts: { kevin: 116.8, charline: 106.9 },
-  copil: { kevin: 50.6, charline: 45 },
-  rooftop: { kevin: 123.8, charline: 118.5 },
-  intercontrat: { kevin: 53.3, charline: 41.4 },
+  parking: { kevin: 51.7, charline: 44.1 },
+  lcp7: { kevin: 54.4, charline: 46.4 },
+  ts: { kevin: 117, charline: 107.4 },
+  copil: { kevin: 51.2, charline: 45 },
+  rooftop: { kevin: 120.3, charline: 114.8 },
+  intercontrat: { kevin: 53.1, charline: 43.2 },
   pause: { kevin: 54.4, charline: 48.4 },
-  seminaire: { kevin: 52.1, charline: 45.6 },
+  seminaire: { kevin: 52.5, charline: 43.4 },
 };
 
 /** Gold and silver: within these multiples of the reference time. */

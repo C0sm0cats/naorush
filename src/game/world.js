@@ -81,6 +81,7 @@ export const HERO_STATS = {
  * @property {number} [peek] 1 / -1 once held long enough: the camera looks up / down; 0 otherwise.
  * @property {boolean} [wet] Feet on wet floor (IN1, see traps.js WET).
  * @property {boolean} [slip] Sliding on wet floor while braking or turning.
+ * @property {boolean} [spring] Launched by a robot vacuum: the rise is not cut by letting go of jump.
  *
  * @typedef {'ticket'|'checkpoint'|'reader'|'key'|'exit'|'panel'|'bottle'|'colleague'|'loose'
  *   |'ammo'|'cup'|'cr'|'lift'|'boss'|'kpi'|'wave'|'chair'|'drawer'|'sprinkler'|'printer'

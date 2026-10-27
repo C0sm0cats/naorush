@@ -200,6 +200,7 @@ export function createSim(def, heroId) {
     peek: 0,
     wet: false,
     slip: false,
+    spring: false,
   };
   return {
     heroId,
@@ -273,6 +274,7 @@ function respawn(s) {
     fallFrom: s.checkpoint.y,
     wet: false,
     slip: false,
+    spring: false,
   });
   // Rearm the traps so a retry plays the same way.
   for (const t of s.things) {
@@ -509,8 +511,14 @@ export function step(s, input) {
       hero.buffer = 0;
       hero.fallFrom = hero.y;
       emit(s, 'jump', hero.x + HERO.w / 2, hero.y);
-    } else if (hero.airJumps > 0 && hero.state === 'air') {
+    } else if (
+      hero.airJumps > 0 &&
+      hero.state === 'air' &&
+      // Shooting up off a springboard, a double jump would only slow the rise: kept for later.
+      !(hero.spring && hero.vy > st.jump * 0.9)
+    ) {
       hero.vy = st.jump * 0.9;
+      hero.spring = false;
       hero.airJumps--;
       hero.buffer = 0;
       hero.fallFrom = hero.y;
@@ -518,7 +526,9 @@ export function step(s, input) {
     }
   }
   // Variable height: releasing early cuts the rise; holding it floats the apex a little.
-  let g = hero.vy > 0 && !input.jump ? GRAVITY * 2.1 : GRAVITY;
+  // A springboard launch (hero.spring) rises in full either way.
+  if (hero.vy <= 0 || hero.state !== 'air') hero.spring = false;
+  let g = hero.vy > 0 && !input.jump && !hero.spring ? GRAVITY * 2.1 : GRAVITY;
   if (input.jump && hero.state === 'air' && Math.abs(hero.vy) < APEX_BAND) g *= APEX_GRAVITY;
   hero.vy = Math.max(-MAX_FALL, hero.vy - g * DT);
 

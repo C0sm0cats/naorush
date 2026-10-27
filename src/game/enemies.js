@@ -245,22 +245,41 @@ export function stepIntern(s, t) {
   if (standsIn(hero, t, 0.3, INTERN_HURT)) knock(s, hero, t.x, 'intern');
 }
 
+/**
+ * Launch speed off a robot vacuum's lid (tiles/s), per hero: a real springboard. The
+ * feet peak 4.35 tiles above the vacuum's floor for Kévin, 4.68 for Charline, jump held
+ * or not (5.8 with her double jump at the top). Air control stays.
+ */
+export const SPRING = { kevin: 18.6, charline: 19.3 };
+/** Height of the vacuum's lid above the floor (tiles). */
+const LID = 0.18;
+/** The vacuum stops dead while its lid squashes and springs back (s): predictable. */
+export const SPRING_STOP = 0.4;
+
 /** Robot vacuum: fast, unstoppable, but its lid is a springboard. @param {Sim} s @param {Thing} t */
 export function stepVacuum(s, t) {
   const hero = s.hero;
   if (!grounded(s, t)) return;
-  patrol(s, t, 0);
+  if (t.state === 'spring') {
+    // Lid squashed, then sprung back: it waits, then rolls on the way it was going.
+    if (t.t > SPRING_STOP) Object.assign(t, { state: 'walk', t: 0 });
+  } else patrol(s, t, 0);
   const hx = hero.x + HERO.w / 2;
   if (hero.state === 'dead' || Math.abs(hx - t.x) > 0.35 + HERO.w / 2) return;
   // A floor between them keeps them apart.
   if (hero.y + HERO.h <= t.y) return;
   if (hero.vy < 0 && hero.y > t.y + 0.02 && hero.y < t.y + 0.4) {
-    hero.vy = s.stats.jump * 1.12;
+    // Launched from the lid itself, so the rise is the same however the hero came down.
+    hero.y = t.y + LID;
+    hero.vy = SPRING[s.heroId] ?? SPRING.kevin;
     hero.state = 'air';
+    // Launched: letting go of jump does not cut this rise short.
+    hero.spring = true;
     hero.airJumps = s.stats.airJumps;
     hero.fallFrom = hero.y;
+    Object.assign(t, { state: 'spring', t: 0 });
     emit(s, 'vacuumBounce', t.x, t.y + 0.3);
-  } else if (hero.y < t.y + 0.25) knock(s, hero, t.x, 'vacuum');
+  } else if (hero.y < t.y + 0.25 && t.state !== 'spring') knock(s, hero, t.x, 'vacuum');
 }
 
 /** Project manager on a video call: sends meeting invites down the corridor. @param {Sim} s @param {Thing} t */

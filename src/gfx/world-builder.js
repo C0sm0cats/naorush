@@ -1244,10 +1244,13 @@ function furnish({
       else vol.box(x0 + 11, top - 9, 10, x0 + 20, top - 8, 11, rgb('#f4f1ea'));
     }
     const top = (h - 1) * V;
+    // The green exit sign hangs over the way out: no banner in front of it.
+    const exit = sim.things.find((t) => t.kind === 'exit');
     if (mood === 'event')
       // Seminar: fabric banners hung from the ceiling, in the event colours.
       for (let c = 3; c < Math.min(w - 2, arena[0] - 2); c += 6) {
         if (c % 20 >= 7 && c % 20 <= 11) continue;
+        if (exit && Math.abs(c + 0.5 - Math.max(2.6, Math.min(w - 2.6, exit.x))) < 3) continue;
         if (onPanel(c * V - 1) || onPanel(c * V + V) || !openBelow(c, h - 1)) continue;
         if (tile(c, h - 4) !== TILE.EMPTY) continue;
         const x = c * V;
@@ -1767,7 +1770,7 @@ const FONT = {
   R: ['110', '101', '111', '110', '101'],
   S: ['111', '100', '111', '001', '111'],
   T: ['111', '010', '010', '010', '010'],
-  W: ['10001', '10001', '10101', '11011', '10001'],
+  W: ['10001', '10001', '10101', '10101', '01010'],
   B: ['110', '101', '110', '101', '110'],
   G: ['111', '100', '101', '101', '111'],
   J: ['001', '001', '001', '101', '111'],
