@@ -910,12 +910,14 @@ function heroBody(sim, t, still) {
   if (sim.won) {
     // Victory hops with both arms up in a V, pumping in time with the hop (no waving).
     // Raised arms open outwards with a negative spread (a positive one crosses them).
+    // Nearly straight up and wide, so from the side both fists read: a half-raised V
+    // seen three-quarter on hides the far arm and looks like one hand up.
     if (kev) {
       // Kévin: big stomping hops, fists high, a heavy squash on each landing.
       const hop = Math.abs(Math.sin(t * 5.5));
       const land = (1 - hop) ** 4;
-      base(p, t, hop * 0.35, hop * 0.2, 2.55 + hop * 0.3, 2.55 + hop * 0.3);
-      p.armSpread = -0.3 - hop * 0.08;
+      base(p, t, hop * 0.35, hop * 0.2, 2.75 + hop * 0.15, 2.75 + hop * 0.15);
+      p.armSpread = -0.5 - hop * 0.08;
       p.bob = hop * 1.7;
       p.head = -0.2 - hop * 0.08;
       p.squash = land * 0.15 - hop * 0.03;
@@ -927,8 +929,8 @@ function heroBody(sim, t, still) {
       const hop = Math.abs(Math.sin(ph));
       // Coming down, the hair floats up.
       const down = Math.cos(ph) * Math.sin(ph) < 0;
-      base(p, t, -hop * 0.55, -hop * 0.3, 2.65 + hop * 0.2, 2.65 + hop * 0.2);
-      p.armSpread = -0.45 - hop * 0.12;
+      base(p, t, -hop * 0.55, -hop * 0.3, 2.8 + hop * 0.12, 2.8 + hop * 0.12);
+      p.armSpread = -0.58 - hop * 0.1;
       p.bob = hop * 2.6;
       p.head = -0.22 - hop * 0.08;
       p.squash = (1 - hop) ** 4 * 0.07 - hop * 0.05;
@@ -952,8 +954,8 @@ function heroBody(sim, t, still) {
         t,
         0.7 * k + 0.2 + w * 0.15,
         0.35 * k - w * 0.1,
-        1.4 + Math.sin(t * 30) * flail,
-        1.25 - Math.sin(t * 30) * flail,
+        1.15 + Math.sin(t * 30) * flail,
+        1.1 - Math.sin(t * 30) * flail,
       );
       p.armSpread = kev ? 0.7 : 0.55;
       p.lean = -0.5 * k - w * 0.12;
@@ -993,8 +995,9 @@ function heroBody(sim, t, still) {
     return airPose(p, h.vy, jump, t, kev);
   }
   const speed = Math.abs(h.vx);
-  // Skid: still sliding one way while facing the other, arms windmilling; the coat
-  // swings forward with the momentum.
+  // Skid: still sliding one way while facing the other, both arms out to the sides
+  // for balance (level with the shoulders once the lean back is counted, wobbling
+  // together: one arm windmilling up would read as a wave); the coat swings forward.
   if (speed > 2 && Math.sign(h.vx) !== h.facing) {
     const j = Math.sin(t * 45) * 0.05;
     base(
@@ -1002,10 +1005,10 @@ function heroBody(sim, t, still) {
       t,
       (kev ? 0.8 : 0.7) + j,
       -0.5 - j,
-      -1 + Math.sin(t * 16) * 0.25,
-      1.3 - Math.sin(t * 16) * 0.25,
+      1.0 + Math.sin(t * 16) * 0.08,
+      1.0 + Math.sin(t * 16) * 0.08,
     );
-    p.armSpread = kev ? 0.4 : 0.25;
+    p.armSpread = (kev ? 1.0 : 0.9) + Math.sin(t * 16 + 1) * 0.1;
     p.lean = kev ? -0.42 : -0.32;
     p.head = -0.15;
     p.squash = kev ? 0.09 : 0.05;
@@ -1256,8 +1259,9 @@ export function heroLayers(p, sim, beats) {
   const th = beats.throw;
   if (free && th >= 0 && th < 0.28) {
     const swing = th < 0.08 ? -1.3 * (th / 0.08) : mix(-1.3, SHOULDER, smooth((th - 0.08) / 0.2));
-    p.armR = swing;
     p.lean = (p.lean ?? 0) + 0.12;
+    // Leaning back lifts the arm: keep the sweep level with the shoulder anyway.
+    p.armR = Math.min(swing, SHOULDER + Math.min(0, p.lean));
     if (p.mood === 'neutral' || p.mood === undefined) p.mood = 'effort';
   }
   // Landing: the higher the drop, the deeper and longer the squash; arms dip out,
