@@ -110,8 +110,10 @@
   color: #ff8fbd;
 }
 .il-skip {
+  min-width: 44px;
+  min-height: 44px;
   margin-top: 18px;
-  padding: 8px 18px;
+  padding: 10px 22px;
   border: 0;
   border-radius: 999px;
   background: #ffffff1f;

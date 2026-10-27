@@ -25,9 +25,20 @@ export const ROUTE = [
   { id: 'nao', label: 'NAO' },
 ];
 
-/** How long the clock runs, then how long the card holds (seconds). */
+/** How long the clock runs, then the least the card holds (seconds). */
 export const RUN = 2.4;
 export const HOLD = 2.2;
+/** Reading pace: a screen reader's speech, slower than the eye (seconds per word). */
+const PER_WORD = 0.4;
+
+/**
+ * How long the card stays up once the clock has stopped: time to read (or hear)
+ * everything it says, never less than HOLD. @param {string} text
+ */
+export function readingTime(text) {
+  const words = text.split(/\s+/).filter((w) => /[\p{L}\d]/u.test(w)).length;
+  return Math.max(HOLD, 1 + words * PER_WORD);
+}
 /** The clock ticks this many times on its way (more often in the quick middle). */
 export const TICKS = 18;
 
@@ -154,9 +165,11 @@ export class Interlude {
     this.skipBtn = /** @type {HTMLButtonElement} */ (html('button', 'il-skip', card));
     this.skipBtn.id = 'interludeSkip';
     this.skipBtn.textContent = 'Passer ▶';
-    // For screen readers, the whole card at once.
-    this.live = html('p', 'sr-only', this.el);
+    // For screen readers, the whole card at once: a live region that is always there
+    // (outside the card, which is hidden between stages), filled once the card is up.
+    this.live = html('p', 'sr-only', document.body);
     this.live.setAttribute('aria-live', 'polite');
+    this.say = 0;
     this.el.addEventListener('pointerdown', (e) => {
       if (e.target !== this.skipBtn) this.skip();
     });
@@ -177,14 +190,17 @@ export class Interlude {
     this.el.dataset.hero = hero;
     this.who.textContent = `${it.who} : `;
     this.text.textContent = it.line;
-    this.live.textContent = `${clockText(it.to)}. Avant les NAO : ${countdownText(it.to)}. ${it.who} : ${it.line}`;
+    const said = `${clockText(it.to)}. Avant les NAO : ${countdownText(it.to)}. ${it.who} : ${it.line}`;
+    this.live.textContent = '';
+    clearTimeout(this.say);
+    this.say = window.setTimeout(() => (this.live.textContent = said), 150);
+    const hold = readingTime(said);
     this.stops.forEach((g, i) => {
       g.classList.toggle('done', i <= it.stop);
       g.classList.toggle('next', i === it.stop + 1);
     });
     this.el.hidden = false;
     this.active = true;
-    const start = performance.now();
     let ticks = still ? TICKS : 0;
     let arrived = false;
     /** @param {number} k */
@@ -206,10 +222,14 @@ export class Interlude {
     };
     return new Promise((resolve) => {
       this.done = resolve;
-      const tick = () => {
-        const s = (performance.now() - start) / 1000;
+      // Time on screen, frame by frame: a tab in the background does not count.
+      let s = 0;
+      let last = performance.now();
+      const tick = (/** @type {number} */ now = last) => {
+        s += Math.min(0.1, Math.max(0, (now - last) / 1000));
+        last = now;
         draw(still ? 1 : s / RUN);
-        if (s >= RUN + HOLD) return this.skip();
+        if (s >= RUN + hold) return this.skip();
         this.raf = requestAnimationFrame(tick);
       };
       tick();
@@ -221,6 +241,8 @@ export class Interlude {
     if (!this.active) return;
     this.active = false;
     cancelAnimationFrame(this.raf);
+    clearTimeout(this.say);
+    this.live.textContent = '';
     this.el.hidden = true;
     this.done();
   }

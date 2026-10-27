@@ -6,6 +6,7 @@ import {
   clockText,
   countdownText,
   interludeFor,
+  readingTime,
   stageTime,
 } from '../src/app/interlude.js';
 import {
@@ -207,6 +208,20 @@ describe('Interlude between story stages (NA-2)', () => {
       expect(/** @type {{to: number}} */ (k).to).toBeLessThan(NAO_AT);
       expect(k?.stop).toBe(i);
     }
+  });
+
+  it('stays up long enough to read (or hear) everything it says', () => {
+    for (let i = 0; i + 1 < CAMPAIGN; i++)
+      for (const hero of /** @type {const} */ (['kevin', 'charline'])) {
+        const it = /** @type {NonNullable<ReturnType<typeof interludeFor>>} */ (
+          interludeFor(LEVELS[i], LEVELS[i + 1], hero)
+        );
+        const said = `${clockText(it.to)}. Avant les NAO : ${countdownText(it.to)}. ${it.who} : ${it.line}`;
+        const words = said.split(/\s+/).filter((w) => /[\p{L}\d]/u.test(w)).length;
+        // At least 150 words a minute, a screen reader's pace.
+        expect(readingTime(said), said).toBeGreaterThanOrEqual(words * 0.4);
+      }
+    expect(readingTime('Bonjour')).toBeGreaterThanOrEqual(2);
   });
 
   it('stays out of the bonus stages and of any jump back', () => {

@@ -718,7 +718,8 @@ body.title-out .title-fx::after {
   .title {
     --col: min(520px, 100%);
     grid-template-columns: var(--col);
-    grid-template-rows: auto minmax(min(30vh, 260px), 1fr) auto;
+    /* Logo, heroes, menu: everything fits without scrolling down to 390×664. */
+    grid-template-rows: auto minmax(min(22vh, 200px), 1fr) auto;
     align-content: stretch;
     justify-content: center;
     gap: 0;
@@ -751,14 +752,15 @@ body.title-out .title-fx::after {
   .logo-rush {
     margin-left: 0.9em;
   }
+  /* Over the top of the heroes' space, so it takes no room from the menu. */
   .title-day {
-    position: relative;
-    top: auto;
-    left: auto;
+    top: calc(100% + 6px);
+    left: 50%;
+    width: max-content;
     max-width: min(340px, 92%);
-    margin-top: 12px;
     padding: 6px 12px 6px 30px;
     font-size: 12px;
+    translate: -50% 0;
     rotate: -1.5deg;
   }
   .title[data-nao-day='true'] .title-day {
@@ -779,6 +781,25 @@ body.title-out .title-fx::after {
   .title-panel::before {
     left: 20px;
     right: 20px;
+  }
+}
+
+/* Short tall screens (phones with the browser bars showing): a smaller logo, no
+   blurbs on the hero tiles and no rotate tip, so the menu never scrolls. */
+@media (max-aspect-ratio: 1/1) and (max-height: 760px) {
+  .title .kicker {
+    padding: 4px 10px;
+    font-size: 10px;
+  }
+  .logo {
+    margin-top: 6px;
+    font-size: clamp(48px, 9vh, 80px);
+  }
+  .hero-card em {
+    display: none;
+  }
+  .title .card::after {
+    display: none !important;
   }
 }
 
@@ -1062,8 +1083,34 @@ body.contrast .title .ghost.daily {
     text-shadow: none;
     background: none;
   }
+  /* The hero tiles keep their outline (title.css sets border: 0); the chosen one
+     gets a thick highlighted frame, not just the small tick. */
+  .hero-card {
+    border: 2px solid ButtonText;
+  }
+  .hero-card[aria-checked='true'] {
+    border: 5px double Highlight;
+  }
+  /* Text gets an opaque backplate here: the kicker must not overlap NAO. */
+  .logo {
+    margin-top: 0.22em;
+  }
+  .title-day {
+    border: 1px solid CanvasText;
+  }
   .logo-rush::before,
   .title-fx {
     display: none;
+  }
+}
+/* Outlined controls take a little more room: on shorter desktop windows the tagline
+   stays for screen readers only, so the menu still fits without scrolling. */
+@media (forced-colors: active) and (max-height: 760px) and (min-aspect-ratio: 1/1) {
+  .title .lead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
   }
 }

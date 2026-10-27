@@ -127,7 +127,7 @@ Object.assign(globalThis, {
 });
 
 const { Hud, agree, keyLine } = await import('../src/app/hud.js');
-const { autoRoll, readingOrder, renderChapters, renderCredits, renderTrophies } =
+const { autoRoll, readingOrder, renderChapters, renderCredits, renderTrophies, trapTab } =
   await import('../src/app/menus.js');
 const { buildResults, gapText, readMedal, renderResults, secretsFound } =
   await import('../src/app/results.js');
@@ -204,6 +204,21 @@ describe('hud toasts', () => {
     expect(hud.toastTime).toBeLessThanOrEqual(2.5);
     hud.event(ev('meeting'));
     expect(hud.toastEl.textContent.length).toBeLessThan(45);
+  });
+});
+
+describe('hearts', () => {
+  it('a lost heart is said aloud, not the full stock at the start', () => {
+    const hud = new Hud();
+    hud.update(0, sim({ maxHearts: 4, hero: { hearts: 4, x: 10, y: 1 } }), LEVEL, {});
+    expect(hud.heartsLive.textContent).toBe('');
+    expect(hud.heartsLive.getAttribute('aria-live')).toBe('polite');
+    hud.update(0, sim({ maxHearts: 4, hero: { hearts: 3, x: 10, y: 1 } }), LEVEL, {});
+    expect(hud.heartsLive.textContent).toBe('3 cœurs sur 4');
+    hud.update(0, sim({ maxHearts: 4, hero: { hearts: 1, x: 10, y: 1 } }), LEVEL, {});
+    expect(hud.heartsLive.textContent).toBe('1 cœur sur 4');
+    // Outside the HUD (hidden off play): on the page itself.
+    expect(/** @type {any} */ (hud.heartsLive).parent).toBe(document.body);
   });
 });
 
@@ -343,6 +358,62 @@ describe('menus', () => {
     ]);
     // Every element exactly once.
     expect(new Set(readingOrder(items)).size).toBe(items.length);
+  });
+
+  it('keep a pinned « Fermer » at its place in the document, visited once', () => {
+    // Scrolled list: the sticky button sits on screen in the middle of the rows.
+    const items = [
+      box(100, 20, 'row1'),
+      box(200, 20, 'row2'),
+      box(300, 20, 'row3'),
+      box(150, 20, 'close'), // last in the markup, mid-screen once scrolled
+    ];
+    const order = readingOrder(items, (b) => b.id === 'close').map((b) => b.id);
+    expect(order).toEqual(['row1', 'row2', 'row3', 'close']);
+    // Pinned in the middle of the document: stays after what precedes it there.
+    const mid = [box(100, 20, 'a'), box(900, 20, 'pin'), box(200, 20, 'b')];
+    expect(readingOrder(mid, (b) => b.id === 'pin').map((b) => b.id)).toEqual(['a', 'pin', 'b']);
+  });
+
+  it('keep Tab inside an open modal screen', () => {
+    const a = /** @type {any} */ ({ offsetParent: {}, tabIndex: 0, disabled: false, focus() {} });
+    const b = /** @type {any} */ ({ offsetParent: {}, tabIndex: 0, disabled: false, focus() {} });
+    const doc0 = /** @type {any} */ (document);
+    for (const el of [a, b]) el.focus = () => (doc0.activeElement = el);
+    const screen = /** @type {any} */ ({
+      getAttribute: (/** @type {string} */ k) => (k === 'aria-modal' ? 'true' : null),
+      querySelectorAll: () => [a, b],
+      contains: (/** @type {any} */ el) => el === a || el === b,
+    });
+    const press = (/** @type {boolean} */ shiftKey) => {
+      let prevented = false;
+      const moved = trapTab(
+        /** @type {any} */ ({ key: 'Tab', shiftKey, preventDefault: () => (prevented = true) }),
+        screen,
+      );
+      return moved && prevented;
+    };
+    const doc = /** @type {any} */ (document);
+    doc.activeElement = b;
+    expect(press(false)).toBe(true);
+    expect(doc.activeElement).toBe(a);
+    expect(press(true)).toBe(true);
+    expect(doc.activeElement).toBe(b);
+    // In the middle, Tab goes its usual way.
+    doc.activeElement = a;
+    expect(press(false)).toBe(false);
+    // Focus lost on the body comes back in.
+    doc.activeElement = doc.body;
+    expect(press(false)).toBe(true);
+    expect(doc.activeElement).toBe(a);
+    // Not a modal: left alone.
+    expect(
+      trapTab(
+        /** @type {any} */ ({ key: 'Tab' }),
+        /** @type {any} */ ({ getAttribute: () => null }),
+      ),
+    ).toBe(false);
+    doc.activeElement = undefined;
   });
 
   it('let the arrows and the gamepad stop on trophy rows', () => {

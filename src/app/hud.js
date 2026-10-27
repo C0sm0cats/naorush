@@ -176,6 +176,14 @@ const CHECKPOINT_LINES = [
 export class Hud {
   constructor() {
     this.hearts = $('hearts');
+    /**
+     * Screen readers hear a heart lost or won back (« 3 cœurs sur 4 »): `#hearts` is an
+     * image, and the HUD is hidden off play, so the live region sits on the body.
+     */
+    this.heartsLive = document.createElement('p');
+    this.heartsLive.className = 'sr-only';
+    this.heartsLive.setAttribute('aria-live', 'polite');
+    document.body.append(this.heartsLive);
     this.tickets = $('tickets');
     this.ammo = $('ammo');
     this.key = $('key');
@@ -430,9 +438,13 @@ export class Hud {
     const max = sim.maxHearts;
     this.heroAt = { x: sim.hero.x + HERO.w / 2, y: sim.hero.y + HERO.h / 2 };
     if (sim.hero.hearts !== this.lastHearts) {
+      // -1: a stage (re)starts, nothing was lost.
+      const changed = this.lastHearts >= 0;
       this.lastHearts = sim.hero.hearts;
       const n = sim.hero.hearts;
-      this.hearts.setAttribute('aria-label', `${n} ${n > 1 ? 'cœurs' : 'cœur'} sur ${max}`);
+      const said = `${n} ${n > 1 ? 'cœurs' : 'cœur'} sur ${max}`;
+      this.hearts.setAttribute('aria-label', said);
+      this.heartsLive.textContent = changed ? said : '';
       this.hearts.classList.toggle('low', sim.hero.hearts === 1 && max > 1);
       this.hearts.replaceChildren(
         ...Array.from({ length: max }, (_, i) => {

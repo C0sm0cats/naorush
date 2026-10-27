@@ -16,6 +16,7 @@ import {
   renderChapters,
   renderCredits,
   renderTrophies,
+  trapTab,
 } from './app/menus.js';
 import { applyPrefs, caption, prefs, reducedMotion, setupOptions } from './app/options.js';
 import { BEST_KEY, renderResults, secretsFound } from './app/results.js';
@@ -1091,7 +1092,7 @@ function menuInput() {
   // In reading order (phones regrid some screens), list rows included so long lists scroll.
   const buttons = readingOrder(
     /** @type {HTMLElement[]} */ ([
-      ...overlay.querySelectorAll('button, input, select, [data-nav]'),
+      ...overlay.querySelectorAll('button, input, select, summary, [data-nav]'),
     ]).filter((b) => b.offsetParent !== null),
   );
   const at = buttons.indexOf(/** @type {HTMLElement} */ (document.activeElement));
@@ -1109,6 +1110,14 @@ function menuInput() {
   }
   return false;
 }
+
+// Tab and Shift+Tab stay inside the open dialog (options, trophies, cast, a board, the credits…).
+addEventListener('keydown', (e) =>
+  trapTab(
+    /** @type {KeyboardEvent} */ (e),
+    screen === 'reading' ? $('reader') : document.getElementById(screen),
+  ),
+);
 
 /** @param {number} now */
 function frame(now) {

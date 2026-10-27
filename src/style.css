@@ -14,7 +14,8 @@
   --sky: #58d5ff;
   --gold: #ffd166;
   --text: #141a2c;
-  --muted: #5a6680;
+  /* 5.4:1 on the darkest card tints (stats box), was 4.5:1. */
+  --muted: #505c76;
   --soft: #7a8aa6;
   --glass: #0e1424b8;
   --glass-grad: linear-gradient(180deg, #26345acc, #0e1424d9);
@@ -614,6 +615,12 @@ body[data-device='touch'] .keys-hint {
   text-align: center;
   pointer-events: none;
   opacity: 0;
+  /* A dark plate: the white title stays readable over light walls (LCP7, ≈ 2:1 before). */
+  padding: 14px 28px 16px;
+  border-radius: 24px;
+  background: #0e1424b8;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   text-shadow:
     0 3px 0 #0e1424,
     0 6px 28px #000c;
@@ -674,7 +681,7 @@ body[data-screen='loading'] .stage {
 .talk-box {
   position: relative;
   width: min(760px, 100%);
-  padding: 24px 56px 20px 24px;
+  padding: 24px 66px 20px 24px;
   border-radius: 24px;
   background: linear-gradient(180deg, #fffdf7, var(--paper) 50%, var(--paper-2));
   color: var(--ink);
@@ -756,14 +763,15 @@ body[data-screen='loading'] .stage {
   bottom: 14px;
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  /* 44 px to tap; white on the deep pink edge colour: 5.3:1 (3.1:1 on --pink). */
+  width: 44px;
+  height: 44px;
   padding: 0 0 0 2px;
   border: 0;
   border-radius: 50%;
-  background: var(--pink);
+  background: var(--pink-edge);
   color: #fff;
-  font-size: 12px;
+  font-size: 15px;
   cursor: pointer;
   box-shadow: 0 3px 0 var(--pink-edge);
   animation: nudge 0.9s infinite ease-in-out;
@@ -1965,7 +1973,7 @@ body[data-pad='l'] .touch .big {
     font-size: 13px;
   }
   .talk-box {
-    padding: 18px 50px 12px 18px;
+    padding: 18px 62px 12px 18px;
   }
   .talk-box p {
     min-height: 2.6em;
@@ -2057,7 +2065,7 @@ body[data-pad='l'] .touch .big {
     grid-template-columns: 7.5em 1fr;
   }
   .talk-box {
-    padding: 22px 48px 16px 18px;
+    padding: 22px 62px 16px 18px;
   }
   .talk-who small {
     display: none;
@@ -2068,6 +2076,19 @@ body[data-pad='l'] .touch .big {
   * {
     animation: none !important;
     transition: none !important;
+  }
+  /* The stage banner still shows, still and whole, then simply goes: no slide, no fade. */
+  .stage.show {
+    animation: stage-still 3.6s linear both !important;
+  }
+}
+@keyframes stage-still {
+  0%,
+  99% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
   }
 }
 
@@ -2363,10 +2384,74 @@ body[data-screen='won'] .bark {
 /* DF-2's note under « Vitesse du jeu »: its own small line, the label stays one word wide. */
 .opt-note {
   display: block;
+  grid-row: 2;
+  grid-column: 1;
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
   line-height: 1.25;
+}
+.options label:has(.opt-note) select {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+}
+/* Every option is easy to hit with a finger: sliders and lists at least 44 px tall. */
+.options input[type='range'] {
+  min-height: 44px;
+  margin: 0;
+}
+.options select {
+  min-height: 44px;
+}
+/* The opaque strip behind the sticky Fermer reaches 16 px above it: room for the last row. */
+#optionsClose {
+  margin-top: 18px;
+}
+/* Results on a narrow phone: the four buttons fit on screen under the stats. */
+@media (max-width: 480px) and (min-height: 600px) {
+  #won .card {
+    padding: 22px 20px 18px;
+    gap: 6px;
+  }
+  #won h2 {
+    font-size: 26px;
+  }
+  #won .stats {
+    margin-bottom: 4px;
+  }
+  #won .stats dt,
+  #won .stats dd {
+    padding-top: 5px;
+    padding-bottom: 5px;
+  }
+  #won .go {
+    padding: 11px;
+  }
+  #won .card .ghost {
+    padding: 8px 6px;
+  }
+}
+/* Credits on a landscape phone: a smaller title and buttons leave room for the roll. */
+@media (max-height: 500px) {
+  #credits {
+    row-gap: 8px;
+  }
+  .roll h2 {
+    font-size: 34px;
+    margin-bottom: 2px;
+  }
+  .roll h3 {
+    margin: 10px 0 2px;
+  }
+  .roll p {
+    margin: 2px 0;
+    font-size: 14px;
+  }
+  .credits-actions button {
+    min-height: 40px;
+    padding: 8px 20px;
+    font-size: 15px;
+  }
 }
 /* Touch only: no keyboard to rebind, the list would only push the settings away. */
 body[data-device='touch'] .options .keys {

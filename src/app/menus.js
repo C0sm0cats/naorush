@@ -32,18 +32,44 @@ function navigable(li) {
 }
 
 /**
+ * Pinned to the screen (`position: sticky` or `fixed`, on itself or a parent): a « Fermer »
+ * stuck to the bottom of a scrolling list sits wherever the scroll puts it, so its place
+ * on screen says nothing about where it belongs.
+ * @param {Element} el
+ */
+export function isPinned(el) {
+  if (typeof getComputedStyle !== 'function') return false;
+  // Up to the screen itself, which is fixed over the game like every overlay.
+  for (
+    let n = /** @type {Element | null} */ (el);
+    n && n !== document.body && !n.matches('.screen, [role="dialog"]');
+    n = n.parentElement
+  ) {
+    const pos = getComputedStyle(n).position;
+    if (pos === 'sticky' || pos === 'fixed') return true;
+  }
+  return false;
+}
+
+/**
  * Menu elements in the order the eye reads them: rows top to bottom, each row left to
  * right, whatever order the markup has them in (CSS grids and `grid-row` reorder screens
- * on phones). Up/down then visits every element exactly once.
+ * on phones). Pinned elements (see {@link isPinned}) keep their place in the document
+ * order instead. Up/down then visits every element exactly once.
  * @template {{getBoundingClientRect: () => {top: number, left: number, height: number}}} T
- * @param {T[]} items
+ * @param {T[]} items In document order.
+ * @param {(el: T) => boolean} [pinned]
  * @returns {T[]}
  */
-export function readingOrder(items) {
-  const boxes = items.map((el, i) => {
-    const r = el.getBoundingClientRect();
-    return { el, i, top: r.top, left: r.left, mid: r.top + r.height / 2, h: r.height };
-  });
+export function readingOrder(items, pinned = (el) => isPinned(/** @type {any} */ (el))) {
+  const fixed = items.map((el) => pinned(el));
+  const boxes = items
+    .map((el, i) => ({ el, i }))
+    .filter(({ i }) => !fixed[i])
+    .map(({ el, i }) => {
+      const r = el.getBoundingClientRect();
+      return { el, i, top: r.top, left: r.left, mid: r.top + r.height / 2, h: r.height };
+    });
   boxes.sort((a, b) => a.top - b.top || a.left - b.left || a.i - b.i);
   /** @type {Array<typeof boxes>} */
   const rows = [];
@@ -53,7 +79,62 @@ export function readingOrder(items) {
     if (row && Math.abs(b.mid - row[0].mid) < Math.max(4, Math.min(b.h, row[0].h) / 2)) row.push(b);
     else rows.push([b]);
   }
-  return rows.flatMap((row) => row.sort((a, b) => a.left - b.left || a.i - b.i).map((b) => b.el));
+  const order = rows.flatMap((row) => row.sort((a, b) => a.left - b.left || a.i - b.i));
+  // Each pinned element goes right after the last element (in reading order) that
+  // precedes it in the document: a trailing « Fermer » ends the list, once.
+  /** @type {Array<{el: T, i: number}>} */
+  const out = order.map(({ el, i }) => ({ el, i }));
+  items.forEach((el, i) => {
+    if (!fixed[i]) return;
+    let at = 0;
+    out.forEach((o, k) => {
+      if (o.i < i) at = k + 1;
+    });
+    out.splice(at, 0, { el, i });
+  });
+  return out.map((o) => o.el);
+}
+
+/** What Tab can reach inside a screen. */
+const TABBABLE =
+  'button, input, select, textarea, summary, a[href], [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Keeps Tab and Shift+Tab inside an open modal screen (`aria-modal`): from the last
+ * element Tab wraps to the first, from the first Shift+Tab wraps to the last, and focus
+ * that has escaped (on the page body) comes back in.
+ * @param {KeyboardEvent} e
+ * @param {HTMLElement | null} screen The open screen, if any.
+ * @returns {boolean} Whether it moved the focus.
+ */
+export function trapTab(e, screen) {
+  if (e.key !== 'Tab' || !screen || screen.getAttribute('aria-modal') !== 'true') return false;
+  const items = /** @type {HTMLElement[]} */ ([...screen.querySelectorAll(TABBABLE)]).filter(
+    (el) =>
+      el.offsetParent !== null &&
+      !(/** @type {HTMLButtonElement} */ (el).disabled) &&
+      el.tabIndex >= 0,
+  );
+  if (!items.length) return false;
+  const first = items[0];
+  const last = /** @type {HTMLElement} */ (items.at(-1));
+  const active = /** @type {HTMLElement | null} */ (document.activeElement);
+  const inside = Boolean(active && screen.contains(active));
+  const to = !inside
+    ? e.shiftKey
+      ? last
+      : first
+    : e.shiftKey
+      ? active === first
+        ? last
+        : null
+      : active === last
+        ? first
+        : null;
+  if (!to) return false;
+  e.preventDefault();
+  to.focus();
+  return true;
 }
 
 /**

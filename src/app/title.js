@@ -156,7 +156,8 @@ export function heroRegion(vw, vh, panel, brand) {
       bottom: 0.97,
     };
   }
-  const top = brand.height > 0 ? brand.bottom / vh : 0.2;
+  // The line of the day hangs just under the logo (about 36 px): heads stay clear of it.
+  const top = brand.height > 0 ? (brand.bottom + 36) / vh : 0.2;
   const bottom = panel.height > 0 ? panel.top / vh : 0.75;
   const free = Math.max(0.12, bottom - top);
   return {
