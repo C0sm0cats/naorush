@@ -6,9 +6,7 @@ Les NAO commencent jeudi et l’enveloppe des augmentations s’est perdue en ci
 
 ▶ **[Jouer dans le navigateur](https://c0sm0cats.github.io/naorush/)** : PC, tablette et mobile, sans installation. Il faut un navigateur récent compatible WebGL2 (Chrome, Edge, Firefox, Safari 15 ou plus).
 
-<p align="center">
-  <img src="docs/gameplay.gif" alt="Kévin traverse le parking B2 : toits des voitures, nacelle du monte-charge et flaque signalée par un panneau jaune" width="480">
-</p>
+![Kévin traverse le parking B2 : toits des voitures, nacelle du monte-charge et flaque signalée par un panneau jaune](docs/gameplay.gif)
 
 ![Écran titre, un jeudi soir : « Jour des NAO ! »](docs/title.jpg)
 
