@@ -4,6 +4,8 @@
 
 Les NAO commencent jeudi et l’enveloppe des augmentations s’est perdue en circuit de validation. Avec Kévin ou Charline, traverse le parking, l’open space de LCP7, la salle serveurs de Technologies & Services, le comité de pilotage et le toit du Power UP Tour pour la faire signer à temps.
 
+Un clin d’œil affectueux à la vie en ESN : ici, personne n’est ridiculisé. Les directeurs sont des boss imposants et charismatiques qu’on convainc à coups de comptes rendus, et chaque combat se termine par une signature commune.
+
 ▶ **[Jouer dans le navigateur](https://c0sm0cats.github.io/naorush/)** : PC, tablette et mobile, sans installation. Il faut un navigateur récent compatible WebGL2 (Chrome, Edge, Firefox, Safari 15 ou plus).
 
 ![Kévin traverse le parking B2 : toits des voitures, nacelle du monte-charge et flaque signalée par un panneau jaune](docs/gameplay.gif)
