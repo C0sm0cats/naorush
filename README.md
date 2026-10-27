@@ -28,7 +28,7 @@ Chaque étape compte de 10 à 12 salles, avec ses bornes Chronotime, ses secrets
 
 Entre deux étapes de l’histoire, un court interlude (passable) montre le trajet de la semaine, l’horloge qui avance jusqu’à l’étape suivante, le compte à rebours avant les NAO de jeudi et une réplique du héros.
 
-<p align="center"><img src="docs/interlude.jpg" alt="Interlude entre le parking et l’open space : l’horloge, le compte à rebours avant les NAO, le trajet de la semaine et une réplique de Kévin" width="560"></p>
+![Interlude entre le parking et l’open space : l’horloge, le compte à rebours avant les NAO, le trajet de la semaine et une réplique de Kévin](docs/interlude.jpg)
 
 ## Les boss
 
@@ -110,9 +110,9 @@ Badge aux bornes Chronotime : en cas de pépin, tu repars de là. Les ramettes d
 - **Son** : musique (un thème principal qui revient dans chaque étape et chaque boss, avec des couches qui montent pendant l’action, et sa version en attente téléphonique), ambiances de fond (serveurs, vent, parking…) et bruitages, tout synthétisé en direct avec WebAudio. Aucun fichier son.
 - **Simulation** : déterministe à 60 Hz. Dans les tests, un solveur finit chaque étape avec les deux héros et convainc chaque directeur sans prendre un coup, et un test de non-blocage vérifie qu’aucun héros ne peut rester coincé dans le décor.
 
-### Prérequis
+## Lancer en local
 
-Node.js 22.12 ou plus récent, et npm.
+Il faut Node.js 22.12 ou plus récent, et npm.
 
 ```sh
 npm install
