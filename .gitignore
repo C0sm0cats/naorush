@@ -3,7 +3,6 @@ dist/
 smoke/
 .plan/
 prompt/
-.serena/
 .DS_Store
 *.log
 test-results/
